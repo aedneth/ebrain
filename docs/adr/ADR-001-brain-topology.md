@@ -33,14 +33,16 @@ Se **descartan los mounts** (N brains) porque:
 2. mounts es más nuevo (HTTP MCP mounts todavía en "PR 2" upstream — `brain-registry.ts:9-11`) = inmadurez.
 3. En F2 no hay MCP remoto multi-token que justifique la separación física por-DB.
 
-### Mecanismo de cross-source (empírico, pin a25209b)
+### Mecanismo de cross-source (empírico, pin a25209b) — CORREGIDO 2026-07-11
 
-Verificado en vivo (2026-07-11). El span-all vive en la **capa Operation/MCP**, NO en el `--source` del CLI:
+Validado end-to-end vía sonda MCP JSON-RPC + CLI. **El cross-source nativo NO funciona en este pin** — es una v1 limitation confirmada, no solo un detalle del CLI:
 
-- `operations.ts:478` → `wantsAll = all_sources || source_id === '__all__'`. Un caller que pase `source_id:'__all__'` o `all_sources:true` **cruza todos los sources** (trusted local) o **sus sources concedidos** (remoto).
-- **El `--source __all__` del CLI NO funciona**: el regex de validación de source-id es `[a-z0-9-]{1,32}` (sin `_`) → rechaza `__all__` y cae al source `default` (vacío). Además `relational-recall.ts:73-74` marca *"multi-source enumeration under `__all__` is a v1 limitation"*. Confirmado empíricamente: `--source __all__`, `--source-id __all__`, `--all-sources`, `--all_sources` → todos "No results" desde el CLI.
-- **Consecuencia:** la interfaz real de ebrain es el **MCP** (SPRINT 2.4) — ahí `source_id:'__all__'`/`all_sources:true` SÍ cruzan para el caller local de confianza (sesiones Claude Code de Eduardo). Requisito "cross-source instantáneo" ✅ por el canal que importa.
-- Para el **terminal crudo** (`gbrain-run query`) se añade un **wrapper fan-out** de ebrain (overlay): consulta cada source registrado y mergea por score. ~15 líneas; se retira cuando upstream levante la v1 limitation.
+- **Per-source SÍ funciona** (CLI y MCP): `query --source company-brain` y `mcp__ebrain__query {source_id:"company-brain"}` devuelven resultados con relevancia correcta. Embeddings OK en contexto MCP (sin 400).
+- **Cross-source (`all_sources`/`__all__`) NO funciona**:
+  - CLI: `--source __all__` cae al `default` vacío (regex `[a-z0-9-]{1,32}` rechaza `_`).
+  - MCP: `{all_sources:true}` y `{source_id:"__all__"}` → **`[]`** (probado en vivo). El `wantsAll` de `operations.ts:478` existe pero aguas abajo la enumeración multi-source colapsa a `['default']` — exactamente lo que advierte `relational-recall.ts:73-74`: *"multi-source enumeration under `__all__` is a v1 limitation"*.
+- **Solución (overlay ebrain):** `~/.config/ebrain/ebrain-q` — fan-out que consulta cada source federado del knowledge layer y mergea por score numérico. **Este es el valor que ebrain añade sobre gbrain**: entrega el cross-source instantáneo que el motor no tiene en v1. Validado: `ebrain-q "korvex pricing"` mezcla second-brain + company-brain ordenados por score. Se retira/reemplaza por nativo cuando upstream levante la limitación (o al migrar a un pin más nuevo).
+- **Para agentes vía MCP:** hasta que el nativo funcione, un agente que quiera cross-source debe (a) llamar `query` por-source y mergear, o (b) el guidance block los orienta a usar `ebrain-q` por CLI. La interfaz MCP sirve per-source hoy.
 
 ### Modelo de aislamiento personal ⊥ Korvex (GUARDRAILS §3)
 

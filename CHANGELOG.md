@@ -4,6 +4,15 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — F2.4: MCP registrado + cross-source resuelto vía overlay `ebrain-q`
+
+- **MCP `ebrain` registrado** (user scope, machine-wide) → `✔ Connected`. Launcher `~/.config/ebrain/gbrain-mcp` (cwd neutral + `.env` + `MCP_STDIO=1`). Tools `mcp__ebrain__*` en toda sesión nueva de Claude Code.
+- **Corrección honesta al ADR-001:** el cross-source **nativo NO funciona** en pin a25209b — sonda MCP JSON-RPC probó que `{all_sources:true}` y `{source_id:"__all__"}` devuelven `[]` (v1 limitation, `relational-recall.ts:73`). Per-source sí funciona (CLI + MCP).
+- **Overlay `~/.config/ebrain/ebrain-q`**: fan-out que consulta cada source federado y mergea por score → el cross-source instantáneo que gbrain no tiene en v1. Validado mezclando second-brain + company-brain. **Es el valor de ebrain sobre gbrain.**
+- Roster carril-código (graphify, no gbrain): 5 CLIs + museum-of-us + busnet (read-only) + korvex-* (read-only); brisas + dekko = deny.
+
+---
+
 ## 2026-07-11 — F2 (en curso): topología decidida (ADR-001) + Company Brain federado
 
 **Tipo:** federación CKIS (Fase 2) — decisión de arquitectura + segundo source vivo.

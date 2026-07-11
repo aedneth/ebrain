@@ -38,6 +38,21 @@ El launcher (`~/.config/ebrain/gbrain-run`, chmod 700):
 
 - `query --no-expand`: evita el paso de expansión LLM (no hay chat model configurado; solo embeddings). `gbrain think` (síntesis con citas) requiere configurar un chat model — pendiente (natural para F4 routing o un `GBRAIN_CHAT_MODEL=openai:gpt-4o-mini`).
 
+## Cross-source (F2) — usar `ebrain-q`, NO el CLI nativo
+
+```bash
+~/.config/ebrain/ebrain-q "<pregunta>" [topN]     # cross-source real (fan-out + merge por score)
+```
+
+⚠ **El cross-source nativo de gbrain NO funciona** en este pin (v1 limitation): `--source __all__` / `--all-sources` / `{all_sources:true}` devuelven vacío. Usa **siempre `ebrain-q`** para buscar en TODO el knowledge layer (second-brain + company-brain + los que se federen). Per-source sí funciona: `gbrain-run query "<q>" --source <id> --no-expand`. Ver ADR-001 §cross-source.
+
+## MCP (F2) — ebrain en las sesiones de Claude Code
+
+- Registrado a **user scope** (machine-wide): `claude mcp add ebrain --scope user -- ~/.config/ebrain/gbrain-mcp`. Verificar: `claude mcp get ebrain` → `✔ Connected`.
+- Launcher `~/.config/ebrain/gbrain-mcp` (cwd neutral + sourcea `.env` + `MCP_STDIO=1`). Limpieza al cerrar sesión: watchdog de ppid de gbrain.
+- Tools disponibles en cualquier sesión nueva: `mcp__ebrain__query` / `search` / `get_page` / `think` / `code_*` (102 ops). **Cross-source por MCP aún per-source** (usar `ebrain-q` en CLI hasta que el nativo funcione).
+- Quitar: `claude mcp remove ebrain -s user`.
+
 ## Re-ingesta / actualización
 
 ```bash

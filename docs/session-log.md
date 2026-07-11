@@ -6,13 +6,15 @@ Handoff entre sesiones. El más reciente arriba. Formato: fecha · fase · qué 
 
 ## 2026-07-11 — Fase 2 en curso (orquestador Opus)
 
-**Fase:** F2 (Federación CKIS) → **2.1 y 2.2 hechas; 2.3+ reformadas**.
+**Fase:** F2 (Federación CKIS) → **2.1, 2.2, 2.3, 2.4, 2.6 hechas; 2.6b/2.6c nuevas; 2.5/2.7/2.8 pendientes**.
 
 **Qué se hizo:**
-- **ADR-001** (`docs/adr/ADR-001-brain-topology.md`): topología **1 brain · N sources** decidida con Eduardo (indexador único, cross-source). Mounts descartados.
+- **ADR-001** (`docs/adr/ADR-001-brain-topology.md`): topología **1 brain · N sources** decidida con Eduardo (indexador único). Mounts descartados.
 - **company-brain** federado y embebido: 163 pág / 801 chunks / 100% / ~$0.06. Brain total: 1024 pág / 4474 chunks / 100%.
 - **Aislamiento validado**: `--source company-brain` no filtra notas personales; `--source second-brain` sí las trae. secret-scan 0/0.
-- **Cross-source caracterizado**: funciona en MCP/Operation (`source_id:'__all__'`/`all_sources:true`), NO en el `--source` del CLI (v1 limitation, regex sin `_`). Interfaz real de ebrain = MCP.
+- **graphify (2.6)** → `docs/graphify-integration.md`: **dos carriles bridge-no-embed** (semántico=ebrain, código=graphify puenteado). Cero cliente en gbrain por diseño.
+- **MCP `ebrain` (2.4)** registrado user-scope → `✔ Connected` (`~/.config/ebrain/gbrain-mcp`).
+- **Cross-source (crítico, corregido):** sonda MCP JSON-RPC probó que el nativo **NO funciona** (`{all_sources:true}` → `[]`; v1 limitation). Per-source sí. → **overlay `~/.config/ebrain/ebrain-q`** (fan-out+merge) entrega el cross-source real; validado mezclando ambos sources.
 
 **Hallazgos que condicionan lo que sigue:**
 1. **korvex-web/korvex-crm NO clonados** aquí → su código llega vía Dev Brain `code-graph/`. brisas tampoco clonado.
