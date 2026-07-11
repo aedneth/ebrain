@@ -4,6 +4,15 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — F2.7: benchmark QMD vs ebrain + decisión (ebrain primario, QMD fallback)
+
+- **Benchmark** (`docs/benchmark-qmd-vs-ebrain.md`, 8 queries ES/EN): ebrain relevancia top-1 **0.81-0.91**; QMD `search` (BM25) devuelve "none" en queries conceptuales; QMD `vsearch` **113s + índice 76% stale**. ebrain vía MCP ~1-3s (persistente); CLI fan-out 11-16s (cold-start bun ×2).
+- **Costo estimado** (uso intensivo): search ≈ **$0.006-0.094/mes**; + re-embed incremental ~$0.12/mes → **total < $0.50/mes con uso día-y-noche**. Cap $5 jamás tocado por búsqueda.
+- **Decisión (gate Eduardo):** **ebrain = primario semántico** (vía MCP); **QMD = fallback cero-costo/offline** (BM25 keyword; vector en pausa hasta re-embed). CLAUDE.md del vault actualizado.
+- **Follow-ups:** optimizar `ebrain-q` vía MCP persistente (~12s→~2s); multi-proveedor cero-costo (ZeroEntropy/gemini free) como columnas alternativas → 2.6b/F4.
+
+---
+
 ## 2026-07-11 — F2.6c: `brain-init` implementado (bootstrap de proyecto agent-agnostic)
 
 - **`~/eBrain/scripts/brain-init`** + template canónico `~/eBrain/templates/brain/` (scripts, githooks, config.sh.tmpl, claude-settings.hooks.json, ORCHESTRATOR_BOOTSTRAP.md.tmpl).
