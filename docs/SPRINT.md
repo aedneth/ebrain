@@ -93,14 +93,17 @@ Convención de estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado
 
 ## FASE 2 — Federación CKIS
 
-- [ ] 2.1 Registrar Company Brain repo como source `company-brain` (mismo brain u otro — decidir con evidencia de aislamiento; documentar la decisión como ADR en `docs/adr/ADR-001-brain-topology.md`).
-- [ ] 2.2 Sync + validación: query cruzada personal↔korvex responde con citas correctas y sin filtrar contenido personal cuando se consulta desde contexto korvex (probar scoping).
-- [ ] 2.3 Registrar repos de código como sources con `--strategy code`: korvex-web, korvex-crm, recmp3-cli, /ebrain. Trust triad: código korvex = read-only. Verificar que brisas-del-golfo NO está registrado y queda `deny`.
-- [ ] 2.4 MCP: `claude mcp add ebrain -- gbrain serve`; probar desde una sesión Claude Code que los tools aparecen tipados.
-- [ ] 2.5 `/sync-gbrain` (o equivalente manual) en cada repo → bloque `## GBrain Search Guidance` en sus CLAUDE.md. Commit local en cada repo, SIN push en korvex-*.
-- [ ] 2.6 Graphify: verificar hooks post-commit siguen vivos; indexar `.brain/` y graph-reports como páginas; documentar en `docs/graphify-integration.md`.
-- [ ] 2.7 Benchmark QMD vs gbrain: 20 queries reales (mismas para ambos), medir relevancia top-5 (juicio de Eduardo o Opus), latencia y costo → `docs/benchmark-qmd-vs-ebrain.md` con recomendación. **Gate humano: Eduardo decide.**
-- [ ] 2.8 Backup: (a) probar recovery reindex-from-git en un brain limpio (cronometrar); (b) script de dump lógico semanal Supabase; (c) agregar config ebrain al manifest de `ckis-backup-all`; (d) `ckis-backup-all` corre verde. Documentar en `docs/runbook.md` §recovery.
+> **Decisión de topología (ADR-001, 2026-07-11):** **1 brain · N sources** (hub de federación único; mounts descartados por fragmentar el cross-source). Aislamiento personal⊥Korvex por triple defensa (token-scope remoto + `.gbrain-source` pin + wikilink #972), NO por el flag `federated`. Cross-source vive en la capa MCP/Operation (`source_id:'__all__'`), no en el `--source` del CLI (v1 limitation).
+> **Redirect graphify (Eduardo, 2026-07-11):** NO embeber el Dev Brain crudo (2610 `.md`, redundante). graphify ya construye el grafo de código y se reconstruye solo. Federar **salidas destiladas** (wiki/GRAPH_REPORT/graph.json) y/o puentear el MCP de graphify para queries de grafo. Reforma 2.3 + 2.6.
+
+- [x] 2.1 Source `company-brain` registrado (`federated:true` por ADR-001) → `~/Documents/Company Brain` (163 pág, 801 chunks, 100% embebido, ~$0.06). second-brain federado también. ADR-001 escrito en `docs/adr/`. **Topología decidida con Eduardo.**
+- [x] 2.2 Aislamiento validado: query personal `--source company-brain` → **cero notas personales filtradas**; misma query `--source second-brain` → sí aparecen (aisladas). Cross-source caracterizado (funciona vía MCP/Operation, no CLI). secret-scan company-brain 0/0. Test adversarial de escritura remota → diferido a fase MCP remoto (no hay callers remotos en F2).
+- [~] 2.3 **REFORMADO (redirect graphify)**: korvex-web/korvex-crm **no están clonados** en la máquina → su inteligencia de código llega vía Dev Brain `code-graph/`. Repos de código PRESENTES (aedneth, tuyos): CLI-suite (flowclock/magnus/recmp3/sapientia/streamnet), museum-of-us. `busnet` (owner Crisstianpd) = conservador, no auto-indexar sin ok. **brisas-del-golfo NO está clonado** (deny moot local; anclar deny a su remote si se clona). Estrategia de código: federar salidas graphify, no `--strategy code` masivo — decidir en 2.6. **Requiere estimación+aprobación (GUARDRAILS §4) antes de embeber código.**
+- [ ] 2.4 MCP: `claude mcp add ebrain -- gbrain serve` (stdio local); probar tools tipados desde una sesión Claude Code; validar cross-source vía `all_sources:true` (donde SÍ funciona).
+- [ ] 2.5 `.gbrain-source` pin + bloque `## GBrain Search Guidance` en CLAUDE.md de repos presentes. Commit local, SIN push korvex-*.
+- [ ] 2.6 **Graphify (ampliado)**: `docs/graphify-integration.md` — analizar salida graphify (`.brain/`, wiki, graph.json), decidir integración para queries de código (federar destilados vs puentear MCP graphify vs `--strategy code` selectivo). **Excluir `code-graph/brisas-del-golfo/` del Dev Brain** (registro sub-path, no glob — `git ls-files --cached` no honra ignore en trackeados). Verificar hooks post-commit vivos.
+- [ ] 2.7 Benchmark QMD vs gbrain: 20 queries reales (mismas para ambos), medir relevancia top-5, latencia y costo → `docs/benchmark-qmd-vs-ebrain.md` con recomendación. **Gate humano: Eduardo decide.**
+- [ ] 2.8 Backup: (a) probar recovery reindex-from-git en un brain limpio (cronometrar); (b) dump lógico si aplica; (c) agregar config ebrain al manifest de `ckis-backup-all`; (d) `ckis-backup-all` verde. Documentar en `docs/runbook.md` §recovery.
 - [ ] 2.9 Gate F2: `[AUDIT_PASS]` + commit.
 
 ---

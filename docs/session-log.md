@@ -4,6 +4,30 @@ Handoff entre sesiones. El más reciente arriba. Formato: fecha · fase · qué 
 
 ---
 
+## 2026-07-11 — Fase 2 en curso (orquestador Opus)
+
+**Fase:** F2 (Federación CKIS) → **2.1 y 2.2 hechas; 2.3+ reformadas**.
+
+**Qué se hizo:**
+- **ADR-001** (`docs/adr/ADR-001-brain-topology.md`): topología **1 brain · N sources** decidida con Eduardo (indexador único, cross-source). Mounts descartados.
+- **company-brain** federado y embebido: 163 pág / 801 chunks / 100% / ~$0.06. Brain total: 1024 pág / 4474 chunks / 100%.
+- **Aislamiento validado**: `--source company-brain` no filtra notas personales; `--source second-brain` sí las trae. secret-scan 0/0.
+- **Cross-source caracterizado**: funciona en MCP/Operation (`source_id:'__all__'`/`all_sources:true`), NO en el `--source` del CLI (v1 limitation, regex sin `_`). Interfaz real de ebrain = MCP.
+
+**Hallazgos que condicionan lo que sigue:**
+1. **korvex-web/korvex-crm NO clonados** aquí → su código llega vía Dev Brain `code-graph/`. brisas tampoco clonado.
+2. **Redirect graphify (Eduardo):** no embeber Dev Brain crudo (2610 `.md`); graphify ya destila el grafo y se auto-reconstruye. Federar salidas / puentear MCP graphify. Reforma 2.3+2.6.
+3. **⚠ brisas en Dev Brain** (`code-graph/brisas-del-golfo/`, commiteado): excluir por **registro sub-path**, no glob (`git ls-files --cached` ignora `.gitignore` en trackeados). GUARDRAILS §2.
+4. Cross-source terminal → pendiente wrapper fan-out (overlay ebrain).
+
+**Cómo arrancar la próxima sesión:**
+1. Leer ADR-001 (federación + cross-source) y `discovery/03/04` (gstack/trust) para 2.4/2.5.
+2. **2.6 primero** (redirect): escribir `docs/graphify-integration.md` — analizar `.brain/`+wiki+graph.json, decidir integración de código (federar destilados vs MCP graphify vs `--strategy code` selectivo), con exclusión sub-path de brisas.
+3. Antes de embeber cualquier código: estimación de costo + aprobación (GUARDRAILS §4).
+4. 2.4 MCP local (`gbrain serve` stdio) validando `all_sources:true`. Decisión pendiente de Eduardo: ¿incluir el grafo de código de brisas (solo estructura, no datos de cliente) en ebrain? Default = NO.
+
+---
+
 ## 2026-07-11 — Fase 1 completa (orquestador Opus)
 
 **Fase:** F1 (Motor vivo — PGLite local + Second Brain) → ✅ **completa y auditada**.

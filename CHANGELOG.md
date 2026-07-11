@@ -4,6 +4,20 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — F2 (en curso): topología decidida (ADR-001) + Company Brain federado
+
+**Tipo:** federación CKIS (Fase 2) — decisión de arquitectura + segundo source vivo.
+
+- **ADR-001 — topología de brains:** **1 brain · N sources** (hub de federación único). Mounts descartados (fragmentarían el cross-source, e inmaduros). Decisión de frontera tomada con Eduardo: ebrain = indexador único de TODOS los brains, cross-source e instantáneo.
+- **Modelo de aislamiento personal⊥Korvex** (GUARDRAILS §3): triple defensa — (1) token-scope de callers remotos (garantía dura, fase MCP remoto, diferida), (2) `.gbrain-source` pinning por repo, (3) wikilink scoping #972. El flag `federated` NO es la frontera de seguridad.
+- **Cross-source (empírico, pin a25209b):** vive en la capa MCP/Operation (`operations.ts:478`: `all_sources || source_id==='__all__'`). El **`--source __all__` del CLI NO funciona** (regex `[a-z0-9-]` rechaza `_`; "v1 limitation" en `relational-recall.ts:73`). → interfaz real de ebrain = MCP (donde cruza); terminal crudo tendrá wrapper fan-out.
+- **company-brain federado:** source registrado (`federated:true`) → `~/Documents/Company Brain`; **163 páginas · 801 chunks · 100% embebido · ~$0.06**. second-brain también federado. Total del brain: **1024 páginas · 4474 chunks · 100% embebidos**.
+- **Aislamiento validado en vivo:** query personal `--source company-brain` → **cero notas personales**; `--source second-brain` → sí (aisladas). secret-scan company-brain 0/0.
+- **Redirect graphify (Eduardo):** NO embeber Dev Brain crudo (2610 `.md`). graphify ya construye el grafo de código y se reconstruye solo → federar salidas destiladas / puentear su MCP (reforma SPRINT 2.3 + 2.6).
+- **⚠ GUARDRAILS §2:** Dev Brain contiene `code-graph/brisas-del-golfo/` (commiteado) → `git ls-files --cached` no lo excluye por ignore. Exclusión por **registro sub-path**, no glob. brisas queda fuera de ebrain por default (decisión explícita de Eduardo para incluir su grafo, con alcance).
+
+---
+
 ## 2026-07-11 — F1: Motor vivo + Second Brain indexado
 
 **Tipo:** puesta en marcha del motor gbrain (Fase 1 del SPRINT) — PGLite local, ingesta completa del Second Brain.
