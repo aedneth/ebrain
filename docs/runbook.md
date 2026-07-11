@@ -74,7 +74,16 @@ rm -rf ~/.gbrain/brain.pglite
 ~/.config/ebrain/gbrain-run extract links --source db
 ~/.config/ebrain/gbrain-run embed --stale
 ```
-(El markdown en git es canónico; el vault se respalda cada 15 min. Recovery probado formalmente en F2 §2.8.)
+(El markdown en git es canónico; el vault se respalda cada 15 min.)
+
+**Recovery PROBADO (F2 §2.8a, 2026-07-11):** en un brain aislado (`GBRAIN_HOME` desechable) se reconstruyó desde git: **863 páginas + 3689 chunks** (`sync --no-embed` ~2 min) + **490 links** (`extract links --source db`, 7s) — idéntico a producción. Luego `embed --stale` (= pasada de F1, ~$0.30–0.35). `global_basename` persiste en el brain. La DB es reconstruible al 100%. **Ojo:** el paso de links es `extract links --source db` (NO `extract --stale`, que no reconstruye los wikilinks).
+
+## Backup (F2 §2.8)
+
+- El repo **`~/eBrain` está en el manifest** de `ckis-backup-all` (`~/Documents/ckis-infra/ckis-manifest.json`, target `ebrain` → `aedneth/ebrain` privado). La próxima corrida programada auto-crea el remote y lo pushea (secret-scan en pre-commit). Verificado: repo limpio de secretos (46 archivos, cero valores).
+- La **DB PGLite NO se respalda** (índice derivado reconstruible desde git — ver Recovery). Los launchers viven versionados en `scripts/` (la key sigue solo en `~/.config/ebrain/`, fuera de todo repo).
+- Health: `bash ~/Documents/ckis-infra/bin/ckis-backup-doctor.sh --oneline` → verde.
+- Dump lógico de Supabase (SPRINT 2.8b): N/A mientras sea PGLite local; aplica al migrar a Supabase Pro.
 
 ## Costo (F1)
 

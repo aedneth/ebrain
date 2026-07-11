@@ -4,6 +4,17 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — F2.5 + F2.8: guidance blocks + backup/recovery probado
+
+**2.5 — guidance blocks:** bloque `## ebrain Search + Code Guidance` (semántico→ebrain/MCP/`ebrain-q`, estructura→graphify/Dev Brain) inyectado en 7 repos propios con CLAUDE.md (5 CLIs + museum + korvex-web), **commit local sin push**. Integrado a `brain-init` (paso 5.5) para repos futuros.
+
+**2.8 — backup/recovery:**
+- **Recovery PROBADO** (GUARDRAILS §5) en brain aislado (`GBRAIN_HOME` desechable): 863 pág + 3689 chunks (`sync --no-embed` ~2min) + **490 links** (`extract links --source db`, 7s) — idéntico a producción. DB 100% reconstruible desde git. El paso de links correcto es `extract links --source db`.
+- **`~/eBrain` añadido al manifest** de `ckis-backup-all` (target `ebrain`→`aedneth/ebrain` privado). Repo secret-clean (46 archivos, cero valores). Push inicial lo hace la corrida programada (auto-crea remote). PGLite NO se respalda (reconstruible).
+- `ckis-backup-doctor` verde. Dump Supabase N/A (PGLite local). Documentado en `runbook.md` §recovery+§backup.
+
+---
+
 ## 2026-07-11 — F2.7: benchmark QMD vs ebrain + decisión (ebrain primario, QMD fallback)
 
 - **Benchmark** (`docs/benchmark-qmd-vs-ebrain.md`, 8 queries ES/EN): ebrain relevancia top-1 **0.81-0.91**; QMD `search` (BM25) devuelve "none" en queries conceptuales; QMD `vsearch` **113s + índice 76% stale**. ebrain vía MCP ~1-3s (persistente); CLI fan-out 11-16s (cold-start bun ×2).
