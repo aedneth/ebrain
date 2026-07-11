@@ -53,18 +53,20 @@ Convención de estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado
 - [x] 0.4.1 Opus audita los 5 reportes de discovery contra el código real (spot-checks) → `[AUDIT_PASS]` o correcciones. **`[AUDIT_PASS]`** los 5 (00-environment + 01-04); spot-checks verificados: 102 ops array, SOURCE_TIER_NAMES, #972 cross-source, scopes, 147 BrainEngine sigs, ZeroEntropy default, RRF_K=60, setup symlink, redact HIGH tier, repo-policy caller-level.
 - [x] 0.4.2 Actualizar `docs/ULTRAPLAN.md` y `docs/ARCHITECTURE.md` con descubrimientos que cambien decisiones; anotar cada cambio en `CHANGELOG.md` del repo ebrain. → ULTRAPLAN §0.1 (tabla de deltas), ARCHITECTURE §9, CHANGELOG.md creado.
 - [x] 0.4.3 Commit: `F0: discovery complete (gbrain@<sha>, gstack@<sha>)`. → `f8e218b` (vendor/ excluido).
-- [ ] 0.4.4 **GATE HUMANO**: Eduardo aprueba (a) proyecto Supabase dedicado, (b) provider de embeddings + presupuesto de ingesta estimado en 0.4.5.
+- [x] 0.4.4 **GATE HUMANO**: Eduardo aprueba (a) proyecto Supabase dedicado, (b) provider de embeddings + presupuesto de ingesta estimado en 0.4.5. **✅ RESUELTO 2026-07-10:** (a) **NO Supabase por ahora** (free-tier lleno, 2/2 proyectos) → **PGLite LOCAL** para F1/F2; migración lossless a Supabase cuando Pro. (b) Embeddings = **`openai:text-embedding-3-small`** (key propia, $50 créditos); cap dashboard OpenAI + monitoreo local; canary-first. QMD (EmbeddingGemma-300M local, 5190 vectores) verificado **NO reusable** (modelo/dims/store distintos) — QMD se queda, benchmark F2.
 - [x] 0.4.5 Estimar costo de ingesta total: contar tokens aproximados del vault (`find + wc`) × precio del provider elegido → escribir en `discovery/05-cost-estimate.md`. → 860 .md, ~2.14M tokens brutos, ~2.5M a embeber, full-ingest ≈ centavos–$0.33 (no es riesgo de costo).
 
 ---
 
-## FASE 1 — Motor vivo (Supabase + Second Brain)
+## FASE 1 — Motor vivo (PGLite local + Second Brain)
+
+> **Calibración 0.4.4 (2026-07-10):** F1 corre en **PGLite LOCAL**, no Supabase (free-tier lleno). Embeddings = `openai:text-embedding-3-small` hosted. Ojo RAM (138MB libres): un proceso pesado a la vez, batch caps en embed.
 
 ### 1.1 Provisión
-- [ ] 1.1.1 Eduardo crea proyecto Supabase `ebrain-prod` (manual, gate humano) y entrega pooler URL.
-- [ ] 1.1.2 Crear `~/.config/ebrain/.env` (chmod 600) con `EBRAIN_DATABASE_URL`, `OPENROUTER_API_KEY` (si ya existe), key del provider de embeddings. Verificar que NINGÚN repo la trackea.
-- [ ] 1.1.3 Instalar gbrain desde el clon local (`bun install` + link global o wrapper) — NO desde upstream remoto, para que overlay/patches locales apliquen.
-- [ ] 1.1.4 `gbrain init` apuntando a Supabase con el embedding provider aprobado. `gbrain doctor` → verde. Guardar salida en `docs/runbook.md`.
+- [~] 1.1.1 ~~Eduardo crea proyecto Supabase `ebrain-prod`~~ → **N/A: PGLite local** (Supabase diferido a Pro). El "init a Supabase" se reemplaza por `gbrain init --pglite` (ver 1.1.4/1.2.1).
+- [~] 1.1.2 Crear `~/.config/ebrain/.env` (chmod 600) con la key de embeddings (`OPENAI_API_KEY`). **Eduardo coloca la key** (nunca entra al contexto del agente); Opus verifica presencia sin imprimir. Sin `EBRAIN_DATABASE_URL` (PGLite es local). Verificar que NINGÚN repo la trackea.
+- [ ] 1.1.3 Instalar gbrain desde el clon local (`bun install` + link global o wrapper) — NO desde upstream remoto, para que overlay/patches locales apliquen. **Ojo RAM al correr `bun install`.**
+- [ ] 1.1.4 `gbrain init --pglite` con `GBRAIN_EMBEDDING_MODEL=openai:text-embedding-3-small`. `gbrain doctor` → verde. Guardar salida en `docs/runbook.md`.
 
 ### 1.2 Canary PGLite (barato y local primero)
 - [ ] 1.2.1 `gbrain init --pglite` en un brain de prueba desechable.

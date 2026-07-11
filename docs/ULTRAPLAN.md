@@ -47,6 +47,14 @@ Verificado en vivo contra github.com/garrytan/gbrain y github.com/garrytan/gstac
 | `SKILL.md` de gstack es **build-artifact** de `SKILL.md.tmpl`. Dos secret scanners (`redact-patterns.ts` fuerte + `gstack-brain-sync` embebido débil). gbrain trae budget system nativo (BudgetMeter por fase, `mcp_spend_log`, `budget_ledger`). | Overlay CKIS (F3) vía sección en CLAUDE.md / wrapper, nunca editar SKILL.md vendored. GUARDRAILS ebrain no sobre-estima cobertura de scanner. El doble-cap de gasto (GUARDRAILS §4) puede apoyarse en el budget nativo de gbrain. |
 | Default schema pack = `gbrain-base-v2` (15 tipos). Schema real en `migrate.ts` (56 tablas), no solo `schema.sql`. "Ontología" = columnas en `facts`. PGLite ~50K páginas single-writer. | `ebrain-ckis-v1` extiende `gbrain-base-v2`. Prod en Supabase (aunque el vault son ~860 páginas, cabe en PGLite — Supabase igual por federación multi-source + plan). |
 
+### Decisión gate 0.4.4 (2026-07-10) — motor local, embeddings hosted
+
+Eduardo resolvió el gate con dos ajustes que **calibran la arquitectura**:
+
+- **DB: PGLite LOCAL, no Supabase (por ahora).** Free-tier de Supabase lleno (2/2 proyectos) y sin presupuesto para Pro. El vault (~860 páginas) está muy por debajo del límite de PGLite (~50K), así que **F1 y F2 corren 100% local**. Cuando haya Supabase Pro (o un Postgres free tipo Neon), se migra con `gbrain migrate` (lossless, verificado en discovery/04). Reusar un proyecto Supabase existente queda **descartado** (violaría personal⊥cliente, GUARDRAILS §3).
+- **Embeddings: `openai:text-embedding-3-small` hosted** (Eduardo tiene key + $50 créditos). Hosted → **no consume la RAM local** (crítico: 138MB libres). Costo full-ingest ≈ $0.05; cap en dashboard OpenAI + monitoreo local + canary-first protegen los créditos.
+- **QMD NO es reusable por gbrain** (verificado): QMD embebió 5,190 vectores de ambos brains con **EmbeddingGemma-300M local (768d)** en SQLite propio — modelo/dims/store incompatibles con gbrain. Son "otro tipo" de embeddings. QMD **se mantiene** como capa de search local; el benchmark QMD-vs-gbrain (2.7) ahora es apples-to-apples y **decide su retiro o rol de fallback** con evidencia. gbrain no es redundante: aporta grafo + `think` + federación + MCP + code-intel que QMD no tiene.
+
 ## 1. Qué es ebrain (definición operativa)
 
 ```

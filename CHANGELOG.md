@@ -20,4 +20,4 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
   - Dos secret scanners en gstack: `lib/redact-patterns.ts` (3-tier fuerte, pre-push) + `bin/gstack-brain-sync` embebido (más débil) → GUARDRAILS ebrain no debe sobre-estimar cobertura.
   - Default schema pack = `gbrain-base-v2` (15 tipos); schema real en `migrate.ts` (56 tablas), no solo `schema.sql`; "ontología" = columnas en `facts`. PGLite ~50K páginas single-writer → Supabase para prod.
 - Estimado de ingesta: `discovery/05-cost-estimate.md` (vault ≈ 860 .md, ~2.14M tokens).
-- **Pendiente gate humano 0.4.4:** Eduardo aprueba (a) proyecto Supabase dedicado y (b) provider de embeddings + presupuesto.
+- **Gate humano 0.4.4 ✅ resuelto (2026-07-10):** (a) **PGLite LOCAL** (Supabase free-tier lleno; migración lossless cuando Pro); (b) embeddings **`openai:text-embedding-3-small`** hosted (key propia + $50 créditos, cap + canary). Verificado que **QMD NO es reusable** (EmbeddingGemma-300M local 768d vs gbrain — modelo/dims/store distintos); QMD se mantiene, benchmark F2. Detalle: ULTRAPLAN §0.1 "Decisión gate 0.4.4". → **Desbloquea F1** (tras colocar la key + cap OpenAI).
