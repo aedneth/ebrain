@@ -6,7 +6,10 @@ Handoff entre sesiones. El más reciente arriba. Formato: fecha · fase · qué 
 
 ## 2026-07-11 — Fase 2 en curso (orquestador Opus)
 
-**Fase:** F2 (Federación CKIS) → **2.1, 2.2, 2.3, 2.4, 2.6 hechas; 2.6b/2.6c nuevas; 2.5/2.7/2.8 pendientes**.
+**Fase:** F2 (Federación CKIS) → **2.1, 2.2, 2.3, 2.4, 2.6, 2.6c hechas; 2.6b nueva; 2.5/2.7/2.8 pendientes**.
+
+**F2.6c (`brain-init`) — implementado y probado:** `~/eBrain/scripts/brain-init` + template `~/eBrain/templates/brain/`. Bootstrap agent-agnostic idempotente (config rutas-correctas, git+Claude hooks, register Dev Brain, trust `--client`→deny). Drift `02→03-projects`/`03→05-knowledge` arreglado en template. Verificado end-to-end. Doc: `docs/brain-init-pipeline.md`. Pendiente: batch-fix drift en ~10 `.brain` desplegados (solo propios).
+
 
 **Qué se hizo:**
 - **ADR-001** (`docs/adr/ADR-001-brain-topology.md`): topología **1 brain · N sources** decidida con Eduardo (indexador único). Mounts descartados.
