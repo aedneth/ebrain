@@ -112,6 +112,24 @@ if [ "$DRY" = 0 ]; then
       "$TEMPLATE_DIR/ORCHESTRATOR_BOOTSTRAP.md.tmpl" > "$PROJECT_DIR/.brain/ORCHESTRATOR_BOOTSTRAP.md"
 fi
 
+# ── 5.5 guidance block en CLAUDE.md (ebrain + graphify) ─────────────────────
+say "5.5 ebrain/graphify guidance → CLAUDE.md"
+if [ "$DRY" = 0 ] && [ -f "$TEMPLATE_DIR/CLAUDE-guidance.md" ]; then
+  CM="$PROJECT_DIR/CLAUDE.md"; [ -f "$CM" ] || printf '# %s\n' "$NAME" > "$CM"
+  python3 - "$CM" "$TEMPLATE_DIR/CLAUDE-guidance.md" <<'PY'
+import sys,re
+cm,guide=sys.argv[1],sys.argv[2]
+block=open(guide).read().strip()
+txt=open(cm).read()
+S,E="<!-- ebrain-guidance:start -->","<!-- ebrain-guidance:end -->"
+if S in txt and E in txt:
+    txt=re.sub(r"## ebrain Search \+ Code Guidance\n"+re.escape(S)+r".*?"+re.escape(E),block,txt,flags=re.S)
+else:
+    txt=txt.rstrip()+"\n\n"+block+"\n"
+open(cm,"w").write(txt)
+PY
+fi
+
 # ── 6. .gitignore: graphify-out/ es build output ────────────────────────────
 say "6. .gitignore (graphify-out/)"
 if [ "$DRY" = 0 ]; then
