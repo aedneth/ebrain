@@ -4,6 +4,30 @@ Handoff entre sesiones. El más reciente arriba. Formato: fecha · fase · qué 
 
 ---
 
+## 2026-07-11 — Fase 1 completa (orquestador Opus)
+
+**Fase:** F1 (Motor vivo — PGLite local + Second Brain) → ✅ **completa y auditada**.
+
+**Qué se hizo:**
+- Motor **PGLite local** en `~/.gbrain/brain.pglite/`; embeddings `openai:text-embedding-3-large` **@1536d** (Matryoshka, bajo el HNSW 2000d). Schema pack `gbrain-base-v2`.
+- Launcher `~/.config/ebrain/gbrain-run` (chmod 700): `cd` a dir neutral → sourcea `.env` → `bun run vendor/gbrain/src/cli.ts`. Key en `~/.config/ebrain/.env` (chmod 600), nunca en contexto del agente.
+- Canary 20 notas OK; **root-cause del 400 Bad Request** = bun auto-carga `.env` del cwd (el del vault pisaba la key) → fix: launcher con cwd neutral.
+- Full-ingest: **861 páginas · 3673 chunks · 3673 embebidos (100%) · 490 links · 901 tags** · 33 tipos inferidos. `global_basename=true` (0→490 edges).
+- Vault verificado INTACTO byte-a-byte; secret-scan CLEAN. Costo ~$0.30–0.35 (cap $5).
+- Validación 10 queries (5 ES/5 EN): **10/10 relevantes, 8/10 exactas top-1** → `docs/validation-f1.md`. Runbook operativo en `docs/runbook.md`.
+
+**Qué quedó a medias / diferido:**
+- Schema pack custom `ebrain-ckis-v1` (1.3.*) DIFERIDO — base-v2 infiere bien; se reevalúa en F5 con evidencia.
+- `gbrain think` (síntesis con citas) requiere chat model (`GBRAIN_CHAT_MODEL`) — natural para F4.
+- Company Brain **NO** embebido (correcto: es F2 2.1). Vault existe: 163 `.md`, ~1.91 MB, ~499K tokens → costo trivial.
+
+**Cómo arrancar la próxima sesión (F2 — Federación CKIS):**
+1. Leer `discovery/02-gbrain-federation.md` (tiers, `.gbrain-source`, `sync --strategy code`) y `discovery/04-connection-contract.md` (trust triad, `## GBrain Search Guidance`, GSTACK_*).
+2. Releer GUARDRAILS §2 (fronteras repos: brisas=deny NO registrándola; korvex-* read-only sin push) y §3 (personal ⊥ korvex).
+3. Arrancar por SPRINT 2.1: decisión de topología de brains (mismo brain vs separado) → ADR-001 en `docs/adr/`.
+
+---
+
 ## 2026-07-10 — Fase 0 completa (orquestador Opus)
 
 **Fase:** F0 (Setup + Reverse Engineering local) → ✅ **completa y auditada**. Commit `f8e218b`.

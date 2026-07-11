@@ -4,6 +4,20 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — F1: Motor vivo + Second Brain indexado
+
+**Tipo:** puesta en marcha del motor gbrain (Fase 1 del SPRINT) — PGLite local, ingesta completa del Second Brain.
+
+- Motor **PGLite local** (`~/.gbrain/brain.pglite/`); Supabase diferido (free-tier lleno, migración lossless cuando Pro).
+- Embeddings **`openai:text-embedding-3-large` @1536d** (Matryoshka; Eduardo pidió mejor calidad que 3-small; bajo el límite HNSW 2000d de pgvector). Schema pack `gbrain-base-v2`.
+- Launcher `~/.config/ebrain/gbrain-run` (chmod 700) resuelve el **gotcha crítico**: `bun` auto-carga el `.env` del cwd → el `.env` del vault pisaba `OPENAI_API_KEY` (400 Bad Request en todo embedding). Fix: `cd` a dir neutral antes de correr. Documentado en `docs/runbook.md`.
+- Ingesta: **861 páginas · 3673 chunks · 3673 embebidos (100%) · 490 links · 901 tags** · 33 tipos inferidos. `link_resolution.global_basename=true` (0→490 edges; DIR_PATTERN no cubre carpetas CKIS).
+- Integridad: vault INTACTO byte-a-byte post-ingesta; secret-scan CLEAN (0 `sk-ant-`, 0 pooler URLs). Costo real **~$0.30–0.35** (muy bajo el cap $5).
+- Validación (`docs/validation-f1.md`): 10 queries reales 5 ES/5 EN → **10/10 relevantes, 8/10 exactas top-1**, bilingüe simétrico. `gbrain think` diferido (requiere chat model → F4).
+- **Diferido:** schema pack custom `ebrain-ckis-v1` (base-v2 suficiente); Company Brain sin embeber (es F2). → **Desbloquea F2** (federación).
+
+---
+
 ## 2026-07-10 — F0: Setup + Reverse Engineering local completo
 
 **Tipo:** setup de workspace + ingeniería inversa de gbrain/gstack (Fase 0 del SPRINT).

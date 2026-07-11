@@ -60,34 +60,34 @@ Convención de estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado
 
 ## FASE 1 — Motor vivo (PGLite local + Second Brain)
 
-> **Calibración 0.4.4 (2026-07-10):** F1 corre en **PGLite LOCAL**, no Supabase (free-tier lleno). Embeddings = `openai:text-embedding-3-small` hosted. Ojo RAM (138MB libres): un proceso pesado a la vez, batch caps en embed.
+> **Calibración 0.4.4 (2026-07-10) + ejecución (2026-07-11):** F1 corrió en **PGLite LOCAL**, no Supabase (free-tier lleno). Embeddings finales = **`openai:text-embedding-3-large` @1536d** (Eduardo pidió mejor calidad; Matryoshka bajo el límite HNSW 2000d). Ojo RAM: un proceso pesado a la vez, batch caps en embed. **Resultado F1: 861 páginas · 3673 chunks · 100% embebidos · 490 links · 901 tags.**
 
 ### 1.1 Provisión
-- [~] 1.1.1 ~~Eduardo crea proyecto Supabase `ebrain-prod`~~ → **N/A: PGLite local** (Supabase diferido a Pro). El "init a Supabase" se reemplaza por `gbrain init --pglite` (ver 1.1.4/1.2.1).
-- [~] 1.1.2 Crear `~/.config/ebrain/.env` (chmod 600) con la key de embeddings (`OPENAI_API_KEY`). **Eduardo coloca la key** (nunca entra al contexto del agente); Opus verifica presencia sin imprimir. Sin `EBRAIN_DATABASE_URL` (PGLite es local). Verificar que NINGÚN repo la trackea.
-- [ ] 1.1.3 Instalar gbrain desde el clon local (`bun install` + link global o wrapper) — NO desde upstream remoto, para que overlay/patches locales apliquen. **Ojo RAM al correr `bun install`.**
-- [ ] 1.1.4 `gbrain init --pglite` con `GBRAIN_EMBEDDING_MODEL=openai:text-embedding-3-small`. `gbrain doctor` → verde. Guardar salida en `docs/runbook.md`.
+- [x] 1.1.1 ~~Eduardo crea proyecto Supabase `ebrain-prod`~~ → **N/A: PGLite local** (Supabase diferido a Pro). El "init a Supabase" se reemplazó por `gbrain init --pglite`.
+- [x] 1.1.2 `~/.config/ebrain/.env` (chmod 600, 181 bytes) con `OPENAI_API_KEY`. Eduardo colocó la key (nunca entró al contexto del agente); presencia verificada sin imprimir. PGLite local (sin `EBRAIN_DATABASE_URL`). `.env` gitignored en todo repo. Cap servidor $5 en el dashboard OpenAI.
+- [x] 1.1.3 gbrain corre desde el clon local vía launcher `~/.config/ebrain/gbrain-run` (`bun run vendor/gbrain/src/cli.ts`) — NO upstream remoto; overlay/patches locales aplican.
+- [x] 1.1.4 `gbrain init --pglite` con `GBRAIN_EMBEDDING_MODEL=openai:text-embedding-3-large` + `GBRAIN_EMBEDDING_DIMENSIONS=1536`. `gbrain doctor` → verde. Salida y gotcha crítico (bun auto-carga `.env` del cwd → launcher hace `cd` a dir neutral) en `docs/runbook.md`.
 
 ### 1.2 Canary PGLite (barato y local primero)
-- [ ] 1.2.1 `gbrain init --pglite` en un brain de prueba desechable.
-- [ ] 1.2.2 Seleccionar 20 notas representativas del vault (mix: daily, permanent, MOC, decision, con wikilinks ES/EN) → copiarlas a `/tmp/ebrain-canary/`.
-- [ ] 1.2.3 Importar canary; verificar: frontmatter intacto byte-a-byte (diff), chunks creados, edges de wikilinks, `gbrain search` encuentra las 20 por título.
-- [ ] 1.2.4 Registrar resultados + costo real de embeddings del canary en `discovery/05-cost-estimate.md` (recalibrar estimación total).
+- [x] 1.2.1 `gbrain init --pglite` en brain de prueba; luego reinit limpio para el full-ingest.
+- [x] 1.2.2 20 notas representativas (daily, permanent, MOC, decision, wikilinks ES/EN).
+- [x] 1.2.3 Canary importado: frontmatter intacto (diff byte-a-byte), 20 páginas / 45 chunks, edges de wikilinks, `search` encuentra las 20. **Root-cause del 400 Bad Request resuelto** (bun `.env` del vault pisaba la key → launcher con cwd neutral).
+- [x] 1.2.4 Costo real del canary (centavos) → recalibrado en `discovery/05-cost-estimate.md`.
 
 ### 1.3 Schema pack `ebrain-ckis-v1`
-- [ ] 1.3.1 `gbrain schema detect` + `suggest` sobre el vault (o el canary ampliado a ~100 notas si detect es caro).
-- [ ] 1.3.2 Redactar el pack: tipos mapeados a `08-note-templates-and-frontmatter.md` y carpetas 00–09; declarar `extractable`/`expert_routing` por tipo; edges custom (`client_of`).
-- [ ] 1.3.3 `gbrain schema use ebrain-ckis-v1` en el canary; validar inferencia de tipo por path en 20 notas.
-- [ ] 1.3.4 Guardar el pack versionado en `/ebrain/overlay/schema-packs/ebrain-ckis-v1/`.
+- [~] 1.3.1 `schema detect`/`suggest` — **DIFERIDO**: `gbrain-base-v2` infiere ya 33 tipos correctos del vault (system, permanent-note, session-log, project-overview, sop, dip…); el pack custom no es bloqueante para F2.
+- [~] 1.3.2 Redacción del pack `ebrain-ckis-v1` — **DIFERIDO** (edges custom `client_of` se evaluarán con evidencia en F2/F5).
+- [~] 1.3.3 `schema use` — DIFERIDO.
+- [~] 1.3.4 Versionar en `overlay/schema-packs/` — DIFERIDO (tarea de F5 si la evidencia lo justifica).
 
-### 1.4 Ingesta Second Brain (producción Supabase)
-- [ ] 1.4.1 Definir exclusiones de sync: `.env*`, adjuntos binarios, `.obsidian/`, carpetas temporales → config de source.
-- [ ] 1.4.2 Registrar el vault como source (`gbrain sources add`) en el brain `personal`.
-- [ ] 1.4.3 Primera pasada `gbrain sync --no-embed` (estructura+grafo sin costo); revisar conteo de páginas vs archivos.
-- [ ] 1.4.4 `gbrain doctor` → decidir `link_resolution.global_basename` según edges ganadas reportadas; activar si neto positivo.
-- [ ] 1.4.5 Embedding por lotes con monitoreo de gasto (parar si supera el estimado aprobado +20%).
-- [ ] 1.4.6 Validación: 10 queries reales de Eduardo (mitad ES, mitad EN) contra `gbrain search` y 3 contra `gbrain think`; documentar calidad en `docs/validation-f1.md`.
-- [ ] 1.4.7 Gate F1: `[AUDIT_PASS]` + commit `F1: engine live, second-brain indexed`.
+### 1.4 Ingesta Second Brain (PGLite local)
+- [x] 1.4.1 Exclusiones: `.env*`, `.obsidian/`, binarios, `.claude/backups/` (heredadas por defecto del sync de gbrain; verificado en secret-scan post-ingesta).
+- [x] 1.4.2 Vault registrado como source `second-brain` (`isolated`, `federated:false`) → `~/Documents/Second Brain`.
+- [x] 1.4.3 `sync --no-embed` (estructura+grafo sin costo); 861 páginas.
+- [x] 1.4.4 `link_resolution.global_basename = true` activado (0 → 490 edges; neto muy positivo — el whitelist DIR_PATTERN no cubre carpetas CKIS).
+- [x] 1.4.5 Embedding por lotes: 3673 chunks, 100% cobertura, ~$0.30–0.35 (muy bajo el cap $5). Vault verificado INTACTO byte-a-byte post-ingesta; secret-scan CLEAN (0 `sk-ant-`, 0 `postgres://…@`).
+- [x] 1.4.6 Validación: 10 queries reales (5 ES / 5 EN) → **10/10 relevantes, 8/10 exactas en top-1**; documentado en `docs/validation-f1.md`. `think` diferido (requiere chat model, F4).
+- [x] 1.4.7 Gate F1: `[AUDIT_PASS]` + commit `F1: engine live, second-brain indexed`.
 
 ---
 

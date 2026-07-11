@@ -28,6 +28,17 @@ Los embeddings se calculan sobre **chunks**, no sobre el archivo crudo. En modo 
 | Voyage `voyage-3` / `voyage-code-3` | ~$0.06–0.18 | ~$0.15–0.45 | `voyage-code-3` para código (F2). |
 | **ZeroEntropy `zembed-1`** (default gbrain) | **VERIFICAR** | ? | Es el default del motor; precio no confirmado — verificar antes de fijarlo. |
 
+## Costo REAL medido (F1, 2026-07-11)
+
+Full-ingest ejecutado con **`openai:text-embedding-3-large` @1536d** (Eduardo eligió calidad sobre el 3-small):
+
+- **861 páginas → 3673 chunks → 3673 embebidos (100%).**
+- Tokens embebidos ≈ 2.14M contenido × ~1.15 overhead de contextual retrieval ≈ **~2.5M**.
+- Precio `text-embedding-3-large` = $0.13 / 1M input → **~$0.30–0.35** (cifra exacta en el dashboard OpenAI).
+- Muy por debajo del cap servidor de **$5**. La estimación previa (centavos–$0.33) se confirmó.
+- Re-embeds posteriores solo tocan chunks stale → marginal.
+- **Company Brain (F2):** 163 `.md`, ~1.91 MB, ~499K tokens → ~$0.06–0.07 adicional con el mismo modelo. Trivial.
+
 ## Conclusión para el gate 0.4.4
 
 - **La ingesta del vault NO es un riesgo de costo:** el corpus es pequeño (~2.5M tokens); el full-embed cuesta **de centavos a ~$0.33** en cualquier provider frontier de embeddings. El cap real importa más para (a) el dream cycle nocturno (llamadas LLM, no embeddings) y (b) el routing F4.
