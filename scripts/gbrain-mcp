@@ -8,4 +8,5 @@ cd "$HOME/.config/ebrain/wd"          # cwd neutral: bun no auto-carga un .env a
 ENV_FILE="$HOME/.config/ebrain/.env"
 if [ -f "$ENV_FILE" ]; then set -a; . "$ENV_FILE"; set +a; fi
 export MCP_STDIO=1
+export GBRAIN_SKILLS_DIR="$HOME/.config/ebrain/skills"
 exec bun run "$HOME/eBrain/vendor/gbrain/src/cli.ts" serve

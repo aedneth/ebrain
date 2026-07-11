@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# skills-federate — agrega las skills canónicas (gstack + ckis-skills + company)
+# en un skills-dir único que gbrain publica vía list_skills (MCP, agent-agnostic,
+# opcional). Dedup por nombre (prioridad ckis > company > global). Idempotente.
+#
+# gbrain confina el skills-dir + exige archivos 'SKILL.md' → se COPIA el contenido
+# (symlinks cross-dir los rechaza la confinación). Re-correr para refrescar drift.
+#
+# Salida: ~/.config/ebrain/skills/<name>/SKILL.md  +  overlay/skills/registry.yaml
+set -euo pipefail
+
+DST="$HOME/.config/ebrain/skills"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REG="$REPO/overlay/skills/registry.yaml"
+mkdir -p "$DST" "$(dirname "$REG")"
+
+# Fuentes en orden de prioridad (first-wins en colisión de nombre).
+# formato: "etiqueta_source|dir_base|nombre_archivo"
+SOURCES=(
+  "ckis|$HOME/Documents/Second Brain/.claude/ckis-skills|skill.md"
+  "company|$HOME/Documents/Company Brain/.claude/skills|skill.md"
+  "gstack|$HOME/.claude/skills|SKILL.md"
+)
+
+declare -A SEEN
+echo "# registry.yaml — catálogo federado de skills canónicas (generado por skills-federate)" > "$REG"
+echo "# fuente de verdad para el skillpack que ebrain publica vía list_skills (MCP)." >> "$REG"
+echo "generated: $(date -u +%FT%TZ)" >> "$REG"
+echo "skills:" >> "$REG"
+
+count=0; dupes=0
+for entry in "${SOURCES[@]}"; do
+  IFS='|' read -r label base fname <<< "$entry"
+  [ -d "$base" ] || { echo "  (source ausente: $base)" >&2; continue; }
+  for d in "$base"/*/; do
+    name="$(basename "$d")"
+    src_file="$d$fname"
+    [ -f "$src_file" ] || continue
+    if [ -n "${SEEN[$name]:-}" ]; then
+      dupes=$((dupes+1))
+      # anota alias en el registry (la versión ganadora ya está)
+      printf '    aliases: [%s]  # también en %s\n' "$name" "$label" >> "$REG"
+      continue
+    fi
+    SEEN[$name]="$label"
+    mkdir -p "$DST/$name"
+    cp "$src_file" "$DST/$name/SKILL.md"
+    # one-liner: description del frontmatter o el primer heading
+    desc="$(awk -F': *' '/^description:/{sub(/^description: */,"");gsub(/"/,"");print;exit}' "$src_file" 2>/dev/null)"
+    [ -z "$desc" ] && desc="$(awk '/^# /{sub(/^# */,"");print;exit}' "$src_file" 2>/dev/null)"
+    trig="$(awk -F': *' '/^trigger:/{sub(/^trigger: */,"");gsub(/"/,"");print;exit}' "$src_file" 2>/dev/null)"
+    {
+      printf '  - name: %s\n' "$name"
+      printf '    source: %s\n' "$label"
+      [ -n "$trig" ] && printf '    trigger: "%s"\n' "$trig"
+      printf '    one_line: "%s"\n' "${desc:0:120}"
+      printf '    optional: true\n'
+    } >> "$REG"
+    count=$((count+1))
+  done
+done
+
+echo "federadas: $count skills únicas (+$dupes duplicados omitidos) → $DST"
+echo "registry:  $REG"

@@ -52,10 +52,13 @@ Los SOPs de Eduardo (development-pipeline-pattern-sop, ultraplan-cloud-execution
 - Un repo cliente (deny) no expone skills personales; el scoping de sources/token de F2 aplica igual al skillpack.
 - Cero peso: publicar es barato (páginas prose); descubrir es una llamada MCP.
 
-## Estado / tarea
+## Estado / tarea — IMPLEMENTADO (2026-07-11)
 
-Nueva tarea **SPRINT 3.9** (diseñada aquí; implementación tras cerrar 3.7/3.8):
-- [ ] 3.9a `overlay/skills/registry.yaml` — catálogo dedup de las ~60 skills (gstack + 35 ckis + 14 company).
-- [ ] 3.9b `scripts/skills-publish` — publica el skillpack vía MCP (`mcp.publish_skills=true`).
-- [ ] 3.9c Validar `mcp__ebrain__list_skills` devuelve el catálogo unificado desde una sesión.
-- [ ] 3.9d Patrón `skillify` documentado + 1 ejemplo (el SOP dev-pipeline → skill del loop). Convergencia con 2.6b (adaptadores por host).
+- [x] 3.9a `overlay/skills/registry.yaml` — **75 skills únicas** deduped (gstack + 35 ckis + 14 company; +11 duplicados omitidos; prioridad ckis>company>gstack).
+- [x] 3.9b `scripts/skills-federate` — agrega a `~/.config/ebrain/skills/<name>/SKILL.md` (copia; `skill.md`→`SKILL.md`). Launchers exportan `GBRAIN_SKILLS_DIR`; `mcp.publish_skills=true`.
+- [x] 3.9c **Validado vía MCP**: `list_skills` → count 75, incluye ckis (braindump/process-inbox/daily-brief) Y gstack (autoplan/review/ship).
+- [x] 3.9d Patrón `skillify` documentado (arriba); SOP dev-pipeline como ejemplo. Converge con 2.6b (adaptadores por host) en F4.
+
+**Refresco de drift:** los SKILL.md se COPIAN (la confinación de gbrain rechaza symlinks cross-dir) → re-correr `scripts/skills-federate` tras cambiar una skill. Candidato a hook/cron en F4/F5.
+
+**Nota de seguridad:** `mcp.publish_skills=true` expone el CONTENIDO de los SKILL.md a callers MCP. En F2 el MCP es stdio local (solo Eduardo) → seguro. Al exponer MCP remoto, revisar (el field-allowlist de gbrain ya descarta `writes_to`/`sources`).

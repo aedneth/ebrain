@@ -16,4 +16,5 @@ if [ -f "$ENV_FILE" ]; then
   . "$ENV_FILE"
   set +a
 fi
+export GBRAIN_SKILLS_DIR="$HOME/.config/ebrain/skills"
 exec bun run "$HOME/eBrain/vendor/gbrain/src/cli.ts" "$@"

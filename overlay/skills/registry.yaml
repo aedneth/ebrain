@@ -1,0 +1,316 @@
+# registry.yaml — catálogo federado de skills canónicas (generado por skills-federate)
+# fuente de verdad para el skillpack que ebrain publica vía list_skills (MCP).
+generated: 2026-07-11T22:55:28Z
+skills:
+  - name: braindump
+    source: ckis
+    one_line: "Capture raw, unstructured thoughts from Eduardo into the inbox with light classification and frontmatter. Use when Eduar"
+    optional: true
+  - name: ckis-context-handoff
+    source: ckis
+    one_line: ">"
+    optional: true
+  - name: ckis-qc-pass
+    source: ckis
+    one_line: ">"
+    optional: true
+  - name: claude-project-architect
+    source: ckis
+    one_line: ">"
+    optional: true
+  - name: client-onboarding
+    source: ckis
+    one_line: "Spin up a new Korvex client — create a person note in 09-people/clients/, a project file in ~/Documents/Company Brain/06"
+    optional: true
+  - name: convert-to-md
+    source: ckis
+    one_line: "Convert non-markdown files in 00-inbox/convert-queue/ (.pdf, .docx, .txt, .rtf) to .md and move them to 00-inbox/ for pr"
+    optional: true
+  - name: daily-brief
+    source: ckis
+    one_line: "Generate Eduardo's morning brief — top 3 priorities, blockers, inbox status — by reading yesterday's daily note, recent "
+    optional: true
+  - name: instagram-capture-process
+    source: ckis
+    one_line: ">"
+    optional: true
+  - name: knowledge-synthesis
+    source: ckis
+    one_line: "Search the entire vault for all notes related to a topic, compile what Eduardo already knows, surface patterns, contradi"
+    optional: true
+  - name: korvex-design
+    source: ckis
+    one_line: ">"
+    optional: true
+  - name: monthly-consolidation
+    source: ckis
+    one_line: "Run the monthly knowledge consolidation — analyze permanent notes from the past month, detect recurring patterns, update"
+    optional: true
+  - name: process-inbox
+    source: ckis
+    one_line: "Read every file in 00-inbox/ and classify it as Type A (raw capture — full processing) or Type B (curated document — ind"
+    optional: true
+  - name: profile-intelligence
+    source: ckis
+    one_line: "Gather Eduardo's personal documents (academic essays, speeches, startup archives, assessments), convert them to Markdown"
+    optional: true
+  - name: project-context
+    source: ckis
+    one_line: "Compile a compact context brief for a project — read its _overview.md, scan recent daily notes for mentions, gather all "
+    optional: true
+  - name: social-media-processor
+    source: ckis
+    one_line: "Read items dropped into 00-inbox/social-media-queue/, strip engagement bait, classify each as actionable knowledge or en"
+    optional: true
+  - name: sync-overviews
+    source: ckis
+    one_line: "Keep all 03-projects/ _overview.md files current using parallel subagents — one per project with changes. Orchestrator h"
+    optional: true
+  - name: ultraplan-bootstrap
+    source: ckis
+    one_line: ">"
+    optional: true
+  - name: url-processor
+    source: ckis
+    one_line: "Fetch a web URL via Jina Reader, extract a clean literature note (title, key insights, quotes, actionability score), fil"
+    optional: true
+  - name: video-editor
+    source: ckis
+    one_line: ">"
+    optional: true
+  - name: weekly-review
+    source: ckis
+    one_line: "Run Eduardo's Sunday weekly review — scan the past 7 days of daily notes, check goal progress, audit knowledge captured "
+    optional: true
+  - name: workflow-extend-pattern-a
+    source: ckis
+    one_line: ">"
+    optional: true
+  - name: yaml-graph-audit
+    source: ckis
+    one_line: ">"
+    optional: true
+  - name: youtube-processor
+    source: ckis
+    one_line: "Extract a YouTube transcript via the youtube-transcript CLI, distill it into a literature note (key concepts, frameworks"
+    optional: true
+    aliases: [ckis-context-handoff]  # también en company
+    aliases: [claude-project-architect]  # también en company
+    aliases: [client-onboarding]  # también en company
+    aliases: [convert-to-md]  # también en company
+    aliases: [korvex-design]  # también en company
+    aliases: [process-inbox]  # también en company
+    aliases: [project-context]  # también en company
+    aliases: [sync-overviews]  # también en company
+    aliases: [ultraplan-bootstrap]  # también en company
+    aliases: [url-processor]  # también en company
+    aliases: [youtube-processor]  # también en company
+  - name: autoplan
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: benchmark
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: benchmark-models
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: book-to-skill
+    source: gstack
+    one_line: "Converts books and documents (PDF, EPUB, DOCX, HTML, Markdown, plain text, RTF, MOBI/AZW with Calibre) into structured a"
+    optional: true
+  - name: browse
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: canary
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: careful
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: codex
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: connect-chrome
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: context-restore
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: context-save
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: cso
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: design-consultation
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: design-html
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: design-review
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: design-shotgun
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: devex-review
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: document-release
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: find-skills
+    source: gstack
+    one_line: "Helps users discover and install agent skills when they ask questions like how do I do X, find a skill for X, is there a"
+    optional: true
+  - name: freeze
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: graphify
+    source: gstack
+    trigger: "/graphify"
+    one_line: "any input (code, docs, papers, images, videos) to knowledge graph. Use when user asks any question about a codebase, doc"
+    optional: true
+  - name: gstack
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: gstack-upgrade
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: guard
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: health
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: investigate
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: land-and-deploy
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: landing-report
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: learn
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: make-pdf
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: office-hours
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: open-gstack-browser
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: pair-agent
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: plan-ceo-review
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: plan-design-review
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: plan-devex-review
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: plan-eng-review
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: plan-tune
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: privacy-policy
+    source: gstack
+    one_line: "Draft a detailed privacy policy covering data types, jurisdiction, GDPR and compliance considerations, and clauses needi"
+    optional: true
+  - name: qa
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: qa-only
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: retro
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: review
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: scrape
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: setup-browser-cookies
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: setup-deploy
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: setup-gbrain
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: ship
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: skillify
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: sync-gbrain
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: unfreeze
+    source: gstack
+    one_line: "|"
+    optional: true
+  - name: wiki-brain
+    source: gstack
+    one_line: "Turn Claude Code into a knowledge base that compounds. Every conversation ingests into a personal wiki you browse in Obs"
+    optional: true

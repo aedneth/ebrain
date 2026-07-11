@@ -4,6 +4,15 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — F3.9: federación de skills IMPLEMENTADA (75 skills unificadas vía MCP)
+
+- **`scripts/skills-federate`** agrega las skills canónicas → `~/.config/ebrain/skills/<name>/SKILL.md` (copia; `skill.md`→`SKILL.md`; dedup prioridad ckis>company>gstack). **75 skills únicas** (+11 duplicados omitidos).
+- Launchers (`gbrain-run`/`gbrain-mcp`) exportan `GBRAIN_SKILLS_DIR`; `mcp.publish_skills=true`.
+- **Validado vía MCP**: `list_skills` → **count 75**, incluye ckis (braindump/process-inbox/daily-brief) Y gstack (autoplan/review/ship). **Agent-agnostic** (cualquier cliente MCP: Claude Code/Codex/gemini…), **opcional** (gated por publish_skills), **unificado + deduped**.
+- `overlay/skills/registry.yaml` (catálogo versionado). Drift: re-correr `skills-federate` (copias). Doc: `docs/skill-federation.md`.
+
+---
+
 ## 2026-07-11 — GATE F3 `[AUDIT_PASS]`: gstack overlay + skill federation diseñada
 
 - **3.5**: `/learn` checkpoint local-only verificado; **secret scanner probado** (4/4 secretos falsos atrapados por los PATTERNS de gstack).
