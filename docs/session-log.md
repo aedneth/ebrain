@@ -14,9 +14,17 @@ Handoff entre sesiones. El más reciente arriba. Formato: fecha · fase · qué 
 - 2.8 recovery-from-git **probado** (863p/3689c/490 links); `~/eBrain` en manifest de `ckis-backup-all` → repo privado `aedneth/ebrain` pusheado; doctor verde.
 - 2.9 gate: sources solo second-brain+company-brain, secret-scan 0/0, brisas/dekko no federados, korvex sin push. **[AUDIT_PASS].**
 
-**Cómo arrancar la próxima sesión (F3 o F4 — Eduardo decide):**
-1. **F3 (gstack + overlay CKIS):** `cd vendor/gstack && ./setup` (host claude), overlay en `overlay/gstack-ckis/`, mapear `structured-agentic-development` vs `/autoplan`. Ver SPRINT F3.
-2. **F4 (routing, spec `ROUTING.md`):** **gate humano 4.2** (key OpenRouter con hard cap). Incluye **2.6b** (auditoría multi-proveedor de `.brain`/hooks/OPUS_BOOTSTRAP → adaptadores de eventos + `ORCHESTRATOR_MODEL`/`WORKER_MODEL`) y el multi-proveedor cero-costo de embeddings (ZeroEntropy/gemini) que pidió Eduardo.
+**F3 ✅ COMPLETA + gate `[AUDIT_PASS]`** (3.1-3.8 + 3.9 diseñado):
+- gstack ya instalado (no `./setup`, no Chromium). **agent-browser (Vercel) = default de browser** (ULTRAPLAN L112); gstack /browse opt-in.
+- `overlay/gstack-ckis/` — mapa 7-phase ↔ skills + 7 reglas donde el SOP gana. No edita SKILL.md vendored.
+- 3.5 checkpoint local-only + secret scanner probado (4/4). 3.7 loop e2e corrido en sandbox (empirical-engine-first, commit-per-phase, PR local sin push) → `docs/validation-f3.md`.
+- **3.9 [Eduardo] federación de skills diseñada** (`docs/skill-federation.md`): ebrain como capa unificada/opcional/agent-agnostic sobre gstack+ckis-skills+company-brain vía skillpack nativo de gbrain (`list_skills`). Impl diferida a F4/2.6b.
+
+**Cómo arrancar la próxima sesión — F4 (routing, spec `ROUTING.md`):**
+1. **Gate humano 4.2:** Eduardo crea key OpenRouter con hard cap → `~/.config/ebrain/.env`.
+2. 4.1 verificación en vivo de modelos chinos (DeepSeek V4, GLM-5.2, Kimi K2.6, MiniMax M3, Qwen3.7) — slugs+precios.
+3. Incluye **2.6b** (adaptadores multi-proveedor de `.brain`/hooks/OPUS_BOOTSTRAP) + **3.9 impl** (skill federation) + multi-proveedor cero-costo de embeddings (ZeroEntropy/gemini) — todo converge en F4.
+4. `cli/route.ts` + `routing.yaml` + benchmark de categorías en disputa. `frontier.auto_escalate:false`.
 
 **F2.6c (`brain-init`) — implementado y probado:** `~/eBrain/scripts/brain-init` + template `~/eBrain/templates/brain/`. Bootstrap agent-agnostic idempotente (config rutas-correctas, git+Claude hooks, register Dev Brain, trust `--client`→deny). Drift `02→03-projects`/`03→05-knowledge` arreglado en template. Verificado end-to-end. Doc: `docs/brain-init-pipeline.md`. Pendiente: batch-fix drift en ~10 `.brain` desplegados (solo propios).
 
