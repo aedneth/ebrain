@@ -1,0 +1,15 @@
+# vendor: clones read-only de upstream (gbrain/gstack) — nunca se versionan aquí
+vendor/
+
+# secretos: jamás en el repo (GUARDRAILS §1)
+*.env
+.env
+*.pem
+*credentials*
+
+# runtime
+node_modules/
+.gbrain/
+
+# log de gasto (puede contener metadata sensible; GUARDRAILS §1/§4)
+spend.jsonl
