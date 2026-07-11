@@ -6,7 +6,17 @@ Handoff entre sesiones. El más reciente arriba. Formato: fecha · fase · qué 
 
 ## 2026-07-11 — Fase 2 en curso (orquestador Opus)
 
-**Fase:** F2 (Federación CKIS) → **2.1, 2.2, 2.3, 2.4, 2.6, 2.6c hechas; 2.6b nueva; 2.5/2.7/2.8 pendientes**.
+**Fase:** F2 (Federación CKIS) → ✅ **COMPLETA + gate `[AUDIT_PASS]`** (2.1–2.8 + 2.9). Único diferido: **2.6b multi-proveedor → F4**.
+
+**Cierre F2 (2.5, 2.7, 2.8, 2.9):**
+- 2.5 guidance blocks en 7 repos propios (local, no push) + integrado a `brain-init`.
+- 2.7 benchmark QMD → **ebrain primario, QMD fallback cero-costo** (costo búsqueda < $0.50/mes). CLAUDE.md del vault + CKIS CHANGELOG v2.3.97 actualizados.
+- 2.8 recovery-from-git **probado** (863p/3689c/490 links); `~/eBrain` en manifest de `ckis-backup-all` → repo privado `aedneth/ebrain` pusheado; doctor verde.
+- 2.9 gate: sources solo second-brain+company-brain, secret-scan 0/0, brisas/dekko no federados, korvex sin push. **[AUDIT_PASS].**
+
+**Cómo arrancar la próxima sesión (F3 o F4 — Eduardo decide):**
+1. **F3 (gstack + overlay CKIS):** `cd vendor/gstack && ./setup` (host claude), overlay en `overlay/gstack-ckis/`, mapear `structured-agentic-development` vs `/autoplan`. Ver SPRINT F3.
+2. **F4 (routing, spec `ROUTING.md`):** **gate humano 4.2** (key OpenRouter con hard cap). Incluye **2.6b** (auditoría multi-proveedor de `.brain`/hooks/OPUS_BOOTSTRAP → adaptadores de eventos + `ORCHESTRATOR_MODEL`/`WORKER_MODEL`) y el multi-proveedor cero-costo de embeddings (ZeroEntropy/gemini) que pidió Eduardo.
 
 **F2.6c (`brain-init`) — implementado y probado:** `~/eBrain/scripts/brain-init` + template `~/eBrain/templates/brain/`. Bootstrap agent-agnostic idempotente (config rutas-correctas, git+Claude hooks, register Dev Brain, trust `--client`→deny). Drift `02→03-projects`/`03→05-knowledge` arreglado en template. Verificado end-to-end. Doc: `docs/brain-init-pipeline.md`. Pendiente: batch-fix drift en ~10 `.brain` desplegados (solo propios).
 
