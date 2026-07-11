@@ -1,0 +1,4 @@
+#!/bin/sh
+HOOK_DIR="$(dirname "$0")"
+[ -x "$HOOK_DIR/pre-commit.security" ] && "$HOOK_DIR/pre-commit.security" "$@" || exit 1
+exit 0

@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# brain-init — agent-agnostic per-project brain bootstrap (ebrain SPRINT 2.6c).
+#
+# Deja un proyecto listo: instala el per-project .brain (scripts + hooks + config),
+# cablea los hooks (git = agnósticos; Claude Code = settings.json), conecta el Dev
+# Brain, y marca la confianza (own vs client→deny). El grafo semántico inicial de
+# graphify necesita un agente → se instruye al final (no se puede invocar la skill
+# de forma no-interactiva). Idempotente. Soporta --dry-run.
+#
+# Uso:
+#   brain-init [PROJECT_DIR] [--slug S] [--name "N"] [--client]
+#              [--orchestrator-model M] [--worker-model M] [--force] [--dry-run]
+set -euo pipefail
+
+# ── localizar el template (junto a este script, en el repo ebrain) ──────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEMPLATE_DIR="$(cd "$SCRIPT_DIR/../templates/brain" && pwd)"
+
+# ── defaults ────────────────────────────────────────────────────────────────
+PROJECT_DIR="$PWD"
+SLUG=""; NAME=""; TRUST="own"; DRY=0; FORCE=0; REGISTER=1
+ORCH_MODEL="claude-opus-4-8"      # F4 routing los sobre-escribe; default sensato
+WORKER_MODEL="claude-sonnet-5"
+
+# ── parse args ──────────────────────────────────────────────────────────────
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --slug) SLUG="$2"; shift 2;;
+    --name) NAME="$2"; shift 2;;
+    --client) TRUST="client"; shift;;
+    --no-register) REGISTER=0; shift;;
+    --orchestrator-model) ORCH_MODEL="$2"; shift 2;;
+    --worker-model) WORKER_MODEL="$2"; shift 2;;
+    --force) FORCE=1; shift;;
+    --dry-run) DRY=1; shift;;
+    -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0;;
+    --*) echo "flag desconocido: $1" >&2; exit 2;;
+    *) PROJECT_DIR="$1"; shift;;
+  esac
+done
+
+PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
+[ -z "$SLUG" ] && SLUG="$(basename "$PROJECT_DIR")"
+[ -z "$NAME" ] && NAME="$SLUG"
+
+say() { printf '  %s\n' "$*"; }
+run() { if [ "$DRY" = 1 ]; then printf '  [dry] %s\n' "$*"; else eval "$*"; fi; }
+
+echo "brain-init → $PROJECT_DIR"
+echo "  slug=$SLUG  name=\"$NAME\"  trust=$TRUST  orchestrator=$ORCH_MODEL  worker=$WORKER_MODEL"
+[ "$DRY" = 1 ] && echo "  (DRY-RUN: no se muta nada)"
+
+# ── precondición: repo git ──────────────────────────────────────────────────
+if ! git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "ERROR: $PROJECT_DIR no es un repo git. Corre 'git init' primero." >&2; exit 1
+fi
+GIT_DIR="$(git -C "$PROJECT_DIR" rev-parse --git-dir)"
+GIT_DIR="$(cd "$PROJECT_DIR" && cd "$GIT_DIR" && pwd)"
+
+# ── 1. skeleton .brain (scripts se refrescan; data dirs no se pisan) ─────────
+say "1. .brain skeleton + scripts"
+run "mkdir -p '$PROJECT_DIR/.brain'/{sessions,decisions,bugs,graph,scripts/lib}"
+run "cp -r '$TEMPLATE_DIR/scripts/.' '$PROJECT_DIR/.brain/scripts/'"
+run "chmod +x '$PROJECT_DIR/.brain/scripts/'*.sh 2>/dev/null || true"
+
+# ── 2. config.sh (render del tmpl; no pisar salvo --force) ───────────────────
+CFG="$PROJECT_DIR/.brain/config.sh"
+if [ -f "$CFG" ] && [ "$FORCE" = 0 ]; then
+  say "2. config.sh ya existe (usa --force para regenerar) — se conserva"
+else
+  say "2. render config.sh (rutas 03-projects/05-knowledge correctas)"
+  if [ "$DRY" = 0 ]; then
+    sed -e "s#__PROJECT_SLUG__#$SLUG#g" -e "s#__PROJECT_NAME__#$NAME#g" \
+        -e "s#__ORCHESTRATOR_MODEL__#$ORCH_MODEL#g" -e "s#__WORKER_MODEL__#$WORKER_MODEL#g" \
+        -e "s#__BRAIN_TRUST__#$TRUST#g" \
+        "$TEMPLATE_DIR/config.sh.tmpl" > "$CFG"
+  fi
+fi
+
+# ── 3. git hooks (copias; el wrapper ya tolera post-commit.graphify ausente) ─
+say "3. git hooks → $GIT_DIR/hooks"
+for h in post-commit post-commit.brain pre-commit pre-commit.security post-checkout; do
+  run "cp '$TEMPLATE_DIR/githooks/$h' '$GIT_DIR/hooks/$h' && chmod +x '$GIT_DIR/hooks/$h'"
+done
+
+# ── 4. hooks de Claude Code (merge en .claude/settings.json) ─────────────────
+say "4. Claude Code hooks → .claude/settings.json (merge, no destructivo)"
+if [ "$DRY" = 0 ]; then
+  mkdir -p "$PROJECT_DIR/.claude"
+  python3 - "$PROJECT_DIR/.claude/settings.json" "$TEMPLATE_DIR/claude-settings.hooks.json" <<'PY'
+import json, sys, os
+dst, tmpl = sys.argv[1], sys.argv[2]
+cur = {}
+if os.path.exists(dst):
+    try: cur = json.load(open(dst))
+    except Exception: cur = {}
+hooks = json.load(open(tmpl))["hooks"]
+cur.setdefault("hooks", {})
+for evt, spec in hooks.items():
+    cur["hooks"].setdefault(evt, spec)   # no pisar un hook existente del usuario
+json.dump(cur, open(dst, "w"), indent=2)
+print("  settings.json actualizado")
+PY
+fi
+
+# ── 5. ORCHESTRATOR_BOOTSTRAP.md (parametrizado, provider-agnostic) ──────────
+say "5. ORCHESTRATOR_BOOTSTRAP.md"
+if [ "$DRY" = 0 ]; then
+  sed -e "s#__PROJECT_SLUG__#$SLUG#g" -e "s#__PROJECT_NAME__#$NAME#g" \
+      -e "s#__ORCHESTRATOR_MODEL__#$ORCH_MODEL#g" -e "s#__WORKER_MODEL__#$WORKER_MODEL#g" \
+      -e "s#__DATE__#$(date +%F)#g" \
+      "$TEMPLATE_DIR/ORCHESTRATOR_BOOTSTRAP.md.tmpl" > "$PROJECT_DIR/.brain/ORCHESTRATOR_BOOTSTRAP.md"
+fi
+
+# ── 6. .gitignore: graphify-out/ es build output ────────────────────────────
+say "6. .gitignore (graphify-out/)"
+if [ "$DRY" = 0 ]; then
+  GI="$PROJECT_DIR/.gitignore"; touch "$GI"
+  grep -qxF 'graphify-out/' "$GI" 2>/dev/null || echo 'graphify-out/' >> "$GI"
+fi
+
+# ── 7. conectar al Dev Brain (idempotente) ──────────────────────────────────
+if [ "$REGISTER" = 1 ]; then
+  say "7. register-to-dev-brain"
+  run "bash '$PROJECT_DIR/.brain/scripts/register-to-dev-brain.sh'"
+else
+  say "7. register-to-dev-brain OMITIDO (--no-register)"
+fi
+
+# ── 8. trust: client → deny en gbrain-repo-policy (nunca federar a ebrain) ───
+if [ "$TRUST" = "client" ]; then
+  say "8. trust=client → deny en gbrain-repo-policy (no federar a ebrain)"
+  POL="$HOME/.claude/skills/gstack/bin/gstack-gbrain-repo-policy"
+  REMOTE="$(git -C "$PROJECT_DIR" remote get-url origin 2>/dev/null || echo '')"
+  if [ -x "$POL" ] && [ -n "$REMOTE" ]; then
+    run "'$POL' set \"\$('$POL' normalize '$REMOTE' 2>/dev/null || echo '$REMOTE')\" deny 2>/dev/null || true"
+  else
+    say "   (gstack repo-policy no disponible o sin origin — anotar deny manual en ebrain)"
+  fi
+else
+  say "8. trust=own"
+fi
+
+# ── 9. doctor ────────────────────────────────────────────────────────────────
+echo "── doctor ──"
+[ "$DRY" = 1 ] && { echo "  (dry-run: sin verificación)"; exit 0; }
+ok=1
+[ -f "$PROJECT_DIR/.brain/config.sh" ] && say "✓ config.sh" || { say "✗ config.sh"; ok=0; }
+[ -x "$GIT_DIR/hooks/post-commit" ] && say "✓ git post-commit" || { say "✗ git post-commit"; ok=0; }
+[ -f "$PROJECT_DIR/.claude/settings.json" ] && say "✓ Claude hooks" || { say "✗ Claude hooks"; ok=0; }
+[ -f "$PROJECT_DIR/.brain/scripts/log-session.sh" ] && say "✓ scripts" || { say "✗ scripts"; ok=0; }
+say ""
+say "NEXT (paso de agente — graphify semántico necesita un runtime de agente):"
+say "  cd '$PROJECT_DIR' && /graphify .        # grafo de código inicial"
+say "  luego cada commit auto-reconstruye (post-commit.graphify si graphify lo instala)"
+[ "$ok" = 1 ] && echo "brain-init OK" || { echo "brain-init con fallos"; exit 1; }

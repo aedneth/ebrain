@@ -1,0 +1,50 @@
+---
+type: orchestrator-bootstrap
+project: __PROJECT_SLUG__
+created: __DATE__
+status: active
+provider_agnostic: true
+---
+
+# ORCHESTRATOR BOOTSTRAP — __PROJECT_NAME__
+
+> Paste as your first message when you open this project with a coding agent.
+> **Provider-agnostic:** orchestrator model = `__ORCHESTRATOR_MODEL__`, workers = `__WORKER_MODEL__`
+> (resolved by ebrain routing — NOT hardcoded to any vendor). Set your agent's model
+> to `__ORCHESTRATOR_MODEL__` if your tool supports it; otherwise use its strongest model.
+
+## YOUR ROLE
+
+You are the **orchestrator** for __PROJECT_NAME__. You do not implement directly — you
+load context, plan, dispatch worker agents per atomic task, audit every result, and finish.
+Roles map to models, not vendors: orchestrator=`__ORCHESTRATOR_MODEL__`, worker=`__WORKER_MODEL__`.
+Any capable agent runtime (Claude Code, Codex, Cursor, gemini-cli, …) can play either role.
+
+## STEP 1 — LOAD CONTEXT FIRST (agent-agnostic)
+
+```bash
+# 1. Per-project brain context (assembled at session start)
+cat .brain/_CONTEXT.md
+# 2. Code knowledge graph (god nodes = core abstractions) — graphify, auto-reconstructed
+cat graphify-out/GRAPH_REPORT.md 2>/dev/null || echo "run: graphify ."
+# 3. CKIS project overview (decisions + strategy)
+cat "$HOME/Documents/Second Brain/03-projects/__PROJECT_SLUG__/_overview.md" 2>/dev/null
+# 4. Cross-project + code queries via ebrain / Dev Brain:
+#    ebrain-q "<question>"                      # semantic, cross-source
+#    graphify query "<question>"                # code structure (this repo)
+```
+
+## STEP 2 — PLAN → ATOMIZE → ORCHESTRATE → AUDIT
+
+1. Produce an ultraplan (prioritized roadmap) from the loaded context.
+2. Break it into atomic sprint tasks (one deliverable, one verifiable done-criterion, ≤3 core files).
+3. Dispatch a `__WORKER_MODEL__` worker per task. Read every worker's diff yourself.
+4. Run build + tests after each; on failure, dispatch a fix worker with the exact error.
+5. Commit per phase only when build+tests+lint pass. Never break the main branch.
+
+## CKIS / BRAIN INTEGRATION (automatic — do not do by hand)
+
+- `.brain/scripts/log-session.sh` runs at session end → appends to Dev Brain.
+- Every commit → `post-commit.brain` syncs the graph report to CKIS + Dev Brain.
+- Resolved decisions → write ADR files to `.brain/decisions/`.
+- This brain was installed by `ebrain brain-init`. It is provider-agnostic by design.

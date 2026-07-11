@@ -4,6 +4,17 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — F2.6c: `brain-init` implementado (bootstrap de proyecto agent-agnostic)
+
+- **`~/eBrain/scripts/brain-init`** + template canónico `~/eBrain/templates/brain/` (scripts, githooks, config.sh.tmpl, claude-settings.hooks.json, ORCHESTRATOR_BOOTSTRAP.md.tmpl).
+- Un comando deja un repo listo: `.brain` skeleton + scripts → config (rutas correctas) → git hooks → merge Claude hooks → bootstrap parametrizado → `.gitignore` → register-to-dev-brain → trust. Idempotente, `--dry-run`, `--client`, `--no-register`, `--force`.
+- **Drift arreglado en el template:** `02-projects`→`03-projects`, `03-knowledge`→`05-knowledge` (afectaba config.sh + sync-graph-to-vault.sh de TODOS los `.brain` desplegados). Nuevos despliegues correctos; batch-fix de los desplegados = follow-up (solo repos propios).
+- **Provider-agnostic:** `ORCHESTRATOR_BOOTSTRAP.md` parametrizado (`$ORCHESTRATOR_MODEL`/`$WORKER_MODEL`) reemplaza el `OPUS_BOOTSTRAP` Anthropic-locked. La generalización de los hooks de eventos (Claude Code→Codex/Cursor/gemini) va en 2.6b.
+- **Frontera cliente:** `--client` → `BRAIN_TRUST=client` + `deny` en gstack repo-policy → brisas/dekko nunca federan.
+- Verificado end-to-end en repo desechable: idempotencia, merge no-destructivo (preserva hooks de usuario), `--client`, doctor ✓. Doc: `docs/brain-init-pipeline.md`.
+
+---
+
 ## 2026-07-11 — F2.4: MCP registrado + cross-source resuelto vía overlay `ebrain-q`
 
 - **MCP `ebrain` registrado** (user scope, machine-wide) → `✔ Connected`. Launcher `~/.config/ebrain/gbrain-mcp` (cwd neutral + `.env` + `MCP_STDIO=1`). Tools `mcp__ebrain__*` en toda sesión nueva de Claude Code.
