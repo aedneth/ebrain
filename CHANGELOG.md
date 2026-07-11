@@ -4,6 +4,19 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — GATE F2 `[AUDIT_PASS]`: Federación CKIS COMPLETA
+
+**Opus audit F2 (2026-07-11) — invariantes verificados:**
+- Sources = solo `second-brain` (861p) + `company-brain` (163p); **cero clientes/código registrados**. brisas/dekko NO federados.
+- Secret-scan del brain: 0 `sk-ant`, 0 pooler-urls. Repo `~/eBrain` secret-clean (46 archivos).
+- korvex: solo commits locales, **cero push** (verificado). Único push = `~/eBrain` → `aedneth/ebrain` privado.
+- Backup `ckis-backup-doctor` **verde** (all pushed). Recovery-from-git probado (863p/490 links). CHANGELOG al día.
+
+**F2 (Federación CKIS) COMPLETA.** Hecho: 2.1 topología (ADR-001, 1 brain·N sources) · 2.2 aislamiento · 2.3 repos · 2.4 MCP + `ebrain-q` cross-source · 2.5 guidance blocks · 2.6 graphify (dos carriles bridge) · 2.6c `brain-init` · 2.7 benchmark QMD (ebrain primario, QMD fallback) · 2.8 backup/recovery.
+**Diferido a F4:** 2.6b auditoría multi-proveedor (insumo del model-routing). **Siguiente fase: F3 (gstack + overlay CKIS)** o F4 (routing) según decida Eduardo.
+
+---
+
 ## 2026-07-11 — F2.5 + F2.8: guidance blocks + backup/recovery probado
 
 **2.5 — guidance blocks:** bloque `## ebrain Search + Code Guidance` (semántico→ebrain/MCP/`ebrain-q`, estructura→graphify/Dev Brain) inyectado en 7 repos propios con CLAUDE.md (5 CLIs + museum + korvex-web), **commit local sin push**. Integrado a `brain-init` (paso 5.5) para repos futuros.
