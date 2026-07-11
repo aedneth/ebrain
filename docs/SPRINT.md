@@ -112,12 +112,12 @@ Convención de estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado
 
 ## FASE 3 — Workflow gstack con overlay CKIS
 
-- [ ] 3.1 `cd vendor/gstack && ./setup` (host claude). Verificar skills visibles en Claude Code.
-- [ ] 3.2 Crear `/ebrain/overlay/gstack-ckis/`: archivo por skill adaptada que documenta el delta vs upstream (NUNCA editar `vendor/gstack` directamente).
-- [ ] 3.3 Mapear `structured-agentic-development` (leer el workflow canónico en el vault) contra `/autoplan`: producir tabla de equivalencias y el overlay que impone: fases numeradas, spec numérica cerrada, `[AUDIT_PASS]`, commit-per-phase, visual gate 1440×900 + 393×852 para trabajo UI.
-- [ ] 3.4 Mapear `development-pipeline-pattern-sop.md` contra `/review`+`/ship`; overlay donde el SOP gana.
+- [x] 3.1 **gstack YA instalado** en `~/.claude/skills/` (pin 9988cd3): /autoplan /review /ship /qa /office-hours /learn /retro /careful /freeze /guard verificados. **Sin `./setup`, sin descarga de Chromium** (Eduardo: agent-browser nativo; `vendor/gstack` queda como referencia read-only de auditoría). *(Corrección: un `cp` mío creó un nested `gstack/gstack` que eliminé; install real intacto.)*
+- [x] 3.2 `overlay/gstack-ckis/` creado: `README.md` (filosofía overlay, no editar vendored) + `00-ckis-overlay-map.md`. Adaptación vía CLAUDE.md/SOP, nunca tocando los SKILL.md.
+- [x] 3.3 **Mapa 7-phase ↔ /autoplan** en `00-ckis-overlay-map.md`: tabla de equivalencias + overlay que impone fases numeradas, spec numérico cerrado, `[AUDIT_PASS]`/fase, commit-per-phase, visual gate 1440×900+393×852 (con **agent-browser**, no /browse).
+- [x] 3.4 **Mapa SOP ↔ /review+/ship** + reglas de precedencia (7 reglas donde el SOP gana: gate pass/fail, maker≠checker, visual gate agent-browser, commit-per-phase, contratos herméticos, .brain/.claude nunca commiteados, irreversible→surface).
 - [ ] 3.5 Activar `/learn` + checkpoint mode local-only; si se activa memory sync a repo privado, verificar secret scanner con un secreto de prueba falso (debe bloquear).
-- [ ] 3.6 Marcar opt-in por hardware: browse, open-gstack-browser, design-shotgun (documentar cómo activarlas bajo demanda).
+- [x] 3.6 Opt-in por hardware documentado (`00-ckis-overlay-map.md` §triage): browse/design-shotgun/open-gstack-browser = Chromium sólo on-demand. **Default de browser = agent-browser (Vercel)** para QA/spec/web/fetch (ULTRAPLAN L112).
 - [ ] 3.7 Sprint de prueba end-to-end en un repo sandbox: `/office-hours → /autoplan → implementar (worker) → /review → /ship` (PR local, sin push a korvex). Registrar fricciones en `docs/validation-f3.md`.
 - [ ] 3.8 Gate F3: `[AUDIT_PASS]` + commit.
 

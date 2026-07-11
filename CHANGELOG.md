@@ -4,6 +4,15 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — F3 (en curso): overlay CKIS↔gstack (3.1–3.4, 3.6)
+
+- **3.1 gstack ya instalado** (`~/.claude/skills/`, pin 9988cd3) — sin `./setup`, sin Chromium. Descubierto que estaba pre-instalado; `vendor/gstack` queda como referencia read-only. (Un `cp` mío creó un nested `gstack/gstack` → eliminado, install real intacto.)
+- **Decisión de frontera (Eduardo, ULTRAPLAN L112):** browser = **agent-browser (Vercel) nativo** para QA/spec-driven-dev/web/fetch (Chromium propio, > playwright); gstack `/browse`+`/design-shotgun`+`/open-gstack-browser` = **opcionales/on-demand** (GUARDRAILS §9, 4GB). Visual gate corre con agent-browser.
+- **`overlay/gstack-ckis/`** (3.2/3.3/3.4/3.6): `README.md` + `00-ckis-overlay-map.md` — mapa 7-phase ↔ skills gstack + 7 reglas de precedencia donde el **SOP de Eduardo gana** (gate pass/fail, maker≠checker, visual gate dual-viewport, commit-per-phase + `[AUDIT_PASS]`, contratos de worker herméticos, `.brain`/`.claude` nunca commiteados, irreversible→surface). Overlay vía CLAUDE.md/SOP, NUNCA editando los SKILL.md vendored (build-artifacts).
+- **Pendiente F3:** 3.5 (`/learn` + checkpoint local-only + test secret scanner), 3.7 (sprint e2e sandbox), 3.8 (gate).
+
+---
+
 ## 2026-07-11 — GATE F2 `[AUDIT_PASS]`: Federación CKIS COMPLETA
 
 **Opus audit F2 (2026-07-11) — invariantes verificados:**
