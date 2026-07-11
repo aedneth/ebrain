@@ -4,6 +4,17 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — F4 núcleo (4.1–4.4): router Tier 1 sobre OpenRouter vivo + auditado por Fable 5
+
+- **Gate humano 4.2:** `OPENROUTER_API_KEY` colocada (presencia verificada sin imprimir), **$5 de crédito**. Recordatorio abierto: auto-recharge OFF + límite por-key server-side.
+- **4.1 verificación en vivo** (`docs/model-registry.md`): los 5 slugs primarios EXISTEN en OpenRouter hoy. Δ notables: **GLM-5.2 −75% ($0.35/M in) + 1M ctx**, MiniMax M3 exacto ($0.30, 1M, multimodal), DeepSeek V4 Pro $0.435 (+56% vs spec), Kimi K2.6 out caro ($3.41 — riesgo de loops), Qwen3.7-Max el más caro ($1.25/$3.75). Tool-calling✓ en los 5; floors **cero-costo reales** (`qwen3-coder:free`, `qwen3-next-80b:free`) = carril multi-proveedor $0 nativo.
+- **Auditoría Fable 5** (agente nativo del prompt original, solo audit por costo de tokens): VERDICT sound-to-implement con 3 fixes → integrados: `monthly_usd:4` (≤ crédito), capacidad **`reasoning`** añadida, `max_price` en `request_defaults`, fallbacks `long_context` por ventana, `usage:{include:true}` para USD real.
+- **4.3 `cli/route.ts`** (bun, ~230 líneas): clasifica (keywords + `--cap`), array `models` `[ganador,fallback,floor]` (failover server-side), `provider:{data_collection:deny,max_price}`, loguea `spend.jsonl`, imprime costo, aborta si cap excedido. Doble candado frontier. **Probado end-to-end** (ruteó a deepseek-v4-pro, costo real $0.000077 capturado). **Tests 9/9** + integración hard-stop (exit 3 sin gastar). Launcher `ebrain-route`.
+- **4.4 `routing.yaml`** escrito (7 capacidades, cadenas verificadas). `frontier.auto_escalate:false` config + hardcode.
+- **Costo mensual estimado:** típico día-y-noche **~$6–9/mes** OpenRouter + <$0.50/mes embeddings OpenAI; $5 ≈ 3 semanas. Número exacto sale de `spend.jsonl` tras 1 semana (gate F4).
+
+---
+
 ## 2026-07-11 — F3.9: federación de skills IMPLEMENTADA (75 skills unificadas vía MCP)
 
 - **`scripts/skills-federate`** agrega las skills canónicas → `~/.config/ebrain/skills/<name>/SKILL.md` (copia; `skill.md`→`SKILL.md`; dedup prioridad ckis>company>gstack). **75 skills únicas** (+11 duplicados omitidos).
