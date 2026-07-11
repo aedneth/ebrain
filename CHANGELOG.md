@@ -4,6 +4,15 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — GATE F3 `[AUDIT_PASS]`: gstack overlay + skill federation diseñada
+
+- **3.5**: `/learn` checkpoint local-only verificado; **secret scanner probado** (4/4 secretos falsos atrapados por los PATTERNS de gstack).
+- **3.7**: **loop e2e corrido** en sandbox (`slugify()`): empirical-engine-first (4 invariant tests), commit-per-phase + `[AUDIT_PASS]`, gate objetivo + smoke real, PR local **sin push**. Fricción clave documentada (`docs/validation-f3.md`): los slash-skills son capa-sesión; el overlay impone la disciplina del SOP, no "corre" los skills.
+- **3.9 [NUEVO — Eduardo]**: **federación de skills** diseñada (`docs/skill-federation.md`) — ebrain como capa unificada/opcional/agent-agnostic sobre gstack (54) + ckis-skills (35) + Company Brain (14) + skillified workflows, vía el **skillpack nativo de gbrain** (`list_skills` MCP). Impl diferida (converge con 2.6b en F4).
+- **3.8 gate**: overlay no edita vendored; loop con disciplina SOP + sin push; agent-browser default. **F3 COMPLETA.**
+
+---
+
 ## 2026-07-11 — F3 (en curso): overlay CKIS↔gstack (3.1–3.4, 3.6)
 
 - **3.1 gstack ya instalado** (`~/.claude/skills/`, pin 9988cd3) — sin `./setup`, sin Chromium. Descubierto que estaba pre-instalado; `vendor/gstack` queda como referencia read-only. (Un `cp` mío creó un nested `gstack/gstack` → eliminado, install real intacto.)
