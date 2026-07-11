@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# ebrain-q — cross-source fan-out query (overlay sobre gbrain).
+# gbrain pin a25209b no soporta all_sources/__all__ para brains multi-source
+# (v1 limitation). Este wrapper consulta cada source federado del knowledge
+# layer y mergea por score — el "cross-source instantáneo" que Eduardo pide.
+#
+# Uso:  ebrain-q "<pregunta>"  [topN]     (topN por defecto 10)
+set -euo pipefail
+
+RUN="$HOME/.config/ebrain/gbrain-run"
+Q="${1:-}"
+TOP="${2:-10}"
+[ -z "$Q" ] && { echo "uso: ebrain-q \"<pregunta>\" [topN]"; exit 2; }
+
+# Sources del knowledge layer a cruzar (federados, no 'default', no cliente).
+mapfile -t SOURCES < <(
+  "$RUN" sources list 2>/dev/null \
+    | awk '/federated/ && $1 != "default" {print $1}' \
+    | grep -vE 'brisas|dekko' || true
+)
+[ "${#SOURCES[@]}" -eq 0 ] && SOURCES=(second-brain company-brain)
+
+TMP="$(mktemp)"
+trap 'rm -f "$TMP"' EXIT
+
+# Recolecta: SCORE \t SOURCE \t SLUG \t SNIPPET  (score numérico limpio para ordenar)
+for src in "${SOURCES[@]}"; do
+  "$RUN" query "$Q" --source "$src" --no-expand 2>/dev/null \
+    | grep -E '^\[[0-9]' \
+    | while IFS= read -r line; do
+        score="${line%%]*}"; score="${score#[}"          # 0.8873
+        rest="${line#*] }"                                # slug -- snippet
+        slug="${rest%% --*}"
+        printf '%s\t%s\t%s\t%s\n' "$score" "$src" "$slug" "$rest"
+      done >> "$TMP" || true
+done
+
+# Orden global por score desc, dedup por slug, top N, formato legible.
+sort -t$'\t' -k1,1 -rn "$TMP" \
+  | awk -F'\t' '!seen[$3]++ { printf "%-14s [%s] %s\n", $2, $1, $4 }' \
+  | head -n "$TOP"

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# gbrain-mcp — launcher del MCP server de ebrain para Claude Code (stdio).
+# Mismo patrón que gbrain-run (cwd neutral + sourcea la key), + MCP_STDIO=1
+# para que el server no cierre si el gateway cierra su mitad de stdin tras el
+# handshake. La limpieza ante cierre de sesión la hace el watchdog de ppid.
+set -euo pipefail
+cd "$HOME/.config/ebrain/wd"          # cwd neutral: bun no auto-carga un .env ajeno
+ENV_FILE="$HOME/.config/ebrain/.env"
+if [ -f "$ENV_FILE" ]; then set -a; . "$ENV_FILE"; set +a; fi
+export MCP_STDIO=1
+exec bun run "$HOME/eBrain/vendor/gbrain/src/cli.ts" serve

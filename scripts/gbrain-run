@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# ebrain — launcher seguro de gbrain.
+# 1) cd a un cwd NEUTRAL sin .env: bun auto-carga el .env del cwd y pisaría la
+#    key; corriendo desde un dir vacío evita ese override (root cause F1 2026-07-10).
+# 2) Carga la key de embeddings desde ~/.config/ebrain/.env al ENTORNO del
+#    proceso de gbrain. La key NUNCA se imprime; solo se exporta.
+# Uso:  ~/.config/ebrain/gbrain-run <args de gbrain>   (usa rutas ABSOLUTAS en args)
+set -euo pipefail
+WD="$HOME/.config/ebrain/wd"
+mkdir -p "$WD"
+cd "$WD"
+ENV_FILE="$HOME/.config/ebrain/.env"
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ENV_FILE"
+  set +a
+fi
+exec bun run "$HOME/eBrain/vendor/gbrain/src/cli.ts" "$@"
