@@ -52,7 +52,7 @@ Convención de estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado
 ### 0.4 Gate F0
 - [x] 0.4.1 Opus audita los 5 reportes de discovery contra el código real (spot-checks) → `[AUDIT_PASS]` o correcciones. **`[AUDIT_PASS]`** los 5 (00-environment + 01-04); spot-checks verificados: 102 ops array, SOURCE_TIER_NAMES, #972 cross-source, scopes, 147 BrainEngine sigs, ZeroEntropy default, RRF_K=60, setup symlink, redact HIGH tier, repo-policy caller-level.
 - [x] 0.4.2 Actualizar `docs/ULTRAPLAN.md` y `docs/ARCHITECTURE.md` con descubrimientos que cambien decisiones; anotar cada cambio en `CHANGELOG.md` del repo ebrain. → ULTRAPLAN §0.1 (tabla de deltas), ARCHITECTURE §9, CHANGELOG.md creado.
-- [ ] 0.4.3 Commit: `F0: discovery complete (gbrain@<sha>, gstack@<sha>)`.
+- [x] 0.4.3 Commit: `F0: discovery complete (gbrain@<sha>, gstack@<sha>)`. → `f8e218b` (vendor/ excluido).
 - [ ] 0.4.4 **GATE HUMANO**: Eduardo aprueba (a) proyecto Supabase dedicado, (b) provider de embeddings + presupuesto de ingesta estimado en 0.4.5.
 - [x] 0.4.5 Estimar costo de ingesta total: contar tokens aproximados del vault (`find + wc`) × precio del provider elegido → escribir en `discovery/05-cost-estimate.md`. → 860 .md, ~2.14M tokens brutos, ~2.5M a embeber, full-ingest ≈ centavos–$0.33 (no es riesgo de costo).
 
