@@ -36,7 +36,16 @@ El launcher (`~/.config/ebrain/gbrain-run`, chmod 700):
 ~/.config/ebrain/gbrain-run doctor                         # salud
 ```
 
-- `query --no-expand`: evita el paso de expansión LLM (no hay chat model configurado; solo embeddings). `gbrain think` (síntesis con citas) requiere configurar un chat model — pendiente (natural para F4 routing o un `GBRAIN_CHAT_MODEL=openai:gpt-4o-mini`).
+- `query --no-expand`: evita el paso de expansión LLM. **Chat model configurado (F4.8, 2026-07-12):** `gbrain think` (síntesis con citas) ya corre — retrieval por embeddings (OpenAI 3-large, intacto) + síntesis por **`openrouter:minimax/minimax-m3`** (stack chino, sin frontier). Probado: `Model: openrouter:minimax/minimax-m3 | Pages: 40 | Citations: 8`.
+
+### Chat model → OpenRouter (F4.8 — reverse-engineering para el motor mejorado)
+- **Dos knobs distintos, no los confundas:**
+  - `GBRAIN_CHAT_MODEL` (env, exportado en los launchers) → query-expansion / chat general.
+  - `models.default` (config del brain, `gbrain config set models.default <model>`) → **el que usa `think`** para síntesis. Su default de fábrica era `anthropic:claude-opus-4-7` (por eso pedía `ANTHROPIC_API_KEY`). Seteado a `openrouter:minimax/minimax-m3`.
+- **Recipe OpenRouter nativo** (`core/ai/recipes/openrouter.ts`): `base_url_default: https://openrouter.ai/api/v1` (BASE_URL opcional), requiere `OPENROUTER_API_KEY`, forma `openrouter:<provider>/<model>`. `splitProviderModelId` (colon-first) soporta la forma anidada `openrouter:minimax/minimax-m3`.
+- **Embeddings NO se tocan:** OpenRouter no tiene API de embeddings; siguen en `openai:text-embedding-3-large @1536d` (fijados en init). Solo migra el LLM de chat/síntesis.
+- **GAP de presupuesto (Fable #4/#8):** el spend de gbrain (think/dream/judges) **NO** entra en `~/.config/ebrain/spend.jsonl` (solo `route.ts` escribe ahí). El cap real de estas llamadas es **server-side (OpenRouter dashboard)**. Instrumentar `src: gbrain` en el ledger local = mejora futura del motor ebrain.
+- **Para F5 (dream cycle):** `models.tier.subagent` necesita un modelo **tool-capable** (p.ej. `openrouter:moonshotai/kimi-k2.6`); no lo cubre `models.default`. Setearlo cuando se arme el dream cycle.
 
 ## Cross-source (F2) — usar `ebrain-q`, NO el CLI nativo
 
