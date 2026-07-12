@@ -4,6 +4,17 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-12 — F6 PLANEADA: TUI ebrain (régimen operativo visual) — ULTRAPLAN + SPRINT + ADR-003 + design brief
+
+- **Mandato de Eduardo:** envolver TODO ebrain en una TUI daily-driver (patrón FlowClock CLI→TUI, estética Claude Code/OpenCode incl. wordmark pixel-block bicolor): orquestar terminales agénticas multi-proveedor (claude/codex/gemini/opencode/cursor/route-stack) sobre las capas de memoria/harness/routing ya construidas, con visualización en vivo + advisor de carril por tarea.
+- **`docs/adr/ADR-003-tui-stack.md`** (proposed): bun + **tui-kit extraído de FlowClock** (~2.6K líneas propias, 0 deps — ni Ink/React ni Go/Rust en 4GB) · **tmux 3.2a = data plane** (sesiones `ebr-*` sobreviven a la TUI; peek `capture-pane`, attach handoff, cero emulación propia) · **contrato CLI-first `--json`** (la TUI no implementa lógica) · lock-awareness PGLite obligatoria (la TUI jamás sostiene el lock). Ratificación en GATE 6.0.
+- **`docs/ULTRAPLAN-TUI.md`**: tesis (la CLI es el backend; la TUI es el cockpit), arquitectura 3 planos, decisiones D1–D8 (gobernador RAM norma→mecanismo; candado nunca-auto-frontier; ADR-004 daemon HTTP-MCP compartido se estudia en 6.4), advisor v0 determinista→v1 con señales (memoria/gasto/RAM + log aceptado/rechazado), 8 criterios de éxito medibles, riesgos, delegación (workers Sonnet/Codex, Fable solo gates 6.0/6.4/6.7).
+- **`docs/SPRINT-TUI.md`**: 8 fases atómicas con verify por tarea — **6.0 reverse engineering de las 5 TUIs de referencia** (opencode/codex/gemini-cli open-source a `vendor/` + claude-code/cursor conductual → `discovery/05–10` + gap-list del kit) → 6.1 CLI robusta (`--json` en todo + `sessions/fleet/memory/spend/advise` nuevos) → 6.2 design system → 6.3 kit+shell → 6.4 sesiones tmux → 6.5 paneles → 6.6 orquestación+advisor → 6.7 hardening+ship.
+- **`docs/prompts/CLAUDE-DESIGN-BRIEF.md`** (formato busnet/dekko, adaptado a dominio TUI): retícula monoespaciada dura, paleta void `#0B0E14` + teal `#2DD4BF` + violeta memoria + 8 categóricos por agente, JetBrains Mono, **cero emoji**, wordmark "e·brain" pixel-block (matriz reproducible en ▀▄█), 7 mockups 120×32, tokens JSON con fallback xterm-256 → `design-system/` (stub README creado) → `design-sync-tui` → `theme.ts`.
+- Estado: **planeación completa, ejecución pendiente de arranque** (6.0 delegable ya). Paso humano nuevo: generar/iterar/exportar en Claude Design (6.2.1).
+
+---
+
 ## 2026-07-12 — F5 CERRADA: consolidación + gate `[AUDIT_PASS]` (8/8 Success Criteria)
 
 - **5.2 — `ebrain doctor` + `ebrain status`** (`harness/core/{doctor,status}.sh` en `cli/ebrain`): salud CKIS lock-aware (launchers, config con presencia de keys sin volcar, **contract-test del guard cableado = alarma de drift, cierra 4.6h2**, flota de 6 adapters, aislamiento de sources de cliente, gasto MTD vs cap). rc=1 solo en fallo duro. Probado: doctor rc=0 (3 warns conocidos), status rc=0.

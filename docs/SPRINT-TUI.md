@@ -1,0 +1,105 @@
+---
+type: sprint-plan
+project: ebrain
+program: F6 — TUI
+created: 2026-07-12
+modified: 2026-07-12
+status: proposed
+tags: [ebrain, tui, sprint, tareas, agentes, tmux]
+related: [ULTRAPLAN-TUI.md, adr/ADR-003-tui-stack.md, prompts/CLAUDE-DESIGN-BRIEF.md, SPRINT.md]
+---
+
+# SPRINT — ebrain TUI (F6, tareas atómicas)
+
+Reglas de ejecución (idénticas a F0–F5): una tarea = un worker = un resultado verificable con su comando de verify. Opus audita cada gate con `[AUDIT_PASS]` antes de avanzar de fase. Commit por fase (o por tarea si toca archivos que el auto-backup puede barrer). Ninguna tarea toca brisas-del-golfo/dekko. Toda tarea que gasta dinero declara costo estimado ANTES de correr. Workers: Sonnet o Codex; Fable 5 SOLO en los gates marcados. Pasos `[HUMANO]` se difieren al checklist, no bloquean tareas posteriores salvo que se indique.
+
+Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` bloqueado.
+
+━━━
+
+## FASE 6.0 — Reverse engineering de las TUIs de referencia
+
+> Mismo método que F0 con gbrain/gstack: leer el código real (open source) u observar la conducta (cerradas), documentar en `discovery/`, sintetizar requisitos. Rubrica común para TODAS: (a) anatomía de layout (home/wordmark, prompt box, status/hint bar, footer), (b) modelo de input (keybinds, modos, palette), (c) sistema de slash commands, (d) theming/tokens, (e) modelo de sesiones/tabs, (f) stack de render y por qué, (g) qué robar / qué evitar.
+
+- [ ] 6.0.1 Clonar a `vendor/`: `sst/opencode`, `openai/codex`, `google-gemini/gemini-cli` (shallow OK — solo interesa la UI actual). Registrar SHA+versión en `discovery/00-environment.md` (append §F6). **Verify:** 3 dirs en vendor/, SHAs anotados.
+- [ ] 6.0.2 RE **OpenCode** → `discovery/05-tui-opencode.md` (rubrica completa; atención especial: wordmark pixel-block bicolor de la home, prompt box con borde de acento, footer `cwd:branch · versión`, hint bar `tab agents · ctrl+p commands`, su sistema de themes). Es el referente estético #1 de Eduardo. **Verify:** doc cubre (a)–(g) con archivo:línea.
+- [ ] 6.0.3 RE **codex** (Rust/ratatui) → `discovery/06-tui-codex.md` (rubrica; foco extra: cómo renderiza el stream del agente y el diff-view). **Verify:** ídem.
+- [ ] 6.0.4 RE **gemini-cli** (Ink/React) → `discovery/07-tui-gemini.md` (rubrica; foco extra: por qué Ink les cuesta CPU/RAM — evidencia para ADR-003). **Verify:** ídem.
+- [ ] 6.0.5 RE conductual **Claude Code** (cerrada — observación de uso + docs públicas, NO decompilación) → `discovery/08-tui-claude-code.md` (rubrica desde conducta: statusline, spinner/verbos, palette, modos permiso/plan, `/commands`, theming). **Verify:** doc cubre (a)–(e)+(g).
+- [ ] 6.0.6 RE conductual **cursor-agent** (cerrada) → `discovery/09-tui-cursor.md` (rubrica desde conducta). **Verify:** ídem.
+- [ ] 6.0.7 **Síntesis** → `discovery/10-tui-synthesis.md`: matriz rubrica × (5 TUIs + FlowClock); canon de keybindings propuesto para ebrain; **gap-list del tui-kit FlowClock** (qué widgets faltan: tabs, tabla, lista scrolleable, gauge, toast, …) con costo estimado por widget; insumos de refinamiento para el design brief (si los hay, actualizar `prompts/CLAUDE-DESIGN-BRIEF.md` §2). **Verify:** matriz completa + gap-list priorizada.
+- [ ] 6.0.8 **GATE F6.0** — auditoría Opus: ¿el kit FlowClock + tmux cubren la anatomía observada a costo razonable? → **ratificar o corregir ADR-003** (si se corrige: plan B bubbletea ANTES de escribir app). `[AUDIT_PASS]` requerido.
+
+## FASE 6.1 — CLI robusta (el backend contract)
+
+> Mandato: **primero una CLI robusta; la TUI se construye encima.** Todo panel futuro = un subcomando `--json` contract-tested acá. Piezas nuevas en TypeScript/bun (`cli/`), patrón route.ts; las bash existentes ganan `--json` con jq.
+
+- [ ] 6.1.1 `ebrain status --json` (extender `harness/core/status.sh`): `{brain:{state,served_by,sources},spend:{mtd,cap,remaining},fleet:{agents:[{name,ok}]},memory:{learnings,sessions}}`. Lock-aware como hoy. **Verify:** `ebrain status --json | jq -e '.brain and .spend and .fleet and .memory'`.
+- [ ] 6.1.2 `ebrain doctor --json` (extender `doctor.sh`): array `checks:[{id,level:ok|warn|fail,msg}]` + `rc`. **Verify:** jq -e sobre schema; rc coherente con niveles.
+- [ ] 6.1.3 `ebrain spend --json` (nuevo `cli/spend.ts`): MTD por cap desde `spend.jsonl` + caps de `routing.yaml` + gap conocido de gbrain (flag `gbrain_untracked:true`). **Verify:** bun test con ledger fixture.
+- [ ] 6.1.4 `ebrain fleet --json` (nuevo, envuelve `install.sh --doctor` por adapter): estado por agente + clase RAM (`heavy|light`) declarada en cada `manifest.yaml` (agregar campo). **Verify:** 6 agentes listados, clases correctas.
+- [ ] 6.1.5 `ebrain memory recent --json` (nuevo `cli/memory.ts`): últimos N learnings de agent-memory + últimas sesiones cross-`.brain` (índice Dev Brain). Sin tocar el lock (es filesystem). **Verify:** bun test con fixtures.
+- [ ] 6.1.6 `ebrain sessions <list|new|peek|send|kill> --json` (nuevo `cli/sessions.ts` sobre tmux): naming `ebr-<agente>-<slug>`; `new` inyecta env/cmd del manifest del adapter; `send`/`kill` exigen `--yes`; `peek` = `capture-pane -p` (últimas N líneas, pasadas por el scrubber de secretos). **Verify:** E2E contra `scripts/fake-agent.sh` (se crea acá en versión mínima): new→list→peek→send→kill, asserts.
+- [ ] 6.1.7 `ebrain advise "<tarea>" --json` v0 (nuevo `cli/advise.ts`): fuente de verdad `config/advisor-rules.yaml` (capacidades→keywords; carriles: `route --cap X` one-shot / codex sesión / claude auditoría / gemini multimodal / opencode+stack); lee `routing.yaml` para cadenas y costos. Salida: `{lane,agent,model,reason,est_cost,alternatives[],frontier:bool}`. **Verify:** bun test con 10 tareas fixture (criterio de éxito #5, primera pasada).
+- [ ] 6.1.8 Contract-tests unificados: `tui/test/contract/` (bun test + zod) valida el schema de TODOS los `--json`; cablear al `contract-test.sh` del harness para que `ebrain doctor` lo vigile. **Verify:** suite verde; romper un campo a propósito → falla.
+- [ ] 6.1.9 **GATE F6.1**: `ebrain help` actualizado con los subcomandos nuevos; suite completa verde; commit de fase. `[AUDIT_PASS]`.
+
+## FASE 6.2 — Design system (Claude Design)
+
+- [ ] 6.2.1 `[HUMANO]` Pegar `docs/prompts/CLAUDE-DESIGN-BRIEF.md` en Claude Design; iterar con su checklist §3; exportar zip → descomprimir en `design-system/`; commit (vendored, read-only). **Verify:** `design-system/` contiene tokens + mockups de las 6 pantallas.
+- [ ] 6.2.2 `scripts/design-sync-tui` (bun): parsea los tokens del export (JSON/CSS vars) → genera `tui/src/theme.ts`: roles semánticos (bg/surface/border/text×3/accent/ok/warn/error/info/memoria), paleta categórica por agente (8), truecolor + fallback 256, set de glifos con fallback ASCII, spacing en celdas. **Verify:** regenerable idempotente (`diff` limpio al correr 2×).
+- [ ] 6.2.3 `tui/test/theme.test.ts`: todos los roles definidos; contraste mínimo aproximado texto/fondo; política **cero emoji** (Korvex discipline) verificada por regex sobre theme+glifos. **Verify:** verde.
+- [ ] 6.2.4 **GATE F6.2**: tokens en código, `design-system/` commiteado, mockups adoptados como referencia de aceptación. `[AUDIT_PASS]`.
+
+## FASE 6.3 — tui-kit + app shell
+
+- [ ] 6.3.1 Extraer el kit de FlowClock → `tui/src/kit/` (`screen/draw/layout/input/lineedit`, copia con atribución de origen y versión FlowClock) + package bun (`tui/package.json`, tsconfig, `bun test` cableado). **Verify:** kit compila aislado; tests de draw/layout portados verdes.
+- [ ] 6.3.2 Generalizar el kit según la gap-list de 6.0.7 — SOLO los widgets que los paneles 6.4–6.6 exigen (candidatos: TabBar, Table, ScrollList, Gauge, Toast, ConfirmDialog, Badge). Cada widget: render-a-buffer + test snapshot. **Verify:** snapshots verdes por widget.
+- [ ] 6.3.3 App shell (`tui/src/app.ts`): main loop, TabBar (Overview·Sessions·Memory·Routing·Fleet·Doctor), hint bar inferior estilo OpenCode (`tab paneles · / palette · ? ayuda`), footer `cwd:branch · vX.Y`, home con **wordmark pixel-block bicolor** desde theme, resize, quit limpio (restaura terminal SIEMPRE, incl. crash — handler). **Verify:** snapshot de home + navegación tab simulada.
+- [ ] 6.3.4 Command palette (`/` y `ctrl+p`, portando `palette.ts` de FlowClock): registry central de comandos (mismos nombres que la CLI) + fuzzy filter. **Verify:** test de input simulado abre/filtra/ejecuta.
+- [ ] 6.3.5 Help overlay (`?`) autogenerado del registry de keybinds (nunca desincronizado). **Verify:** snapshot contiene todo keybind registrado.
+- [ ] 6.3.6 `ebrain ui` en el dispatcher (`cli/ebrain`) → `bun run tui/src/app.ts` (guard: bun presente, TERM válido, tamaño mínimo 80×24 con mensaje claro). **Verify:** `ebrain ui` bootea y sale limpio en el Celeron; medir boot+RSS y anotar en `discovery/00-environment.md`.
+- [ ] 6.3.7 **GATE F6.3**: criterios #1 (boot/RSS) y #8 (cero hardcode de paleta: `grep -rn '#[0-9a-fA-F]\{6\}' tui/src --include='*.ts' | grep -v theme` vacío) medidos. `[AUDIT_PASS]`.
+
+## FASE 6.4 — Sustrato de sesiones (tmux)
+
+- [ ] 6.4.1 `tui/src/sessions/tmux.ts`: wrapper tipado sobre tmux CLI (ls/new/capture/send/kill/has-server/inside-tmux) con errores tipados (no-server, session-not-found). **Verify:** bun test contra tmux real.
+- [ ] 6.4.2 `scripts/fake-agent.sh` completo: banner, output periódico con timestamps, eco de stdin, señal de cierre — fixture E2E estándar del programa. **Verify:** corre 60 s bajo tmux sin morir.
+- [ ] 6.4.3 Panel **Sessions**: ScrollList (nombre, agente con Badge de color categórico, cwd, uptime, estado) + pane de peek en vivo (throttle ≤1 Hz, SOLO cuando el panel está visible, **scrubber de secretos sobre cada frame**) + acciones `a` attach / `k` kill (ConfirmDialog) / `p` prompt. **Verify:** snapshot con fixture + test de throttle (no más de 1 capture/s).
+- [ ] 6.4.4 Attach handoff: suspender la TUI → `tmux attach -t` (o `switch-client` si ya estamos dentro de tmux) → al volver, restaurar pantalla. **Verify:** manual guiado + estado restaurado (snapshot pre/post).
+- [ ] 6.4.5 Launch básico desde el panel (agente + cwd) usando el manifest del adapter (env harness completo). Probar con fake-agent Y con una sesión `claude` real → el session-log de write-back debe existir al cerrar. **Verify:** criterio #3 (rastro en `.brain/`).
+- [ ] 6.4.6 **Gobernador RAM**: lectura `/proc/meminfo` + clase `heavy|light` del manifest (6.1.4); 2º heavy → ConfirmDialog con MB libres reales y advertencia de la norma; registro del override en el session log. **Verify:** test con fleet fixture; manual con 1 claude vivo.
+- [ ] 6.4.7 **Estudio ADR-004** (daemon HTTP-MCP compartido, dueño único del lock PGLite): spike documentado en `docs/adr/ADR-004-shared-brain-daemon.md` con GO/NO-GO/DEFER + criterios (¿gbrain serve HTTP estable? ¿migración de wiring MCP de 6 agentes? ¿qué pasa con dream 03:30?). NO se implementa en F6 salvo GO explícito de Eduardo. **Verify:** ADR con decisión argumentada.
+- [ ] 6.4.8 **GATE F6.4** — auditoría **Fable 5** (threat model: send-keys a target equivocado, scrubber en peek, override del gobernador, superficie tmux). Criterios #3/#4/#7 en primera pasada. `[AUDIT_PASS]`.
+
+## FASE 6.5 — Paneles de conocimiento
+
+- [ ] 6.5.1 Panel **Overview** (home): wordmark + resumen de `status --json` (brain/spend gauge/fleet/memoria) + sesiones activas + últimas 3 entradas de memoria. **Verify:** snapshot con fixture.
+- [ ] 6.5.2 Panel **Memory**: learnings recientes (`memory recent --json`), búsqueda (`ebrain q`, resultado con score+source; `think` opcional con costo pintado ANTES de confirmar), form `remember` (lineedit multiline → `ebrain remember`), browse de session-logs. **Verify:** round-trip remember→recent visible (criterio #6 primera pasada).
+- [ ] 6.5.3 Panel **Routing/Spend**: gauges MTD por cap, ledger reciente, cadenas ganador/fallback/floor por capacidad (de `advisor-rules.yaml`+`routing.yaml`), flag visible del gap gbrain-untracked. **Verify:** snapshot fixture.
+- [ ] 6.5.4 Panel **Fleet/Doctor**: `fleet --json` + `doctor --json` colorizado por nivel; `r` re-run doctor desde la UI (async, spinner). **Verify:** snapshot + re-run actualiza.
+- [ ] 6.5.5 UX de lock-awareness transversal: brain ocupado → banner "brain served by MCP (lock)" + datos cacheados con timestamp visible; NUNCA spinner infinito. **Verify:** test con fixture lock.
+- [ ] 6.5.6 Snapshots de TODOS los paneles con fixtures JSON puros (sin red, sin brain, sin tmux) — la suite corre en cualquier lado. **Verify:** `bun test` verde offline.
+- [ ] 6.5.7 **GATE F6.5**: criterio #2 completo (todo panel ↔ subcomando contract-tested, cero lógica huérfana — revisión de imports). `[AUDIT_PASS]`.
+
+## FASE 6.6 — Orquestación + advisor v1
+
+- [ ] 6.6.1 **Launch flow** (wizard sobre palette/forms): describir tarea → advisor sugiere carril (con razón+costo) → elegir/ajustar agente+modelo → cwd/proyecto (deny-list cliente NO aparece) → **preview del contexto a inyectar** (qué verá el agente: norms, memoria, MCP) → confirmar → `sessions new`. Candado frontier: advertencia de costo + confirmación explícita, jamás default. **Verify:** E2E con fake-agent; frontier requiere confirm (test).
+- [ ] 6.6.2 **Advisor v1** (`cli/advise.ts`): señales adicionales — memoria (`ebrain q "tareas similares"` opcional), gasto restante por cap, RAM libre, historial JSONL de aceptado/rechazado (`~/.config/ebrain/advisor-log.jsonl`, lo escribe el launch flow). Clasificador LLM opcional vía carril `:free` (flag `--llm`, costo $0), NUNCA frontier. **Verify:** bun test — señales alteran el ranking de forma determinista con fixtures.
+- [ ] 6.6.3 **Prompt composer**: redactar prompt multiline → elegir sesión target → preview (nombre+últimas 3 líneas del pane) → confirm → `sessions send`. **Verify:** E2E fake-agent recibe el prompt exacto.
+- [ ] 6.6.4 Fixture de **10 tareas canónicas** (mix real: fix bug korvex-web, batch resúmenes, diseño web, auditoría arquitectura, scrape, refactor largo, one-shot regex, doc técnico, UI component, video/multimodal) → asserts de carril esperado. **Verify:** 10/10 (criterio #5 completo).
+- [ ] 6.6.5 **GATE F6.6**. `[AUDIT_PASS]`.
+
+## FASE 6.7 — Hardening + ship
+
+- [ ] 6.7.1 Edge cases con test o guard: tmux sin server / muerto a mitad de peek; lock PGLite; sin red (paneles degradan); terminal < 80×24; TERM sin truecolor (fallback 256 automático); crash → terminal SIEMPRE restaurada. **Verify:** suite de edge cases verde + checklist manual.
+- [ ] 6.7.2 Perf en el Celeron: tabla medida (boot, RSS idle, CPU idle, CPU con peek 1 Hz) en `docs/f6-success-criteria.md`; decidir D8 (`bun build --compile`) con datos. **Verify:** criterio #1 confirmado.
+- [ ] 6.7.3 Docs: `tui/README.md`, sección TUI en `docs/runbook.md`, keybindings finales en help. **Verify:** docs existen y coinciden con el registry.
+- [ ] 6.7.4 `docs/f6-success-criteria.md`: **8/8 criterios con evidencia** (formato f5). **Verify:** tabla completa.
+- [ ] 6.7.5 Retro → lecciones a `05-knowledge/permanent-notes/` del vault + `ebrain remember` por cada lección reusable. **Verify:** nota commiteada.
+- [ ] 6.7.6 CHANGELOG ebrain + vault, commits finales, **GATE F6.7 — auditoría Fable 5 final del programa**. `[AUDIT_PASS]`.
+- [ ] 6.7.7 Checklist humano F6 (append a `docs/human-checklist.md`): aceptación visual vs mockups, decisión ADR-004 si quedó DEFER, y primer día real de uso como daily driver con notas de fricción.
+
+━━━
+
+**Dependencias entre fases:** 6.0 → gate ratifica ADR-003 → 6.1 ‖ 6.2 (paralelizables) → 6.3 → 6.4 → 6.5 → 6.6 → 6.7. El paso humano 6.2.1 (Claude Design) puede correr en paralelo con 6.1 sin bloquear nada hasta 6.3.
