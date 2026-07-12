@@ -1,0 +1,46 @@
+/* ebrain — colors. Solo dark. Cada token lleva su fallback xterm-256 en comentario. */
+:root {
+  /* fondo y superficies (profundidad solo por tono) */
+  --bg-void: #0B0E14;        /* xterm 233 */
+  --surface-1: #11151F;      /* xterm 234 */
+  --surface-2: #1A2030;      /* xterm 235 */
+  --border-1: #232B3D;       /* xterm 236 — hairline por defecto */
+
+  /* texto */
+  --text-1: #E6EAF2;         /* xterm 254 — primario */
+  --text-2: #8B94A7;         /* xterm 246 — secundario */
+  --text-3: #565F73;         /* xterm 60  — muted/dim */
+
+  /* acento — UN momento teal fuerte por vista */
+  --accent: #2DD4BF;         /* xterm 43 */
+  --accent-dim: #1B7F73;     /* xterm 30 — acento degradado (segundo momento) */
+
+  /* memoria / semántica agéntica */
+  --memory: #A78BFA;         /* xterm 141 — embeddings, citas, think */
+
+  /* semánticos */
+  --ok: #4ADE80;             /* xterm 78 */
+  --warn: #FBBF24;           /* xterm 214 */
+  --error: #F87171;          /* xterm 210 */
+  --info: #60A5FA;           /* xterm 75 */
+
+  /* paleta categórica de agentes (8) — refinada para separación sobre void */
+  --agent-claude: #D97757;   /* xterm 173 — clay */
+  --agent-codex: #9AA5B8;    /* xterm 248 — gris acero */
+  --agent-gemini: #5B8DEF;   /* xterm 69  — azul */
+  --agent-opencode: #E5B567; /* xterm 179 — ámbar-oro (refinado de #F5A97F, alejado del clay) */
+  --agent-cursor: #C678DD;   /* xterm 176 — orquídea (refinado de #B48EFF, alejado del violeta memoria) */
+  --agent-route: #FF6B6B;    /* xterm 203 — coral */
+  --agent-generic: #A3E635;  /* xterm 155 — lima */
+  --agent-free: #67E8F9;     /* xterm 123 — cian */
+
+  /* aliases semánticos */
+  --border-focus: var(--accent);
+  --border-dim: var(--border-1);
+  --text-body: var(--text-1);
+  --text-label: var(--text-2);
+  --text-disabled: var(--text-3);
+  --surface-card: var(--surface-1);
+  --surface-raised: var(--surface-2);
+  --selection-bg: var(--surface-2);
+}

@@ -1,0 +1,17 @@
+/* ebrain — typography. Una sola familia, UN solo tamaño. Jerarquía por peso/tono. */
+:root {
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, Consolas, monospace;
+  --font-size: 15px;
+  --line-h: 1.2; /* @kind other */              /* calibrado: box-drawing conecta en JetBrains Mono a 1.2 */
+  --line-block: 1; /* @kind other */             /* solo para arte de bloques (wordmark, gauges apilados) */
+  --cell-w: 1ch;                 /* ancho de celda */
+  --row-h: calc(var(--font-size) * var(--line-h));
+
+  /* pesos = jerarquía. NO hay tamaños múltiples (salvo wordmark pixel-block). */
+  --weight-bold: 700;            /* títulos de panel, tab activa, tecla en KeyHint, valores clave */
+  --weight-normal: 400;          /* cuerpo, datos */
+  /* "dim" no es un peso: es color --text-3 con weight 400 (metadatos, hints, disabled) */
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--text-1); text-decoration: underline; }

@@ -1,0 +1,237 @@
+{
+  "$name": "ebrain",
+  "$description": "TUI de orquestación agéntica. Tokens para terminal truecolor con fallback xterm-256.",
+  "color": {
+    "background": {
+      "void": {
+        "hex": "#0B0E14",
+        "xterm256": 233,
+        "use": "fondo global"
+      },
+      "surface": {
+        "hex": "#11151F",
+        "xterm256": 234,
+        "use": "paneles"
+      },
+      "raised": {
+        "hex": "#1A2030",
+        "xterm256": 235,
+        "use": "fila seleccionada, overlays"
+      },
+      "border": {
+        "hex": "#232B3D",
+        "xterm256": 236,
+        "use": "hairlines, borde blur"
+      }
+    },
+    "text": {
+      "primary": {
+        "hex": "#E6EAF2",
+        "xterm256": 254
+      },
+      "secondary": {
+        "hex": "#8B94A7",
+        "xterm256": 246
+      },
+      "muted": {
+        "hex": "#565F73",
+        "xterm256": 60,
+        "use": "dim: hints, disabled, metadatos"
+      }
+    },
+    "accent": {
+      "teal": {
+        "hex": "#2DD4BF",
+        "xterm256": 43,
+        "use": "foco, acción, wordmark 'e', borde PromptBox. UN momento fuerte por vista."
+      },
+      "tealDim": {
+        "hex": "#1B7F73",
+        "xterm256": 30,
+        "use": "acento secundario degradado"
+      }
+    },
+    "memory": {
+      "violet": {
+        "hex": "#A78BFA",
+        "xterm256": 141,
+        "use": "memoria, embeddings, citas, think"
+      }
+    },
+    "semantic": {
+      "ok": {
+        "hex": "#4ADE80",
+        "xterm256": 78
+      },
+      "warn": {
+        "hex": "#FBBF24",
+        "xterm256": 214
+      },
+      "error": {
+        "hex": "#F87171",
+        "xterm256": 210
+      },
+      "info": {
+        "hex": "#60A5FA",
+        "xterm256": 75
+      }
+    },
+    "agents": {
+      "claude": {
+        "hex": "#D97757",
+        "xterm256": 173,
+        "label": "claude",
+        "note": "clay"
+      },
+      "codex": {
+        "hex": "#9AA5B8",
+        "xterm256": 248,
+        "label": "codex",
+        "note": "gris acero"
+      },
+      "gemini": {
+        "hex": "#5B8DEF",
+        "xterm256": 69,
+        "label": "gemini",
+        "note": "azul"
+      },
+      "opencode": {
+        "hex": "#E5B567",
+        "xterm256": 179,
+        "label": "opencode",
+        "note": "ámbar-oro; refinado de #F5A97F para separarlo del clay"
+      },
+      "cursor": {
+        "hex": "#C678DD",
+        "xterm256": 176,
+        "label": "cursor",
+        "note": "orquídea; refinado de #B48EFF para separarlo del violeta memoria"
+      },
+      "route": {
+        "hex": "#FF6B6B",
+        "xterm256": 203,
+        "label": "route",
+        "note": "coral — route/stack chino"
+      },
+      "generic": {
+        "hex": "#A3E635",
+        "xterm256": 155,
+        "label": "generic",
+        "note": "lima"
+      },
+      "free": {
+        "hex": "#67E8F9",
+        "xterm256": 123,
+        "label": "free",
+        "note": "cian — free-lane"
+      }
+    }
+  },
+  "spacing": {
+    "unit": "celda de carácter",
+    "scale": [
+      1,
+      2,
+      4
+    ],
+    "vertical": "filas completas (1, 2)"
+  },
+  "typography": {
+    "family": "JetBrains Mono",
+    "fallback": "monospace",
+    "size": "único (15px en mockups HTML)",
+    "hierarchy": {
+      "bold": {
+        "weight": 700,
+        "use": "títulos de panel, tab activa, valores clave, teclas"
+      },
+      "normal": {
+        "weight": 400,
+        "use": "cuerpo, datos, labels"
+      },
+      "dim": {
+        "weight": 400,
+        "color": "#565F73",
+        "use": "hints, metadatos, disabled, chrome pasivo"
+      }
+    }
+  },
+  "glyphs": {
+    "panelBorder": {
+      "chars": "╭ ─ ╮ │ ╰ ╯",
+      "asciiFallback": "+ - + | + +",
+      "use": "paneles"
+    },
+    "dialogBorder": {
+      "chars": "┌ ─ ┐ │ └ ┘",
+      "asciiFallback": "+ - + | + +",
+      "use": "diálogos modales"
+    },
+    "heavyLeft": {
+      "chars": "┃",
+      "asciiFallback": "|",
+      "use": "borde izquierdo del PromptBox (teal)"
+    },
+    "gauge": {
+      "chars": "█ ▓ ░",
+      "asciiFallback": "# = .",
+      "use": "gauges de RAM y spend"
+    },
+    "blocks": {
+      "chars": "█ ▀ ▄ ▓ ▒ ░",
+      "asciiFallback": "# \" _ = : .",
+      "use": "wordmark pixel-block, sparks"
+    },
+    "scrollbar": {
+      "chars": "█ (thumb) │ (track)",
+      "asciiFallback": "# |",
+      "use": "ScrollList"
+    },
+    "spinner": {
+      "frames": "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏",
+      "asciiFallback": "|/-\\\\",
+      "use": "operaciones en curso"
+    },
+    "separators": {
+      "chars": "· │ ─",
+      "asciiFallback": ". | -",
+      "use": "footer, statusbar, hint bar"
+    },
+    "badgeDot": {
+      "chars": "●",
+      "asciiFallback": "*",
+      "use": "badge de agente, estado"
+    },
+    "caret": {
+      "chars": "▌",
+      "asciiFallback": "_",
+      "use": "cursor de input"
+    },
+    "arrows": {
+      "chars": "→ ↑ ↓ ▸ ▾",
+      "asciiFallback": "> ^ v > v",
+      "use": "cadenas de routing, colapsables"
+    }
+  },
+  "states": {
+    "focus": {
+      "border": "#2DD4BF",
+      "title": "bold #E6EAF2",
+      "note": "borde dim→teal; único teal fuerte de la vista"
+    },
+    "blur": {
+      "border": "#232B3D",
+      "title": "normal #8B94A7"
+    },
+    "selected": {
+      "background": "#1A2030",
+      "text": "#E6EAF2",
+      "marker": "▸ o barra invertida"
+    },
+    "disabled": {
+      "text": "#565F73",
+      "weight": 400,
+      "note": "nunca oculto, siempre dim"
+    }
+  }
+}
