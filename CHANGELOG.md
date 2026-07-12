@@ -4,6 +4,19 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-12 — F5 CERRADA: consolidación + gate `[AUDIT_PASS]` (8/8 Success Criteria)
+
+- **5.2 — `ebrain doctor` + `ebrain status`** (`harness/core/{doctor,status}.sh` en `cli/ebrain`): salud CKIS lock-aware (launchers, config con presencia de keys sin volcar, **contract-test del guard cableado = alarma de drift, cierra 4.6h2**, flota de 6 adapters, aislamiento de sources de cliente, gasto MTD vs cap). rc=1 solo en fallo duro. Probado: doctor rc=0 (3 warns conocidos), status rc=0.
+- **5.7 — auditoría de seguridad final: 0 hallazgos.** Escaneo 11-patrones (gitleaks-equivalente) sobre archivos trackeados de `~/eBrain` + `agent-memory` → 0 secretos reales; `.env` gitignored en ambos; sin pooler URL (PGLite); backup targets limpios.
+- **5.4 — `.brain` de ebrain → Dev Brain** vía `brain-init`: registro + 5 git hooks (probados con commit) + grafo. `graphify update` salió contaminado por `vendor/` (12022 nodos) → **`.graphifyignore`** → 15 nodos limpios → **19 notas en `code-graph/ebrain/`**. `.gitignore` blindado (`.brain/`/`.claude/`/`graphify-out/`).
+- **5.6 — decisión QMD ejecutada (FALLBACK, no retiro):** `knowledge-synthesis` skill del vault → ebrain semántico primario + QMD fallback (CLAUDE.md §Search ya lo tenía).
+- **5.1 — dream-cycle construido** (`scripts/dream-cycle` lock-aware + `scripts/systemd/ebrain-dream.{service,timer}` 03:30/Persistent + `runbook.md` §dream-cycle). Subagent tier tool-capable (kimi-k2.6). **Corrida supervisada + enable = checklist humano** (config+dream requieren MCP idle).
+- **5.3 — vault** `03-projects/ebrain/_overview` a estado real F5 + `_ACTIVE-PROJECTS` + CKIS CHANGELOG **v2.3.98**. **5.5 — Company Brain** `repos.md` + `engineering.md` + DRIFT **D-16** + CHANGELOG.
+- **5.8 — 8/8 Success Criteria** (`docs/f5-success-criteria.md`, ULTRAPLAN §5): 5 fully MET, 3 con caveats documentados (PGLite vs Supabase, código=carril graphify, auto-hook graphify 0.6.7). **Crit.2 probado en vivo:** `think` cruzó SB+CB con 13 citas (minimax-m3, synthesisOk). **5.9 — retro** → `05-knowledge/permanent-notes/ebrain-build-lessons.md` (8 lecciones) + `docs/human-checklist.md`.
+- **GATE F5 `[AUDIT_PASS]` (Opus).** Frontera restante = checklist humano (D-16). **ebrain funcional y completo; régimen operativo.** Commits `4476941`→`5414a8e`.
+
+---
+
 ## 2026-07-12 — F4 CERRADA: gate `[AUDIT_PASS]` (routing + chat→OpenRouter + Hermes DEFER)
 
 - **4.8 — chat LLM de gbrain → OpenRouter.** `models.default=openrouter:minimax/minimax-m3` (el knob que usa `think`; su default de fábrica era `anthropic:claude-opus-4-7`) + `GBRAIN_CHAT_MODEL` en ambos launchers (repo↔live reconciliados). **`think` probado 100% en OpenRouter (`Pages:40 | Citations:8`, sin frontier).** Embeddings intactos (OpenAI 3-large @1536d). Gap documentado: spend de gbrain no entra al ledger local (cap real = server-side). Reverse-engineering en `runbook.md` para el motor mejorado.
