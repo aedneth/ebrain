@@ -52,7 +52,10 @@ OUT="$SESSDIR/$DATE_TAG-$AGENT-session.md"
 # estampado en el summary como [agent] para no romper consumidores existentes (grep '| slug |').
 DEV="${DEV_BRAIN_VAULT:-$HOME/Documents/Dev Brain}"
 if [ -d "$DEV/sessions" ]; then
-  subj="$(printf '%s' "$RECENT" | head -1 | sed 's/^[0-9a-f]\{7,\} //' | tr '\n\r\t|' '    ' | tr -s ' ' | head -c 100)"
+  # UTF-8 SAFE: cortar por bytes (`head -c`) parte caracteres multibyte y corrompe el índice (acentos
+  # → bytes inválidos → grep lo trata como binario). Sándwich iconv -c: limpia, corta a 100 bytes,
+  # y descarta el carácter parcial del final. Robusto sin depender de la versión de cut/awk.
+  subj="$(printf '%s' "$RECENT" | head -1 | sed 's/^[0-9a-f]\{7,\} //' | tr '\n\r\t|' '    ' | tr -s ' ' | iconv -f UTF-8 -t UTF-8 -c 2>/dev/null | cut -b1-100 | iconv -f UTF-8 -t UTF-8 -c 2>/dev/null)"
   echo "${NOW_UTC} | ${SLUG} | - | ${HEAD_SHA} | [${AGENT}] ${subj:-session} | ${OUT}" >> "$DEV/sessions/index.md" 2>/dev/null || true
 fi
 echo "[harness] session logged ($AGENT) → $OUT" >&2
