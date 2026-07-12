@@ -10,10 +10,10 @@ MEM="$HOME/eBrain/memory"
 SESSIONS="$MEM/sessions"
 mkdir -p "$SESSIONS"
 
-DENY_SLUG='brisas-del-golfo|dekko'                       # repos de cliente — nunca federar
-SECRET='sk-[A-Za-z0-9_-]{20,}|postgres://[^ ]*:[^ ]*@|-----BEGIN [A-Z ]*PRIVATE KEY|xox[baprs]-[A-Za-z0-9-]{10,}'
+# Política de confianza (DEFAULT-DENY) desde la fuente única del harness.
+. "$HOME/eBrain/harness/core/trust.sh"
 
-count=0; skipped=0
+count=0; skipped=0; denied=0
 while IFS= read -r sdir; do
   repo="$(dirname "$(dirname "$sdir")")"
   slug="$(basename "$repo")"
@@ -21,23 +21,22 @@ while IFS= read -r sdir; do
     PROJECT_SLUG=""; . "$repo/.brain/config.sh" 2>/dev/null || true
     [ -n "${PROJECT_SLUG:-}" ] && slug="$PROJECT_SLUG"
   fi
-  # trust-policy: slug de cliente O remote de cliente → skip
-  echo "$slug" | grep -Eiq "$DENY_SLUG" && continue
-  remote="$(git -C "$repo" remote get-url origin 2>/dev/null || true)"
-  echo "$remote" | grep -Eiq "$DENY_SLUG" && continue
+  # allow-list: solo repos demostrablemente de Eduardo (remote propio o slug local-only)
+  if ! trust_federate_ok "$repo" "$slug"; then denied=$((denied+1)); continue; fi
 
   dst="$SESSIONS/$slug"; mkdir -p "$dst"
   for f in "$sdir"/*.md; do
     [ -f "$f" ] || continue
     b="$(basename "$f")"
     if [ ! -f "$dst/$b" ] || [ "$f" -nt "$dst/$b" ]; then
-      if grep -Eq "$SECRET" "$f" 2>/dev/null; then
+      if trust_redact_hit "$f"; then
         echo "  ⚠ skip (posible secreto): $f" >&2; skipped=$((skipped+1)); continue
       fi
       cp "$f" "$dst/$b"; count=$((count+1))
     fi
   done
 done < <(find "$HOME" -maxdepth 6 -type d -path '*/.brain/sessions' 2>/dev/null)
+[ "$denied" -gt 0 ] && echo "  (trust: $denied repos no-propios omitidos por default-deny)" >&2
 
 echo "sessions-federate: $count nuevos/actualizados, $skipped saltados → $SESSIONS"
 

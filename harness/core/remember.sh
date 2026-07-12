@@ -15,8 +15,8 @@ set -uo pipefail
 
 MEM="$HOME/eBrain/memory"
 LEARN="$MEM/learnings"
-DENY_SLUG='brisas-del-golfo|dekko'
-SECRET='sk-[A-Za-z0-9_-]{20,}|postgres://[^ ]*:[^ ]*@|-----BEGIN [A-Z ]*PRIVATE KEY|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}'
+# Política de confianza compartida (deny de cliente + redact unificado) — fuente única del harness.
+. "$HOME/eBrain/harness/core/trust.sh"
 
 PROJECT_OVERRIDE=""; TAGS=""; PTYPE="agent-learning"; SYNC=1
 ARGS=()
@@ -54,20 +54,21 @@ fi
 [ -n "$PROJECT_OVERRIDE" ] && SLUG="$PROJECT_OVERRIDE"
 
 # --- Seguridad FAIL-CLOSED ---
-# 1) trust-policy: repo de cliente por slug O por remote → negar.
-if printf '%s' "$SLUG" | grep -Eiq "$DENY_SLUG"; then
+# 1) trust-policy: repo de cliente por slug O por remote → negar (hard-deny; no default-deny, para no
+#    bloquear learnings legítimos en repos OSS/ajenos — el sweep sí es default-deny, remember es intencional).
+if printf '%s' "$SLUG" | grep -Eiq "$TRUST_DENY"; then
   echo "remember: DENEGADO — '$SLUG' es repo de cliente (deny-policy). Su contexto no entra a ebrain." >&2
   exit 3
 fi
 if [ -n "$REPO" ]; then
   RURL="$(git -C "$REPO" remote get-url origin 2>/dev/null || true)"
-  if printf '%s' "$RURL" | grep -Eiq "$DENY_SLUG"; then
+  if printf '%s' "$RURL" | grep -Eiq "$TRUST_DENY"; then
     echo "remember: DENEGADO — el remote de este repo es de cliente (deny-policy)." >&2
     exit 3
   fi
 fi
 # 2) redact-scan: si el texto trae un secreto obvio → negar (nunca embeber un secreto).
-if printf '%s' "$CONTENT" | grep -Eq "$SECRET"; then
+if trust_redact_hit_text "$CONTENT"; then
   echo "remember: DENEGADO — el texto parece contener un secreto (key/token/DSN/clave privada). No lo guardo." >&2
   exit 4
 fi

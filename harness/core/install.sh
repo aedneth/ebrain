@@ -33,6 +33,16 @@ MANIFEST="$ADAPTERS/$AGENT/manifest.yaml"
 exp() { printf '%s' "${1/#\~/$HOME}"; }
 mget() { "$BUN" run "$MGET" "$MANIFEST" "$1" 2>/dev/null; }
 
+# FAIL-HARD contra éxito-silencioso: si el parser (bun) no está o no puede leer la clave OBLIGATORIA
+# `agent`, abortamos. Sin esto, un fallo del parser deja todas las variables vacías → todos los pasos
+# se saltan por `[ -n … ]` y el doctor pinta "OK" sin haber instalado nada (el peor bug: control plane
+# que miente éxito). Este es exactamente el hallazgo del audit.
+command -v "$BUN" >/dev/null 2>&1 || { echo "install: 'bun' no disponible ($BUN) — no puedo parsear el manifest. Abort." >&2; exit 1; }
+if [ "$(mget agent)" != "$AGENT" ]; then
+  echo "install: el manifest '$MANIFEST' no parsea (clave 'agent' ausente o != '$AGENT'). ¿YAML inválido o clave mal escrita? Abort — no instalo a ciegas." >&2
+  exit 1
+fi
+
 AGENT_NAME_V="$(mget env.AGENT_NAME)"; [ -z "$AGENT_NAME_V" ] && AGENT_NAME_V="$AGENT"
 NORMS_TARGET="$(exp "$(mget norms.target)")"
 NORMS_MODE="$(mget norms.mode)"
