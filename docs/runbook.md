@@ -87,6 +87,29 @@ rm -rf ~/.gbrain/brain.pglite
 
 **Recovery PROBADO (F2 §2.8a, 2026-07-11):** en un brain aislado (`GBRAIN_HOME` desechable) se reconstruyó desde git: **863 páginas + 3689 chunks** (`sync --no-embed` ~2 min) + **490 links** (`extract links --source db`, 7s) — idéntico a producción. Luego `embed --stale` (= pasada de F1, ~$0.30–0.35). `global_basename` persiste en el brain. La DB es reconstruible al 100%. **Ojo:** el paso de links es `extract links --source db` (NO `extract --stale`, que no reconstruye los wikilinks).
 
+## Dream cycle (F5.1) — consolidación nocturna
+
+`gbrain dream` corre el ciclo de mantenimiento nocturno (dedup, inferencia de links, extracción de patrones/insights). En ebrain se dispara vía `~/eBrain/scripts/dream-cycle` (**lock-aware**) para no chocar con el lock PGLite de una sesión de agente.
+
+**Prerequisito de modelo (F4.8/F5.1):** el dream/subagent usa `models.tier.subagent` — debe ser **tool-capable**. El script lo asegura idempotente a `openrouter:moonshotai/kimi-k2.6` (verificado tool-calling ✓ en F4.1). Las fases de síntesis del dream caen a `models.default` (=`openrouter:minimax/minimax-m3`, F4.8). gbrain **valida** capacidad de tools (`enforceSubagentCapable`) y aborta con instrucción de fix si no.
+
+**Lock (crítico):** gbrain es single-connection. Mientras un MCP `serve` de sesión tiene el lock, `config`/`dream`/`sources` fallan ("Timed out waiting for PGLite lock"). Por eso el dream es una operación **MCP-idle** (nocturna). `dream-cycle` aborta limpio (rc=0, "DIFERIDO") si detecta un serve vivo — nunca deadlockea.
+
+**Gasto/audit:** el dream gasta OpenRouter (subagent/default). Ese gasto **NO** entra a `spend.jsonl` (ledger de route.ts); gbrain lo audita en `~/.gbrain/audit/` (dream-budget JSONL). Cap real = server-side OpenRouter ($10/mo). Revisar el audit tras las primeras corridas.
+
+**Corrida supervisada (HUMANO, con MCP idle — sin sesión de agente viva):**
+```bash
+bash ~/eBrain/scripts/dream-cycle --dry-run   # preview, CERO gasto
+bash ~/eBrain/scripts/dream-cycle             # real; ver ~/.config/ebrain/dream.log + ~/.gbrain/audit/
+```
+
+**Habilitar el timer nocturno (HUMANO — gasto autónomo recurrente):** unit files listos en `~/eBrain/scripts/systemd/` (03:30, `Persistent=true` = catch-up al próximo boot si la laptop estuvo apagada; evita dip-collect 19:30 y el cluster de las 02:2x).
+```bash
+cp ~/eBrain/scripts/systemd/ebrain-dream.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload && systemctl --user enable --now ebrain-dream.timer
+systemctl --user list-timers ebrain-dream.timer   # verificar
+```
+
 ## Backup (F2 §2.8)
 
 - El repo **`~/eBrain` está en el manifest** de `ckis-backup-all` (`~/Documents/ckis-infra/ckis-manifest.json`, target `ebrain` → `aedneth/ebrain` privado). La próxima corrida programada auto-crea el remote y lo pushea (secret-scan en pre-commit). Verificado: repo limpio de secretos (46 archivos, cero valores).

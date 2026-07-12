@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# dream-cycle — ciclo de mantenimiento nocturno de gbrain (consolidación / dream) LOCK-AWARE.
+#
+# gbrain es single-connection (PGLite): si el MCP `serve` de una sesión de agente tiene el
+# lock, un `gbrain dream` se deadlockearía. Este launcher ABORTA limpio en ese caso (mejor
+# diferir que colgar). Pensado para cron nocturno, cuando NO hay sesión de agente viva.
+#
+# Antes de soñar, asegura el subagent tier tool-capable (los loops durables del dream lo
+# necesitan; gbrain valida capacidad de tools con enforceSubagentCapable).
+#
+# Uso:
+#   dream-cycle              corrida real (gasta OpenRouter, cap server-side $10/mo)
+#   dream-cycle --dry-run    preview sin gasto (pasa --dry-run a gbrain dream)
+#
+# El gasto del dream NO entra a spend.jsonl (ese ledger es solo de route.ts). gbrain lo
+# audita en ~/.gbrain/audit/ (dream-budget JSONL). El cap real de esas llamadas es el
+# server-side de OpenRouter. Revisar el audit tras las primeras corridas.
+set -uo pipefail
+
+CFG="$HOME/.config/ebrain"
+LAUNCHER="$CFG/gbrain-run"
+LOG="$CFG/dream.log"
+SUBAGENT_MODEL="openrouter:moonshotai/kimi-k2.6"   # tool-capable (verificado F4.1); cap server-side
+DRY=""; [ "${1:-}" = "--dry-run" ] && DRY="--dry-run"
+
+ts()  { date '+%Y-%m-%dT%H:%M:%S%z'; }
+log() { printf '[%s] %s\n' "$(ts)" "$*" | tee -a "$LOG" >&2; }
+
+[ -x "$LAUNCHER" ] || { echo "dream-cycle: falta $LAUNCHER" >&2; exit 127; }
+
+# 1. Guard de lock: MCP serve vivo → diferir (no deadlock).
+if pgrep -f 'cli\.ts serve' >/dev/null 2>&1; then
+  log "dream DIFERIDO — MCP serve activo (lock PGLite). Correr con el MCP idle (sin sesión de agente)."
+  exit 0
+fi
+
+# 2. Asegurar subagent tier tool-capable (idempotente; requiere lock-free, ya garantizado arriba).
+cur="$("$LAUNCHER" config get models.tier.subagent 2>/dev/null | tr -d '[:space:]' || true)"
+if [ "$cur" != "$SUBAGENT_MODEL" ]; then
+  log "config: models.tier.subagent '${cur:-<unset>}' → '$SUBAGENT_MODEL'"
+  "$LAUNCHER" config set models.tier.subagent "$SUBAGENT_MODEL" 2>&1 | tee -a "$LOG" >&2 || log "WARN: no pude setear subagent tier"
+fi
+
+# 3. Correr el dream.
+log "dream START ${DRY:-(real)}"
+"$LAUNCHER" dream $DRY --json 2>&1 | tee -a "$LOG" >&2
+rc=${PIPESTATUS[0]}
+log "dream END rc=$rc"
+exit "$rc"

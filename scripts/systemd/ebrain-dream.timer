@@ -1,0 +1,14 @@
+[Unit]
+Description=ebrain nightly dream cycle timer (03:30, catch-up on boot)
+# 03:30 evita: content-os-dip (19:30), ckis-reflux + firmware/upgrade notifies (~02:2x-02:38).
+# ckis-backup (cada 15 min) no choca: es git-level, no toca el PGLite del brain.
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+# Persistent: si la laptop estuvo apagada a las 03:30, corre en el próximo boot (no se pierde).
+Persistent=true
+# Jitter para no arrancar exactamente en el borde si algo más despierta a esa hora.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
