@@ -1,0 +1,15 @@
+# .graphifyignore — qué NO indexa graphify en ebrain.
+# El grafo de código de ebrain debe ser SU código propio (harness/ cli/ scripts/),
+# no los clones upstream vendored ni la memoria/runtime.
+
+# clones read-only de upstream (miles de archivos ajenos — NO son código de ebrain)
+vendor/
+
+# memoria agéntica (agent-memory) — es contenido/markdown, no código estructural
+memory/
+
+# runtime / build artefactos
+.brain/
+graphify-out/
+node_modules/
+.gbrain/
