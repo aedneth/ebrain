@@ -113,7 +113,7 @@ if [ -n "$NORMS_TARGET" ] && [ "$NORMS_TARGET" != "null" ] && [ -f "$NORMS_TARGE
 fi
 
 # c) contract tests del guard canónico (drift = rojo, no silencioso)
-if [ -x "$CORE/contract-test.sh" ]; then
+if [ -f "$CORE/contract-test.sh" ]; then
   if bash "$CORE/contract-test.sh" "$CORE/guard-secrets.sh" >/dev/null 2>&1; then
     echo "  guard ✓ contract tests (fixtures) pasan"
   else

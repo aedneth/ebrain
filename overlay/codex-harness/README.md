@@ -1,3 +1,10 @@
+> ⚠️ **MIGRADO (2026-07-11, H5).** Este overlay quedó absorbido por la capa canónica del harness:
+> el adapter vive en `harness/adapters/codex/manifest.yaml` y se instala con
+> `ebrain harness install codex`. Los hooks de `~/.codex/hooks/` ahora son **wrappers generados**
+> que ejecutan los scripts core (`harness/core/{guard-secrets,inject-context,log-session}.sh`).
+> Este dir se conserva como referencia histórica (reverse-engineering del contrato de Codex). No lo
+> uses para instalar: usá el adapter. La fuente de verdad de las normas es `harness/core/NORMS.md`.
+
 # codex-harness — el harness de seguridad+contexto de Codex (cerebro/driver primario)
 
 > Eduardo corre Codex con `--sandbox danger-full-access` (sin gate de aprobación). Bajo ese modo,
