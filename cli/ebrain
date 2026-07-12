@@ -18,7 +18,9 @@ ebrain — capa unificada de harness + memoria agéntica (provider-agnostic)
   ebrain q "<pregunta>"                                      buscar (fan-out cross-source)
   ebrain route --cap <cap> "<prompt>"                        one-shot ruteado (stack OpenRouter capado)
   ebrain harness install <agent>                             instalar/actualizar el harness de un agente
-  ebrain harness doctor [agent]                              verificar el harness (guard/hooks/mcp)
+  ebrain harness doctor [agent]                              verificar el harness de UN agente (guard/hooks/mcp)
+  ebrain doctor                                              salud CKIS completa (launchers/config/contract/sources/gasto)
+  ebrain status                                              snapshot rápido (brain/gasto/flota/memoria)
   ebrain norms render <archivo>                              render del bloque de normas gestionado
   ebrain federate sessions|skills                            barrer .brain/ o skills a la memoria federada
   ebrain help
@@ -31,6 +33,8 @@ cmd="${1:-help}"; shift || true
 case "$cmd" in
   remember)  run "$CORE/remember.sh" "$@" ;;
   q|query)   run "$SCRIPTS/ebrain-q" "$@" ;;
+  doctor)    run "$CORE/doctor.sh" "$@" ;;
+  status)    run "$CORE/status.sh" "$@" ;;
   route)     if [ -x "$CFG/ebrain-route" ]; then "$CFG/ebrain-route" "$@"; else echo "ebrain: falta $CFG/ebrain-route" >&2; exit 127; fi ;;
   harness)
     sub="${1:-}"; shift || true

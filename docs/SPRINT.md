@@ -174,7 +174,7 @@ Convención de estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado
 ## FASE 5 — Consolidación
 
 - [ ] 5.1 Configurar dream cycle nocturno (horario que no choque con backup 15-min ni con dip-collect 19:30); presupuesto acotado; primera corrida supervisada.
-- [ ] 5.2 `ebrain doctor` y `ebrain status` implementados en `cli/` (agregan checks CKIS sobre `gbrain doctor`).
+- [x] 5.2 **HECHO** — `ebrain doctor` (`harness/core/doctor.sh`) + `ebrain status` (`status.sh`) cableados en `cli/ebrain`. Doctor: launchers · config (keys presencia sin volcar) · **contract-test del guard cableado (alarma de drift, cierra 4.6h2)** · flota de 6 adapters · aislamiento de sources de cliente (**lock-aware**: difiere el chequeo directo si el MCP tiene el lock PGLite → corre autoritativo con MCP idle/cron) · gasto MTD vs cap. rc=1 solo en fallo duro. **Probado: doctor rc=0 (3 warns conocidos: gemini hooks.json pendiente, sources diferido por MCP vivo, gap spend gbrain); status rc=0.** Contract-test 16/16.
 - [ ] 5.3 Vault: crear `02-projects/ebrain/` con `_overview.md`, enlace a ADRs, runbook resumido, y decisiones tomadas (QMD, topología de brains). Frontmatter CKIS correcto.
 - [ ] 5.4 Repo /ebrain: `.brain` conectado a Dev Brain (hooks graphify post-commit instalados y probados con un commit).
 - [ ] 5.5 Company Brain: fila en `registry/repos.md` para /ebrain, actualización de domain card engineering, entrada DRIFT si algo quedó abierto, línea en CHANGELOG.
