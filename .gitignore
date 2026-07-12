@@ -13,3 +13,4 @@ node_modules/
 
 # log de gasto (puede contener metadata sensible; GUARDRAILS §1/§4)
 spend.jsonl
+memory/

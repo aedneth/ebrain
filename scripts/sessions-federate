@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# sessions-federate — hermano de skills-federate. Barre los session/decision files NUEVOS de los
+# `.brain/` PROPIOS hacia el repo `agent-memory` (~/eBrain/memory), luego `gbrain sync`. Así la memoria
+# de sesión de CUALQUIER agente (Claude, Codex, …) se acumula cross-agente y queda buscable en ebrain.
+# Filtros de seguridad: (1) trust-policy — repos de cliente NUNCA se barren; (2) redact — páginas con
+# un secreto obvio se saltan. Idempotente (dedup por nombre + mtime). Candidato a cron / pre-dream-cycle.
+set -euo pipefail
+
+MEM="$HOME/eBrain/memory"
+SESSIONS="$MEM/sessions"
+mkdir -p "$SESSIONS"
+
+DENY_SLUG='brisas-del-golfo|dekko'                       # repos de cliente — nunca federar
+SECRET='sk-[A-Za-z0-9_-]{20,}|postgres://[^ ]*:[^ ]*@|-----BEGIN [A-Z ]*PRIVATE KEY|xox[baprs]-[A-Za-z0-9-]{10,}'
+
+count=0; skipped=0
+while IFS= read -r sdir; do
+  repo="$(dirname "$(dirname "$sdir")")"
+  slug="$(basename "$repo")"
+  if [ -f "$repo/.brain/config.sh" ]; then
+    PROJECT_SLUG=""; . "$repo/.brain/config.sh" 2>/dev/null || true
+    [ -n "${PROJECT_SLUG:-}" ] && slug="$PROJECT_SLUG"
+  fi
+  # trust-policy: slug de cliente O remote de cliente → skip
+  echo "$slug" | grep -Eiq "$DENY_SLUG" && continue
+  remote="$(git -C "$repo" remote get-url origin 2>/dev/null || true)"
+  echo "$remote" | grep -Eiq "$DENY_SLUG" && continue
+
+  dst="$SESSIONS/$slug"; mkdir -p "$dst"
+  for f in "$sdir"/*.md; do
+    [ -f "$f" ] || continue
+    b="$(basename "$f")"
+    if [ ! -f "$dst/$b" ] || [ "$f" -nt "$dst/$b" ]; then
+      if grep -Eq "$SECRET" "$f" 2>/dev/null; then
+        echo "  ⚠ skip (posible secreto): $f" >&2; skipped=$((skipped+1)); continue
+      fi
+      cp "$f" "$dst/$b"; count=$((count+1))
+    fi
+  done
+done < <(find "$HOME" -maxdepth 6 -type d -path '*/.brain/sessions' 2>/dev/null)
+
+echo "sessions-federate: $count nuevos/actualizados, $skipped saltados → $SESSIONS"
+
+# commit local del repo agent-memory (add específico, nunca cerca de archivos de entorno)
+if [ -d "$MEM/.git" ]; then
+  git -C "$MEM" add sessions/ 2>/dev/null || true
+  git -C "$MEM" commit -q -m "sessions-federate: sweep $(date -u +%FT%TZ) (+$count)" 2>/dev/null || true
+fi
+
+# sync del source agent-memory a gbrain (estructura + embeddings; volumen chico = costo mínimo)
+"$HOME/.config/ebrain/gbrain-run" sync --source agent-memory >/dev/null 2>&1 \
+  && echo "  gbrain sync agent-memory ✓" || echo "  (gbrain sync diferido — source aún no registrado?)"

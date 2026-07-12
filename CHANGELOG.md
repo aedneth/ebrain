@@ -15,6 +15,16 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — harness H1: write-back floor — memoria agéntica permanente cross-agente (LIVE)
+
+- **Cierra el hueco de capacidad #1:** Codex (driver primario) dejaba 0 session logs. Ahora cablea `subagent_stop` → logger canónico.
+- **`harness/core/log-session.sh`** agent-agnostic: deriva el repo del `cwd` del payload, estampa `agent:`, escribe `.brain/sessions/*-<agent>-session.md` + índice Dev Brain (mismo esquema 6-campos, `[agent]` en el summary). Sin dependencia de transcript (eso es enriquecimiento por-agente). FAIL-OPEN.
+- **`~/eBrain/memory/`** = repo git nuevo, source `agent-memory` (federated, ADR-001) — **L1.5 CKIS** entre `.brain` (L1) y Dev Brain (L2). Camino canónico markdown→git→`gbrain sync` (no put directo). Gitignored del repo ebrain; en `ckis-backup-all` (target agent-memory→aedneth/agent-memory).
+- **`scripts/sessions-federate`** (hermano de skills-federate): barre session files de los `.brain/` propios → agent-memory. **Filtros de seguridad probados:** trust-policy (slug + remote → brisas/dekko NUNCA) + redact-scan por página. **Primer sweep: 38 sesiones, 8 proyectos, 0 clientes colados, 39 páginas embebidas, acceptance query score 0.85.**
+- Codex: `~/.codex/hooks/log-session.sh` (wrapper AGENT_NAME=codex) + `subagent_stop` en hooks.json.
+
+---
+
 ## 2026-07-11 — ADR-002: capa unificada de harness + memoria agéntica permanente (audit Fable 5)
 
 - **Insight de Eduardo (pivote central):** dejar de re-implementar el harness CKIS por-agente; crear UNA capa provider-agnostic (harness + memoria permanente) servida por ebrain. La lectura de memoria ya es agnóstica (MCP); falta unificar harness + write-back.
