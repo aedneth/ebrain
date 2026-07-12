@@ -1,0 +1,26 @@
+# adapter: gemini — Gemini CLI (agente free/experimental). Adapter COMPLETO: la prueba de la tesis
+# es que agregar un agente nuevo = escribir este manifest y correr `ebrain harness install gemini`.
+# `format: claude-json` es la ASUNCIÓN de convergencia; si un payload real diverge, el contrato
+# congelado + los contract tests en doctor lo marcan (drift = doctor rojo, no silencioso).
+agent: gemini
+description: Gemini CLI — agente free/experimental. Adapter completo (guard + contexto + write-back + normas + MCP).
+norms:
+  target: ~/.gemini/GEMINI.md
+  mode: managed-block
+hooks:
+  config: ~/.gemini/hooks/hooks.json
+  format: claude-json
+  dir: ~/.gemini/hooks
+  events:
+    pre_tool_use: pre_tool_use
+    session_start: session_start
+    stop: stop
+  wrappers:
+    - { file: guard-secrets.sh,  core: guard-secrets.sh, event: pre_tool_use }
+    - { file: inject-context.sh, core: inject-context.sh, event: session_start }
+    - { file: log-session.sh,    core: log-session.sh,    event: stop }
+mcp:
+  register: "gemini mcp add ebrain -- $HOME/.config/ebrain/gbrain-mcp"
+env:
+  AGENT_NAME: gemini
+doctor: "gemini --version"

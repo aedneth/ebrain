@@ -1,0 +1,24 @@
+# adapter: claude — Claude Code, orquestador/auditor (Opus). El harness gestiona SOLO el guard de
+# secretos + el bloque de normas. El contexto de sesión y el session-logging los maneja CKIS (hooks
+# propios del vault) → el harness NO los toca. Por eso `install claude` = verificación + zero cambio.
+agent: claude
+description: Claude Code — orquestador/auditor. Guard + normas gestionados por el harness; contexto y write-back los maneja CKIS.
+norms:
+  target: ~/.claude/CLAUDE.md
+  mode: managed-block
+hooks:
+  config: ~/.claude/settings.json
+  format: claude-json
+  dir: ~/.claude/hooks
+  events:
+    pre_tool_use: PreToolUse
+  wrappers:
+    - { file: block-env-read.sh, core: guard-secrets.sh, event: pre_tool_use }
+  external:                       # gestionado por CKIS, el harness no interviene
+    - "SessionStart: banner de contexto CKIS"
+    - "session logging: hooks del vault CKIS"
+mcp:
+  register: null                  # el MCP ebrain ya está conectado en Claude Code
+env:
+  AGENT_NAME: claude
+doctor: null
