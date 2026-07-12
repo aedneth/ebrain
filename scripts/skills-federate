@@ -40,8 +40,9 @@ for entry in "${SOURCES[@]}"; do
     [ -f "$src_file" ] || continue
     if [ -n "${SEEN[$name]:-}" ]; then
       dupes=$((dupes+1))
-      # anota alias en el registry (la versión ganadora ya está)
-      printf '    aliases: [%s]  # también en %s\n' "$name" "$label" >> "$REG"
+      # COMENTARIO (no clave YAML): una línea `aliases:` acá se pegaría al último skill escrito y
+      # corromper­ía el registry. El ganador ya quedó registrado por ${SEEN[$name]}; esto solo anota el dup.
+      printf '  # (dup) %s también en %s — omitido (gana %s)\n' "$name" "$label" "${SEEN[$name]}" >> "$REG"
       continue
     fi
     SEEN[$name]="$label"

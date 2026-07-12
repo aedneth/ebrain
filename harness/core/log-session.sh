@@ -32,7 +32,9 @@ RECENT="$(git -C "$REPO" log --oneline -10 2>/dev/null || true)"
 WORKTREE="$(git -C "$REPO" status --short 2>/dev/null | head -40 || true)"
 
 SESSDIR="$REPO/.brain/sessions"; mkdir -p "$SESSDIR" 2>/dev/null || exit 0
-OUT="$SESSDIR/$DATE_TAG-$AGENT-session.md"
+# Resolución de segundos + PID: dos disparos del hook en el mismo minuto (p.ej. subagentes) no se
+# sobreescriben entre sí (antes: filename por minuto → colisión silenciosa).
+OUT="$SESSDIR/$DATE_TAG$(date +%S)-$AGENT-$$-session.md"
 {
   echo "---"
   echo "type: session"; echo "project: $SLUG"; echo "agent: $AGENT"
