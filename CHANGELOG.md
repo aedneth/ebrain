@@ -4,6 +4,15 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-12 — F4 CERRADA: gate `[AUDIT_PASS]` (routing + chat→OpenRouter + Hermes DEFER)
+
+- **4.8 — chat LLM de gbrain → OpenRouter.** `models.default=openrouter:minimax/minimax-m3` (el knob que usa `think`; su default de fábrica era `anthropic:claude-opus-4-7`) + `GBRAIN_CHAT_MODEL` en ambos launchers (repo↔live reconciliados). **`think` probado 100% en OpenRouter (`Pages:40 | Citations:8`, sin frontier).** Embeddings intactos (OpenAI 3-large @1536d). Gap documentado: spend de gbrain no entra al ledger local (cap real = server-side). Reverse-engineering en `runbook.md` para el motor mejorado.
+- **4.9 — Hermes = DEFER** (`hermes-evaluation.md`). Desviación consciente: NO instalar (RAM 4GB, routing ya capturado en route.ts, MCP stdio→Hermes remoto amnésico, amplifica exfil). Costos + 3 condiciones de revisita + guardrails. Confirmado por Fable.
+- **4.10 — GATE F4 `[AUDIT_PASS]`.** Criterios verificados: 6 rutas con costo logueado (ganadores correctos), `model-registry.md` live, benchmark `~31×` (`benchmark-routing-cost.md`) + qmd-vs-ebrain, `tier0-playbook.md` escrito, Hermes entregado. **F4 cerrada.**
+- **Contexto:** F4 incluyó además el harness unificado H1–H5, la auditoría Fable + 3/4 MUST, el arsenal de 6 agentes (codex/claude/cursor/opencode/gemini/generic) con memoria cross-provider probada, y `think` corriendo en el stack chino. Próximo: F5.
+
+---
+
 ## 2026-07-11 — audit Fable 5 (harness) + 3/4 MUST + arsenal +2 (opencode, cursor)
 
 - **Audit Fable 5** (read-only, 117k tokens, verificación en vivo): harness **sólido para construir encima, sin blocker de código**; deuda de gobernanza. 4 MUST antes de rol de control-plane.
