@@ -63,16 +63,17 @@ Regla de oro nueva: **quien construye (Codex, créditos) ≠ quien audita (Opus,
 | **Cursor ($50 + CLI + Anthropic)** | Canal de edición quirúrgica | Autocomplete + edits inline en el editor; CLI para micro-tareas acotadas; acceso puntual a modelos Anthropic sin gastar sesión Pro | Loops agénticos (matan los $50 en días); scope > 1 archivo |
 | **gemini-cli (free tier)** | Batch / contexto masivo gratis | Digestión de repos/transcripts, clasificación batch, borradores desechables — primera opción si tolera free-tier | Pipelines críticos o programados (rate limits sin SLA) |
 
-### 2.1 Gobernanza de créditos Codex (el driver primario necesita candados)
+### 2.1 Gobernanza del cerebro Codex
 
-Codex pasó de "worker ocasional" a **cerebro** — y hoy es el agente MENOS gobernado del sistema (los guardrails CKIS son per-harness de Claude Code). Obligatorio antes de la primera sesión agresiva:
+Codex pasó de "worker ocasional" a **cerebro** — y era el agente MENOS gobernado (los guardrails CKIS son per-harness de Claude Code). **Realidad del flujo (Eduardo):** corre `codex --sandbox danger-full-access` en directorios de trabajo aislados, igual que `claude --dangerously-skip-permissions`. Como el gate de aprobación está desactivado por diseño, el control NO son los permisos de Codex sino:
 
-- **Sandbox / paths denegados:** `brisas-del-golfo` y `dekko-floors` (repos de cliente) están presentes en disco; Codex NUNCA debe leerlos/escribirlos. `.env*` y credenciales fuera de alcance. Config en `~/.codex/config.toml` (sandbox + `AGENTS.md`, que es lo que Codex lee — NO CLAUDE.md).
-- **MCP ebrain registrado en codex-cli** → misma memoria unificada que Claude Code (search semántico + skills federadas).
-- **Ledger + expiry:** créditos de hackatón suelen **expirar** → verificar fecha YA. Burn-rate semanal registrado. Plan de reversión documentado: si los créditos mueren, los roles vuelven al spec 2026-07-08 (Claude Code re-asciende a primario).
-- **Rastro narrativo:** el trabajo del driver primario debe dejar session logs + CHANGELOG igual que Claude Code — imponerlo vía `AGENTS.md` (graphify ya captura sus commits por git-hook).
+- **Aislamiento por directorio (control primario):** `brisas-del-golfo` y `dekko-floors` (cliente) están en disco — Codex trabaja en el repo específico, nunca en un padre que los contenga. (Riesgo confirmado: `~/.codex/config.toml` ya tenía `dekko-floors` como proyecto trusteado.)
+- **`~/.codex/AGENTS.md` global [IMPLEMENTADO 2026-07-11]** — normas que espejan el `~/.claude/CLAUDE.md`: reglas duras de secretos (nunca leer/imprimir `.env`/credenciales, usar NOMBRES), repos de cliente = deny de exfiltración/push/cross-pollination, disciplina SOP + maker≠checker (Opus audita a Codex), rastro narrativo (session log + CHANGELOG), regla de RAM (un agente vivo).
+- **MCP ebrain en codex-cli [IMPLEMENTADO 2026-07-11]** (`codex mcp add ebrain -- ~/.config/ebrain/gbrain-mcp`) → misma memoria unificada + 75 skills federadas que Claude Code.
+- **Ledger + expiry [PENDIENTE, acción Eduardo]:** los $2500 de hackatón suelen **expirar** → verificar fecha. Burn-rate semanal. Reversión: si mueren, los roles vuelven al spec 2026-07-08 (Claude Code re-primario).
+- **Rastro narrativo:** impuesto vía AGENTS.md; graphify ya captura los commits de Codex por git-hook.
 
-> Esto ES la ejecución de SPRINT 2.6b (auditoría multi-agente) — ya no es diferible. Se materializa en SPRINT 4.6.
+> Esto ES la ejecución de SPRINT 2.6b (auditoría multi-agente) — materializada en 4.6. MCP + AGENTS.md hechos; falta expiry/ledger (Eduardo) + `/codex` op-check + tier0-playbook.
 
 **Advertencia de ToS (input honesto):** Hermes incluye un proxy local OpenAI-compatible que expone providers OAuth (Claude Pro, ChatGPT Pro) como endpoints para Codex/Aider/Cline. Existe, pero **no lo uses**: rutear una suscripción por proxy hacia herramientas de terceros puede violar los términos del provider y arriesgar la cuenta. Cada suscripción se usa en su herramienta nativa; el ahorro real viene del Tier 1, no de exprimir suscripciones por caminos grises.
 

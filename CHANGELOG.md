@@ -15,6 +15,16 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — F4.6 (parcial): gobernanza del cerebro Codex — MCP ebrain + AGENTS.md
+
+- **Flujo real de Eduardo:** corre `codex --sandbox danger-full-access` / `claude --dangerously-skip-permissions` en dirs aislados → gobernanza = **aislamiento + normas + MCP, no approval-gating** (memoria `feedback_agent_fullaccess_workflow`).
+- **`~/.codex/AGENTS.md` global creado** — espeja el `~/.claude/CLAUDE.md`: reglas duras de secretos (nunca leer/imprimir `.env`/credenciales), repos de cliente (brisas/dekko) = deny de exfiltración/push/cross-pollination, disciplina SOP + **maker≠checker invertido** (Opus audita a Codex), rastro narrativo (session log + CHANGELOG), regla RAM (un agente vivo).
+- **MCP ebrain registrado en codex-cli** (`codex mcp add ebrain -- ~/.config/ebrain/gbrain-mcp` → enabled) → Codex (primario) ahora tiene la MISMA memoria unificada + 75 skills federadas que Claude Code.
+- **Riesgo confirmado (Fable):** `~/.codex/config.toml` ya tenía `dekko-floors` (cliente) como proyecto trusteado → la regla de aislamiento por-dir en AGENTS.md es la mitigación.
+- Pendiente 4.6: expiry/ledger de créditos [Eduardo], `/codex` op-check, tier0-playbook.
+
+---
+
 ## 2026-07-11 — F4 núcleo (4.1–4.4): router Tier 1 sobre OpenRouter vivo + auditado por Fable 5
 
 - **Gate humano 4.2:** `OPENROUTER_API_KEY` colocada (presencia verificada sin imprimir), **$5 de crédito**. Recordatorio abierto: auto-recharge OFF + límite por-key server-side.
