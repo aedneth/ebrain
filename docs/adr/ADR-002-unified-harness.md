@@ -3,7 +3,7 @@ type: adr
 project: ebrain
 id: ADR-002
 created: 2026-07-11
-status: proposed
+status: accepted — H1–H5 implementados y probados (2026-07-11); H6 post-4.9
 tags: [ebrain, harness, multi-agent, agentic-memory, provider-agnostic]
 related: [ADR-001-brain-topology.md, ROUTING.md, skill-federation.md, graphify-integration.md, brain-init-pipeline.md, SPRINT.md]
 audited-by: Fable 5 (2026-07-11)

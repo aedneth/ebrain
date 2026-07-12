@@ -4,6 +4,16 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — harness H3–H5: capa unificada provider-agnostic COMPLETA (ADR-002, tesis probada)
+
+- **H3 — memoria semántica de escritura:** `harness/core/remember.sh` + skill `remember` (federada al skillpack, `source: harness`) + CLI unificado `ebrain` (`~/.local/bin/ebrain`: remember/q/route/harness/norms/federate). `ebrain remember "<learning>"` escribe página tipada `agent-learning` a `agent-memory` + `gbrain sync`. **Fail-closed:** niega repos de cliente (slug+remote) y texto con secreto. Verificado: 3 negativas + recall 0.847. Commit `e2170d3`.
+- **H4 — fin de la divergencia de normas:** `harness/core/NORMS.md` = fuente única cross-agente; `render-norms.sh` inyecta bloque gestionado idempotente (0-diff al re-render, backup previo) en `~/.codex/AGENTS.md` (dedup) y `~/.claude/CLAUDE.md` (append; canary intacto). Commit `13cf2ed`.
+- **H5 — la tesis probada:** adapters declarativos `harness/adapters/{claude,codex,gemini,generic}/manifest.yaml` + `inject-context.sh` + `install.sh` (`ebrain harness install/doctor <agent>`, idempotente, doctor rc=1 en pendientes = drift en rojo). **claude+codex = doctor OK, cero cambio de comportamiento** (overlay codex migrado a adapter). **gemini (agente nuevo) = 5/5 criterios de aceptación** (guard-deny, contexto, `agent: gemini` en session log + índice Dev Brain, recall ebrain 0.87, remember en skillpack). Agregar un agente = un manifest + install. Commit `830532a`.
+- **Generaliza las capas:** L1 `.brain` → **L1.5 `agent-memory` (cross-agente)** → L2 Dev Brain → L3 vault. La lectura ya era agnóstica (MCP); ahora la escritura + gobernanza + contexto también. Deuda O(agentes×capas) → O(1 manifest/agente).
+- **Pendiente (post-4.9):** H6 = adapterizar `brain-init` (per-proyecto) + adapter Hermes. Humano: cablear `hooks.json` de gemini cuando se verifique su formato de hooks.
+
+---
+
 ## 2026-07-11 — F4 routing impecable: 2º audit Fable 5 + realidad de recursos (Codex $2500 = cerebro)
 
 - **Nueva realidad de recursos (Eduardo):** Codex ($2500 hackatón + API OpenAI) = **cerebro/driver primario diario** (como se usaba Claude Code); **Claude Code baja a 2º de confianza** (Opus director/auditor, dueño de vault/CKIS); **Cursor $50 + CLI + modelos Anthropic**; OpenRouter **$10/mo** = carril daily ruteado (no agente); stack chino debe **construir proyectos enteros** cada modelo en máx capacidad.
