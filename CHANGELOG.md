@@ -15,6 +15,18 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — F4.6: harness DURO de Codex (hooks) — guard de secretos + contexto en session-start
+
+- **Insight de Eduardo:** bajo `danger-full-access` el `AGENTS.md` es blando; el control duro es el **harness (hooks/scripts/guardrails)** que trabaja seguro + con contexto SIN interrumpir con permisos.
+- **Reverse-engineering:** Codex soporta hooks **Claude-compatible** (`~/.codex/hooks/hooks.json`; eventos snake_case `pre_tool_use`/`session_start`/…; input `tool_input`/`tool_name`/`hook_event_name`; output `permissionDecision:deny`/exit2; sistema de hook-trust).
+- **`overlay/codex-harness/`** (nuevo, versionado, `install.sh` idempotente + no-destructivo):
+  - `block-secret-read.sh` (`pre_tool_use`) — **candado técnico de secretos** = port del `block-env-read.sh` de Claude Code. Bloquea leer `.env`/credenciales/`printenv` al contexto (deny+exit2). **Probado 3/3** (cat .env→deny, ls→allow, grep KEY .env→deny). FAIL-OPEN.
+  - `session-context.sh` (`session_start`) — inyecta `additionalContext`: MCP ebrain, normas AGENTS.md, último CHANGELOG.
+  - Instalado en `~/.codex/hooks/` · `codex doctor` verde · JSON válido.
+- **Pendiente:** trust vivo del hook (Eduardo, próxima sesión `codex` — test: pedirle `cat .env` → debe negarse).
+
+---
+
 ## 2026-07-11 — F4.6 (parcial): gobernanza del cerebro Codex — MCP ebrain + AGENTS.md
 
 - **Flujo real de Eduardo:** corre `codex --sandbox danger-full-access` / `claude --dangerously-skip-permissions` en dirs aislados → gobernanza = **aislamiento + normas + MCP, no approval-gating** (memoria `feedback_agent_fullaccess_workflow`).
