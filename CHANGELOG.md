@@ -4,6 +4,17 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — F4 routing impecable: 2º audit Fable 5 + realidad de recursos (Codex $2500 = cerebro)
+
+- **Nueva realidad de recursos (Eduardo):** Codex ($2500 hackatón + API OpenAI) = **cerebro/driver primario diario** (como se usaba Claude Code); **Claude Code baja a 2º de confianza** (Opus director/auditor, dueño de vault/CKIS); **Cursor $50 + CLI + modelos Anthropic**; OpenRouter **$10/mo** = carril daily ruteado (no agente); stack chino debe **construir proyectos enteros** cada modelo en máx capacidad.
+- **2º audit Fable 5** (deep, read-only): proyecto sano, deuda de **gobernanza** no de código. Hallazgo #1: **Codex es el driver primario MENOS gobernado** (guardrails CKIS son per-harness Claude Code; brisas/dekko en disco; sin deny de secretos, sin MCP, sin session logs) → nueva §2.1 de gobernanza Codex + reframe de SPRINT 4.6 (= ejecución de 2.6b).
+- **`route.ts` endurecido (6 bugs del audit):** append real concurrency-safe, fallback de costo estimado (nunca $0 silencioso → cap real), flag `--floor`, timeout 120s, **regex frontier hermético** (oN/gpt-N/gemini pro|ultra), empate→general. **12/12 tests.**
+- **`routing.yaml`:** split `provider_routing`/`completion_defaults`, **`max_tokens:8192`** (anti-drenaje Kimi/Qwen-Max out), `general` cheap-first opcional vía `--floor`, ganadores en máx capacidad (directiva Eduardo).
+- **`ROUTING.md` rediseñado → status:active:** Tier 0 reescrito (Codex cerebro), §2.1 gobernanza Codex, árbol de decisión nuevo (regla RAM 4GB: un agente vivo a la vez; maker≠checker invertido: Opus audita a Codex), §6 con ledger Codex + auto-recharge OFF + 4 medidores.
+- **Acciones humanas abiertas:** auto-recharge OFF + límite per-key (OpenRouter); verificar expiry créditos Codex; confirmar dónde opera Codex (para el sandbox de 4.6).
+
+---
+
 ## 2026-07-11 — F4 núcleo (4.1–4.4): router Tier 1 sobre OpenRouter vivo + auditado por Fable 5
 
 - **Gate humano 4.2:** `OPENROUTER_API_KEY` colocada (presencia verificada sin imprimir), **$5 de crédito**. Recordatorio abierto: auto-recharge OFF + límite por-key server-side.

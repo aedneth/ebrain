@@ -2,11 +2,12 @@
 type: routing-spec
 project: ebrain
 created: 2026-07-08
-modified: 2026-07-08
-status: proposed
-tags: [ebrain, routing, openrouter, hermes, modelos-chinos, claude-code, codex, cursor, gemini]
-related: [ULTRAPLAN.md, ARCHITECTURE.md, SPRINT.md, GUARDRAILS.md]
-sources-verified: 2026-07-08 (github.com/NousResearch/hermes-agent, hermes-agent.nousresearch.com/docs, openrouter.ai/docs)
+modified: 2026-07-11
+status: active
+tags: [ebrain, routing, openrouter, hermes, modelos-chinos, codex, claude-code, cursor, gemini]
+related: [ULTRAPLAN.md, ARCHITECTURE.md, SPRINT.md, GUARDRAILS.md, model-registry.md]
+sources-verified: 2026-07-08 (hermes-agent, openrouter.ai/docs); model-registry live 2026-07-11
+resource-reality: 2026-07-11 (Codex $2500 = cerebro/primario · OpenRouter $10/mo · Cursor $50+CLI)
 ---
 
 # ROUTING — Capa de ejecución de inteligencia de ebrain
@@ -15,61 +16,81 @@ Implementación completa del AI Execution Layer (Company Brain Part VII) sobre l
 
 ## 1. Arquitectura de 3 tiers (el mapa completo)
 
+> **Realidad de recursos 2026-07-11 (reescribe el Tier 0):** Codex tiene **$2500** de créditos (hackatón) + API OpenAI → es el **cerebro / driver primario diario**, usado agresivamente como se usaba Claude Code. **Claude Code baja a segundo — el agente de confianza:** Opus orquesta/audita, Sonnet workers, y es el dueño de TODO el trabajo vault/CKIS. El **stack chino (Tier 1)** se rutea tan bien que puede **construir proyectos enteros**, cada modelo en su máxima capacidad, capado a $10/mo.
+
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ TIER 0 · FRONTIER INTERACTIVO (activos que YA pagás — no tocan cap)  │
+│ TIER 0 · AGENTES INTERACTIVOS (créditos + suscripciones — no tocan cap)│
 │                                                                      │
-│  Claude Code (Claude Pro) ──► DRIVER DEFAULT de proyectos serios     │
-│    Opus = orquestador/auditor · Sonnet = workers · MCP → ebrain      │
-│  Codex (créditos OpenAI) ──► worker paralelo de código / 2ª opinión  │
-│    invocado vía skill /codex de gstack con specs cerradas            │
-│  Cursor Composer (créditos) ──► autocomplete + edits inline en editor│
-│    consumo pasivo; JAMÁS razonamiento agéntico (drena créditos)      │
-│  gemini-cli (free tier) ──► ingesta masiva / resúmenes batch /       │
-│    contexto gigante GRATIS; primera opción para tareas desechables   │
+│  Codex (codex-cli · $2500) ──► CEREBRO / DRIVER PRIMARIO             │
+│    constructor diario agresivo: features, refactors, tests, debug,   │
+│    sesiones agénticas largas de código · mejor calidad/precio        │
+│  Claude Code (Claude Pro) ──► DIRECTOR + AUDITOR (2º, de confianza)  │
+│    Opus orquesta/audita (revisa diffs de Codex: maker≠checker) ·     │
+│    Sonnet workers · dueño de TODO vault/CKIS/skills/MCP              │
+│  Cursor ($50 + CLI + modelos Anthropic) ──► edición quirúrgica       │
+│    autocomplete/edits inline · CLI para micro-tareas · Anthropic     │
+│  gemini-cli (free tier) ──► batch / contexto gigante GRATIS          │
 └──────────────────────────┬───────────────────────────────────────────┘
-                           │ delega lo barato/batch hacia abajo
+                           │ delega lo programático/batch/autónomo hacia abajo
 ┌──────────────────────────▼───────────────────────────────────────────┐
-│ TIER 1 · STACK CHINO RUTEADO (OpenRouter · 1 key · hard cap)         │
+│ TIER 1 · STACK CHINO RUTEADO (OpenRouter · 1 key · cap $10/mo)        │
 │                                                                      │
-│  ebrain route ──► clasifica por CAPACIDAD → modelo ganador + fallback│
-│  coding→DeepSeek V4 · agentic→Kimi K2.6 · web/design→GLM-5.2 ·       │
-│  long-context+reasoning→MiniMax M3 · general→Qwen3.7 Max             │
-│  También consumido por: jobs de gbrain (dream cycle, judges) y Hermes│
+│  ebrain route ──► clasifica por CAPACIDAD → ganador (máx capacidad) + │
+│  fallback + floor. Constructor COMPLETO: coding→DeepSeek V4 ·         │
+│  agentic→Kimi K2.6 · web/design→GLM-5.2 · reasoning/long→MiniMax M3 · │
+│  terminal/general→Qwen3.7 Max. Carril programático/batch/one-shot +   │
+│  jobs de gbrain (dream/judges/think) + Hermes. NO es agente interactivo│
 └──────────────────────────┬───────────────────────────────────────────┘
 ┌──────────────────────────▼───────────────────────────────────────────┐
 │ TIER 2 · RUNTIME AUTÓNOMO 24/7 (Hermes — opt-in, post-F4)            │
 │                                                                      │
-│  Hermes gateway sobre OpenRouter (provider_routing nativo)           │
-│  Hábitat recomendado: VPS $5 o serverless (Modal/Daytona), NO la     │
-│  laptop de 4 GB · acceso por Telegram/CLI · crons + subagentes       │
+│  Hermes gateway sobre OpenRouter (provider_routing nativo) → maneja   │
+│  el stack chino como constructor autónomo de proyectos enteros       │
+│  Hábitat: VPS $5 o serverless (Modal/Daytona), NO la laptop 4 GB ·   │
+│  Telegram/CLI · crons + subagentes                                   │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-Regla de oro que ordena los tres tiers: **lo interactivo y crítico arriba (ya está pagado), lo batch y programático al medio (centavos), lo autónomo y desatendido abajo (daemon barato)**. Frontier nunca se invoca automáticamente desde Tier 1 ni Tier 2.
+Regla de oro nueva: **quien construye (Codex, créditos) ≠ quien audita (Opus, Pro).** El maker≠checker del SOP sobrevive **invertido**: antes Codex era la 2ª opinión de Claude; ahora **Claude es la 2ª opinión de Codex**. Lo interactivo/crítico arriba (ya pagado), lo programático/batch/autónomo abajo (centavos, capado). Frontier nunca se auto-invoca desde Tier 1 ni Tier 2 — solo Eduardo, a mano.
 
-## 2. Tier 0 — Los activos existentes, cada uno en su mejor rol
+## 2. Tier 0 — Los agentes interactivos, cada uno en su mejor rol (jerarquía 2026-07-11)
 
-| Recurso | Mejor capacidad | Rol asignado | Anti-patrón (prohibido) |
+| Recurso | Rol nuevo | Default para | Anti-patrón (prohibido) |
 |---|---|---|---|
-| **Claude Code (Pro)** | Razonamiento arquitectónico, orquestación agéntica, auditoría | Driver default de TODO proyecto serio (incluido el build de ebrain). Opus planifica/audita, Sonnet implementa. Con MCP de ebrain conectado, cada sesión consulta la memoria unificada en vez de re-leer disco → el plan Pro rinde más | Gastarlo en batch masivo o tareas descartables |
-| **Codex (créditos OpenAI)** | Generación de código acotada, segunda opinión | Worker paralelo despachado desde Claude Code vía skill `/codex` de gstack (ya existe upstream): specs cerradas, tareas atómicas, resultado auditado por Opus | Dejarlo orquestar (no es el director); tareas abiertas que queman créditos |
-| **Cursor Composer (créditos)** | Autocomplete inline, edits quirúrgicos en editor | Ghost text y ediciones rápidas mientras Eduardo edita a mano | Prompts agénticos largos; razonamiento — cada crédito de Composer usado en "pensar" es un desperdicio |
-| **gemini-cli (free tier)** | Ventana de contexto gigante, costo cero | Ingesta masiva inicial, resúmenes de logs/repos/transcripciones, clasificación batch, borradores descartables. Primera opción SIEMPRE que la tarea tolere free-tier (rate limits diarios) | Depender de él para pipelines críticos (los límites del free tier cambian sin aviso) |
+| **Codex (codex-cli · $2500)** | **CEREBRO / DRIVER PRIMARIO** — el constructor diario agresivo | Feature coding, refactors, tests, debugging, sesiones agénticas largas de código. Mejor calidad/precio; créditos abundantes | Orquestar la arquitectura del sistema; trabajo de vault/CKIS; correr full-auto donde viven repos de cliente; quemar créditos sin ledger |
+| **Claude Code (Pro)** | **DIRECTOR + AUDITOR** (2º, de confianza) — Opus planifica/audita, Sonnet workers | Arquitectura, ADRs, gates `[AUDIT_PASS]`, **review de los diffs de Codex** (maker≠checker), TODO el trabajo vault/CKIS (skills, MCP, hooks viven acá), razonamiento de alto riesgo | Implementación masiva de código (eso ya lo paga Codex); correr en paralelo VIVO con Codex (RAM 4 GB) |
+| **Cursor ($50 + CLI + Anthropic)** | Canal de edición quirúrgica | Autocomplete + edits inline en el editor; CLI para micro-tareas acotadas; acceso puntual a modelos Anthropic sin gastar sesión Pro | Loops agénticos (matan los $50 en días); scope > 1 archivo |
+| **gemini-cli (free tier)** | Batch / contexto masivo gratis | Digestión de repos/transcripts, clasificación batch, borradores desechables — primera opción si tolera free-tier | Pipelines críticos o programados (rate limits sin SLA) |
+
+### 2.1 Gobernanza de créditos Codex (el driver primario necesita candados)
+
+Codex pasó de "worker ocasional" a **cerebro** — y hoy es el agente MENOS gobernado del sistema (los guardrails CKIS son per-harness de Claude Code). Obligatorio antes de la primera sesión agresiva:
+
+- **Sandbox / paths denegados:** `brisas-del-golfo` y `dekko-floors` (repos de cliente) están presentes en disco; Codex NUNCA debe leerlos/escribirlos. `.env*` y credenciales fuera de alcance. Config en `~/.codex/config.toml` (sandbox + `AGENTS.md`, que es lo que Codex lee — NO CLAUDE.md).
+- **MCP ebrain registrado en codex-cli** → misma memoria unificada que Claude Code (search semántico + skills federadas).
+- **Ledger + expiry:** créditos de hackatón suelen **expirar** → verificar fecha YA. Burn-rate semanal registrado. Plan de reversión documentado: si los créditos mueren, los roles vuelven al spec 2026-07-08 (Claude Code re-asciende a primario).
+- **Rastro narrativo:** el trabajo del driver primario debe dejar session logs + CHANGELOG igual que Claude Code — imponerlo vía `AGENTS.md` (graphify ya captura sus commits por git-hook).
+
+> Esto ES la ejecución de SPRINT 2.6b (auditoría multi-agente) — ya no es diferible. Se materializa en SPRINT 4.6.
 
 **Advertencia de ToS (input honesto):** Hermes incluye un proxy local OpenAI-compatible que expone providers OAuth (Claude Pro, ChatGPT Pro) como endpoints para Codex/Aider/Cline. Existe, pero **no lo uses**: rutear una suscripción por proxy hacia herramientas de terceros puede violar los términos del provider y arriesgar la cuenta. Cada suscripción se usa en su herramienta nativa; el ahorro real viene del Tier 1, no de exprimir suscripciones por caminos grises.
 
-## 3. Tier 1 — El stack chino por capacidad (tu guía, canónica)
+## 3. Tier 1 — El stack chino por capacidad (constructor completo ruteado)
+
+> **Scope (2026-07-11):** el coding INTERACTIVO diario vive en Codex (cerebro, Tier 0). Este carril es **programático / batch / jobs de gbrain / autónomo (Hermes)** — y, ruteado por capacidad, el stack chino puede **construir proyectos enteros** (cada modelo en su máxima capacidad). El ganador de cada capacidad es el modelo MÁS fuerte en ese eje, no el más barato (los baratos son fallback/floor). **Slugs y precios verificados en vivo → `docs/model-registry.md`** (esta tabla 3.1 es la hipótesis/capacidad; el registry es la verdad).
 
 ### 3.1 Mapa de capacidades (directiva de Eduardo — THE STACK)
 
-| Capacidad | Modelo ganador | Slug (verificar en F4) | ~Precio/M input | Por qué gana |
-|---|---|---|---|---|
-| `coding` | DeepSeek V4 | `deepseek/deepseek-v4-pro` | ~$0.28 | Coding competitivo a fracción del costo |
-| `agentic` | Kimi K2.6 | `moonshotai/kimi-k2.6` | ~$0.60 | Tool-use sostenido, miles de llamadas secuenciales |
-| `web_design` | GLM-5.2 | `z-ai/glm-5.2` | ~$1.40 | #1 Design Arena; web/UI + math |
-| `long_context` + `reasoning` | MiniMax M3 | `minimax/minimax-m3` | ~$0.30 | 1M de contexto + razonamiento experto (GPQA) |
-| `general` | Qwen3.7 Max | `qwen/qwen3.7-max` | ~$1.20 | All-rounder más fuerte; default cuando nada matchea |
+| Capacidad | Modelo ganador (máx capacidad) | Slug (verificado — model-registry.md) | Por qué gana |
+|---|---|---|---|
+| `coding` | DeepSeek V4 Pro | `deepseek/deepseek-v4-pro` | Coding competitivo, 1M ctx, a fracción del costo |
+| `agentic` | Kimi K2.6 | `moonshotai/kimi-k2.6` | Tool-use sostenido, miles de llamadas — clave para proyectos enteros |
+| `web_design` | GLM-5.2 | `z-ai/glm-5.2` | #1 Design Arena; web/UI + math; ahora 1M ctx |
+| `reasoning` | MiniMax M3 | `minimax/minimax-m3` | Razonamiento experto (GPQA); disputa vs DeepSeek → 4.5 |
+| `long_context` | MiniMax M3 | `minimax/minimax-m3` | 1M de contexto real, multimodal |
+| `terminal` | Qwen3.7 Max | `qwen/qwen3.7-max` | Terminal-Bench; ejecución/bash |
+| `general` | Qwen3.7 Max | `qwen/qwen3.7-max` | All-rounder más fuerte; default cuando nada matchea |
 
 ### 3.2 Categorías en disputa (resolver con benchmark, no con opinión)
 
@@ -94,44 +115,24 @@ El `routing.yaml` resultante de F4 es la verdad; esta tabla es la hipótesis ini
 - **Fallback NUNCA a frontier:** la cadena termina en un modelo abierto. Claude/GPT/Gemini premium jamás aparecen en un array `models` de Tier 1.
 - **Embeddings: OpenRouter NO ofrece API de embeddings.** Los embeddings de gbrain (ingesta, búsqueda) van por provider directo barato (Gemini embeddings o OpenAI small) con su propia key y su propio límite. Solo las llamadas LLM de gbrain (dream cycle, judges, `think`) rutean por OpenRouter.
 
-### 3.4 `ebrain route` — contrato de implementación
+### 3.4 `ebrain route` — implementado (as-built, `cli/route.ts` + `routing.yaml`)
 
-```yaml
-# ~/.config/ebrain/routing.yaml  (plain file, editable — no black box)
-budget:
-  monthly_usd: 10          # cap local (además del hard cap en la key)
-  hard_stop: true          # aborta ANTES de llamar si se excede
-  log: ~/.config/ebrain/spend.jsonl
-provider:
-  base_url: https://openrouter.ai/api/v1
-  key_env: OPENROUTER_API_KEY
-  request_defaults:
-    provider: { data_collection: deny }
-capabilities:            # slugs se fijan en F4 tras verificación + benchmark
-  coding:       { models: [<deepseek-v4>, <fallback>, <floor>] }
-  agentic:      { models: [<kimi-k2.6>, <fallback>, <floor>] }
-  web_design:   { models: [<glm-5.2-o-kimi>, <fallback>, <floor>] }
-  long_context: { models: [<minimax-m3-o-glm>, <fallback>, <floor>] }
-  terminal:     { models: [<qwen3.7-max>, <fallback>, <floor>] }
-  general:      { models: [<qwen3.7-max>, <fallback>, <floor>] }
-frontier:
-  auto_escalate: false     # ley; también hardcodeado en el código
-```
+Construido y probado en F4 (commit F4-core). Estructura real de `routing.yaml`: `budget{monthly_usd,hard_stop,log}` · `provider{base_url,key_env,provider_routing{data_collection:deny,max_price},completion_defaults{max_tokens:8192}}` · `capabilities{coding,agentic,web_design,reasoning,long_context,terminal,general}` cada una `[ganador,fallback,floor]` · `classify{}` (keywords) · `frontier.auto_escalate:false`. Slugs verificados en `model-registry.md`.
 
-Comportamiento del CLI (`cli/route.ts`, bun, ≤300 líneas):
-1. Clasifica: `--cap` explícito gana; si no, keywords simples; si ambiguo → `general`. Sin router-LLM en el MVP (costo/latencia; evolución posible si el rule-based falla en uso real).
-2. Llama con array `models` completo (el fallback lo ejecuta OpenRouter, no un loop local).
-3. Loguea SIEMPRE: `{ts, cap, model_usado, tokens_in, tokens_out, usd}` → `spend.jsonl`; imprime `model=… cost=$… tokens=…` al final de cada corrida (el costo visible es diseño).
-4. Aborta con mensaje claro si el cap mensual local está excedido.
+Comportamiento del CLI (`cli/route.ts`, bun, ~230 líneas):
+1. Clasifica: `--cap` explícito gana; si no, keywords; **empate al tope o cero → `general`** (spec). Sin router-LLM (rule-based cubre el 95%).
+2. Llama con array `models` completo (failover server-side de OpenRouter). Flag **`--floor`** appendea `:floor` a slugs limpios (batch/jobs baratos); `:free`/suffixed intactos.
+3. Loguea SIEMPRE `{ts, src, cap, model, tokens_in, tokens_out, usd}` (+`usd_estimated` si OpenRouter no devolvió cost → estimación conservadora, nunca $0 silencioso) → `spend.jsonl` (append real, concurrency-safe); imprime `model=… cost=$…`.
+4. Aborta (exit 3) si el cap mensual local está excedido — **antes** de llamar. Doble candado frontier (regex hardcode hermético + `frontier.auto_escalate`). Timeout de fetch 120s → si OpenRouter cae, Tier 0 (Codex/Claude) es el fallback manual.
 
 ### 3.5 Quién consume Tier 1
 
 | Consumidor | Perfil | Notas |
 |---|---|---|
 | `ebrain route` (CLI/scripts) | según tarea | one-shots programáticos, pipelines |
-| gbrain (dream cycle, judges, brainstorm, `think`) | `general`/`long_context` con `:floor` | mantenimiento nocturno barato; presupuesto por corrida |
-| Hermes (Tier 2) | su propio `provider_routing` apuntando a los mismos slugs | una sola fuente de verdad de modelos: el registry de F4 |
-| Claude Code (delegación) | vía `ebrain route` como comando bash | cuando Opus decide que una subtarea no amerita tokens frontier |
+| gbrain (dream cycle, judges, brainstorm, `think`) | `general`/`long_context` con `--floor` | mantenimiento nocturno barato; presupuesto por corrida (4.8) |
+| Hermes (Tier 2) | su propio `provider_routing` apuntando a los mismos slugs | una sola fuente de verdad de modelos: el registry F4 |
+| Codex / Claude Code (delegación) | vía `ebrain route` como comando bash | cuando el cerebro (Codex) o el director (Opus) decide que una subtarea barata no amerita créditos/tokens interactivos |
 
 ## 4. Tier 2 — Hermes (input exacto basado en investigación, 2026-07-08)
 
@@ -162,23 +163,30 @@ Hermes-agent (NousResearch) verificado: runtime Python ≥3.11 instalado con uv 
 ## 5. Árbol de decisión diario (imprimible)
 
 ```
-¿La tarea es interactiva y el resultado importa?        → Claude Code (Tier 0)
-¿Es edición puntual mientras escribís en el editor?      → Cursor Composer
-¿Es código acotado paralelizable con spec cerrada?       → /codex (créditos)
-¿Es batch/masivo y el free tier alcanza?                 → gemini-cli
-¿Es programático/batch y merece un modelo específico?    → ebrain route --cap <x>
-¿Debe correr sola, programada, o desde el teléfono?      → Hermes (VPS) sobre Tier 1
-¿De verdad necesita frontier y nada más sirve?           → manual, vos lo invocás
+¿Es construir código (feature, fix, refactor, tests)?     → Codex ($2500 — el default/cerebro)
+¿Es planificar, arquitectura, gate o auditar un diff?     → Claude Code (Opus)
+¿Es trabajo de vault / CKIS / conocimiento / skills?      → Claude Code (Sonnet workers)
+¿Es edición puntual mientras editás en el editor?         → Cursor (inline; CLI para micro-edits)
+¿Es batch / contexto gigante y descartable?               → gemini-cli (gratis)
+¿Es programático, scheduled, o un one-shot sin sesión?    → ebrain route --cap <x> ($10/mes)
+¿Un proyecto entero autónomo con el stack chino?          → Hermes (VPS) sobre Tier 1 ruteado
+¿De verdad necesita frontier fuera de estos carriles?     → manual, vos lo invocás
 ```
+
+- **Regla de RAM (4 GB):** UN agente interactivo a la vez. Opus↔Codex se pasan la posta **por archivos** (plan → Codex ejecuta → Opus audita), **nunca dos sesiones vivas en paralelo**.
+- **Regla de auditoría:** lo que Codex construye, Opus lo revisa antes de merge (maker≠checker, invertido).
 
 ## 6. Gobernanza de gasto (resumen ejecutable)
 
-1. Hard cap en la key de OpenRouter (lado servidor) el día que se crea — antes del primer request.
-2. Cap mensual local en `routing.yaml` con `hard_stop` — aborta antes de llamar.
-3. `max_price` por request como techo fino en jobs batch.
+1. Hard cap en la key de OpenRouter (lado servidor) el día que se crea — antes del primer request. **Acción abierta (Eduardo): confirmar auto-recharge OFF** (así el balance cargado = techo real) + límite per-key en el dashboard.
+2. Cap mensual local en `routing.yaml` con `hard_stop` — aborta antes de llamar. **Nota operativa:** con $5 cargados y `monthly_usd:10`, OpenRouter 429ea antes de que el hard-stop local muerda → bajá el cap al crédito cargado si querés el aborto local limpio; subilo a 10 al hacer top-up.
+3. `max_price` por request (`provider.max_price`) + **`max_tokens:8192` default** (`completion_defaults`) — techo fino que corta loops caros (Kimi out $3.41/M, Qwen-Max $3.75/M).
 4. Key de embeddings separada con su propio límite (provider directo, no OpenRouter).
-5. `spend.jsonl` = fuente de verdad local; `ebrain status` muestra gasto del mes; revisión en cada gate de fase.
-6. Hermes y gbrain heredan la MISMA key con el MISMO cap — un solo grifo que cerrar.
+5. `spend.jsonl` (campo `src`: route/gbrain/hermes) = fuente de verdad local; `ebrain status` muestra gasto del mes; revisión en cada gate de fase.
+6. Hermes y gbrain heredan la MISMA key con el MISMO cap — un solo grifo que cerrar (sub-keys por consumidor = hardening 4.8).
+7. **Ledger de créditos Codex semanal** (el pool $2500 no tiene telemetría hoy; §2.1) + expiry verificado.
+8. **Cursor ($50): solo edición interactiva** — nunca loops agénticos (los drena en días).
+9. **4 medidores** (spend.jsonl · dashboard OpenAI · créditos Codex · créditos Cursor) → `ebrain status` los unifica (5.2, adelantado a crítico).
 
 ## 7. Qué queda explícitamente fuera (y por qué)
 

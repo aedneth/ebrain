@@ -4,7 +4,7 @@
  * candado frontier, y parseo/suma de spend.jsonl por mes. `bun test cli/route.test.ts`.
  */
 import { test, expect } from "bun:test";
-import { classify, capExceeded, chainHasFrontier, monthKey, monthSpend, expandHome } from "./route.ts";
+import { classify, capExceeded, chainHasFrontier, monthKey, monthSpend, expandHome, applyFloor, FRONTIER } from "./route.ts";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -24,6 +24,25 @@ test("classify: camino feliz — matchea la capacidad dominante", () => {
 test("classify: sin keywords → general (default seguro)", () => {
   expect(classify("hola qué tal todo bien", { classify: CLASSIFY })).toBe("general");
   expect(classify("", { classify: CLASSIFY })).toBe("general");
+});
+
+test("classify: empate al tope → general (spec: ambiguo→general, no la 1ra del yaml)", () => {
+  // "script"(coding) vs "cli"(terminal): 1-1 → empate → general
+  expect(classify("un script para el cli", { classify: CLASSIFY })).toBe("general");
+});
+
+test("applyFloor: :floor a slugs limpios; :free/suffixed intactos; off = sin cambio", () => {
+  expect(applyFloor(["deepseek/deepseek-v4-pro", "qwen/qwen3-coder:free"], true))
+    .toEqual(["deepseek/deepseek-v4-pro:floor", "qwen/qwen3-coder:free"]);
+  expect(applyFloor(["z-ai/glm-5.2"], false)).toEqual(["z-ai/glm-5.2"]);
+});
+
+test("FRONTIER: hermético contra oN/gpt-N/gemini pro|ultra, permite el stack abierto", () => {
+  expect(FRONTIER.test("openai/o4-mini")).toBe(true);   // antes se escapaba (solo o1/o3)
+  expect(FRONTIER.test("openai/gpt-6")).toBe(true);
+  expect(FRONTIER.test("google/gemini-3-ultra")).toBe(true);
+  expect(FRONTIER.test("deepseek/deepseek-v4-pro")).toBe(false); // "pro" NO gatilla sin "gemini"
+  expect(FRONTIER.test("qwen/qwen3-coder-plus")).toBe(false);
 });
 
 test("capExceeded: hard_stop aborta al alcanzar el tope, no antes", () => {
