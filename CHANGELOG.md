@@ -4,6 +4,18 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — audit Fable 5 (harness) + 3/4 MUST + arsenal +2 (opencode, cursor)
+
+- **Audit Fable 5** (read-only, 117k tokens, verificación en vivo): harness **sólido para construir encima, sin blocker de código**; deuda de gobernanza. 4 MUST antes de rol de control-plane.
+- **MUST#1 (hecho) — trust-policy → allow-list única** `harness/core/trust.sh` (DEFAULT-DENY; federar solo repos propios: remote aedneth o slug local-only; hard-deny brisas/dekko), consumida por `sessions-federate` + `remember.sh`. Cierra el canal de exfil `find $HOME` default-open + mata la deny-list duplicada y **driftada** (faltaban AKIA/gh*_/glpat/AIza en el sweep — ahora unificados). **`busnet-app` (remote `Crisstianpd/busnet`, ajeno) ahora default-deny → confirmar con Eduardo.**
+- **MUST#2 (hecho) — `install.sh` fail-hard** si el parser no lee la clave `agent` → aborta en vez de pintar "doctor OK" sin instalar (mata el éxito-silencioso del instalador).
+- **MUST#3 (hecho) — session-log UTF-8-safe** (`log-session.sh` sándwich iconv -c; el `head -c` byte-oriented corrompía el índice Dev Brain → binario para grep). Índice existente reparado (grep `| flowclock-cli |` = 6).
+- **MUST#4 (pendiente, humano) — sesión Codex real de humo:** H1 tiene 0 sesiones reales de Codex; `subagent_stop` quizá no dispara al cierre plano → si no, fallback git post-commit (H6).
+- **Arsenal +2 (opencode, cursor):** adapters nuevos clase **no-hook** (`harness/adapters/{opencode,cursor}/manifest.yaml`) + `harness/core/mcp-wire.sh` (merge idempotente del MCP ebrain en `~/.cursor/mcp.json` y `~/.config/opencode/opencode.json`). **Bus de memoria LIVE:** `agent mcp list` → `ebrain: ready`, **102 tools** (misma memoria cross-source que Claude/Codex); opencode con `ebrain` + normas en `instructions`. Normas renderizadas a cada archivo nativo; guard = **advisory** (sin hooks, control por norma+aislamiento). opencode en PATH. Prueba la tesis en 2 agentes sin sistema de hooks. Commits `ab108bd` `f81a54d` `ac54fc4`.
+- **Nice-to-have Fable pendientes:** endurecer readers/env-dump del guard (base64/dd/openssl/intérpretes lo bypassean — es *tripwire*, no control duro), `install --wire` (escribir hooks-config), `doctor --all` en cron, pre-check de costo en route.ts, aliases de skills-federate.
+
+---
+
 ## 2026-07-11 — harness H3–H5: capa unificada provider-agnostic COMPLETA (ADR-002, tesis probada)
 
 - **H3 — memoria semántica de escritura:** `harness/core/remember.sh` + skill `remember` (federada al skillpack, `source: harness`) + CLI unificado `ebrain` (`~/.local/bin/ebrain`: remember/q/route/harness/norms/federate). `ebrain remember "<learning>"` escribe página tipada `agent-learning` a `agent-memory` + `gbrain sync`. **Fail-closed:** niega repos de cliente (slug+remote) y texto con secreto. Verificado: 3 negativas + recall 0.847. Commit `e2170d3`.

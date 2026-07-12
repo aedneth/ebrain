@@ -34,10 +34,19 @@ case "$cmd" in
   route)     if [ -x "$CFG/ebrain-route" ]; then "$CFG/ebrain-route" "$@"; else echo "ebrain: falta $CFG/ebrain-route" >&2; exit 127; fi ;;
   harness)
     sub="${1:-}"; shift || true
+    all_agents() { for m in "$EBRAIN_HOME"/harness/adapters/*/manifest.yaml; do [ -f "$m" ] && basename "$(dirname "$m")"; done; }
     case "$sub" in
-      install) run "$CORE/install.sh" "$@" ;;
-      doctor)  run "$CORE/install.sh" --doctor "$@" ;;
-      *) echo "ebrain harness: usá 'install <agent>' o 'doctor [agent]'." >&2; exit 2 ;;
+      install)
+        if [ "${1:-}" = "--all" ]; then
+          shift; rc=0; for a in $(all_agents); do echo "### install $a ###"; bash "$CORE/install.sh" "$@" "$a" || rc=1; done; exit $rc
+        else run "$CORE/install.sh" "$@"; fi ;;
+      doctor)
+        # sin agente o --all → toda la flota (ideal para cron: rc=1 si alguno tiene pendientes)
+        if [ -z "${1:-}" ] || [ "${1:-}" = "--all" ]; then
+          rc=0; for a in $(all_agents); do bash "$CORE/install.sh" --doctor "$a" || rc=1; done
+          echo "── flota: $([ "$rc" = 0 ] && echo 'toda OK' || echo 'hay pendientes (rc=1)') ──"; exit $rc
+        else run "$CORE/install.sh" --doctor "$@"; fi ;;
+      *) echo "ebrain harness: usá 'install <agent>|--all' o 'doctor [agent|--all]'." >&2; exit 2 ;;
     esac ;;
   norms)
     sub="${1:-}"; shift || true
