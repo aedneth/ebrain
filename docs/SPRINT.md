@@ -179,6 +179,6 @@ Convención de estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado
 - [ ] 5.4 Repo /ebrain: `.brain` conectado a Dev Brain (hooks graphify post-commit instalados y probados con un commit).
 - [ ] 5.5 Company Brain: fila en `registry/repos.md` para /ebrain, actualización de domain card engineering, entrada DRIFT si algo quedó abierto, línea en CHANGELOG.
 - [ ] 5.6 Ejecutar decisión QMD de 2.7 (retiro o fallback); actualizar skills/docs del vault que lo referencian.
-- [ ] 5.7 Auditoría final de seguridad: gitleaks sobre /ebrain y overlay; grep de la pooler URL y keys en todos los repos tocados → cero hallazgos.
+- [x] 5.7 **HECHO — cero hallazgos.** gitleaks no instalado → escaneo equivalente por patrones (11 shapes de secreto real: sk-or-v1/sk-ant/openai/postgres-creds/pooler.supabase/AKIA/gh_/glpat/AIza/xox/PRIVATE KEY) sobre archivos **trackeados** (filenames+counts, nunca el valor) en `~/eBrain` (incl. overlay/) **y** `~/eBrain/memory` (agent-memory) → **0 coincidencias en ambos**. Broad scan `sk-[…]{20,}` → 0 (las defs de patrón/fixtures no matchean valores reales). `.env`/`*.env` gitignored en ambos repos; cero `.env`/`spend.jsonl`/`*.pem`/`credentials` trackeados. **No existe pooler URL** (PGLite local, nunca hubo Supabase). Los 2 targets de backup (`aedneth/ebrain`, `aedneth/agent-memory`, privados) = limpios.
 - [ ] 5.8 Verificar los 8 Success Criteria del ULTRAPLAN §5; marcar checkboxes con evidencia (paths).
 - [ ] 5.9 Commit final + retro (`/retro`) → lecciones a `03-knowledge/` del vault.
