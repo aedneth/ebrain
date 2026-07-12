@@ -17,9 +17,9 @@ cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // .tool_input.cmd //
 [ -z "$cmd" ] && exit 0   # no es comando de shell (otro tool) → no aplica
 
 # Programas lectores cuyo stdout aterriza en el contexto del modelo.
-readers='cat|bat|less|more|head|tail|nl|xxd|od|hexdump|strings|tac|rev|nano|vim|vi|view|emacs|jq|yq|grep|egrep|fgrep|rg|ag|ack|awk|sed'
+readers='cat|bat|less|more|head|tail|nl|xxd|od|hexdump|strings|tac|rev|nano|vim|vi|view|emacs|jq|yq|grep|egrep|fgrep|rg|ag|ack|awk|sed|base64|sort|uniq|cut|paste|tr|dd|openssl|fold|column|expand'
 # Formas de archivo de secretos: .env, *.env, .env.local, secrets.*, *.pem, *.key, id_rsa, credentials, .npmrc, .netrc
-secret='(\.env([./]|$|[[:space:]"'\''])|\.env\b|[[:alnum:]_-]+\.env\b|secrets?\.[[:alnum:]]+|\.pem\b|[[:alnum:]_-]+\.key\b|id_rsa|/credentials\b|\.npmrc\b|\.netrc\b)'
+secret='(\.env([./]|$|[[:space:]"'\''])|\.env\b|[[:alnum:]_-]+\.env\b|secrets?\.[[:alnum:]]+|\.pem\b|[[:alnum:]_-]+\.key\b|id_rsa|[/[:space:]]credentials\b|\.npmrc\b|\.netrc\b)'
 
 deny() {
   local reason="$1"
@@ -31,13 +31,20 @@ deny() {
   exit 2
 }
 
-if printf '%s' "$cmd" | grep -Eq "($readers)" && printf '%s' "$cmd" | grep -Eq "$secret"; then
+# Lector ANCLADO como palabra (evita 'od' dentro de 'node'/'Codex', 'cat' dentro de 'locate') AND
+# archivo de secreto presente. El anclaje también mata falsos positivos y ya no depende de accidentes.
+if printf '%s' "$cmd" | grep -Eq "(^|[[:space:];&|<>()])($readers)\b" && printf '%s' "$cmd" | grep -Eq "$secret"; then
   deny "BLOCKED (ebrain harness): este comando parece leer un archivo de secretos/.env al contexto — se enviaría al proveedor del modelo. Usá la variable en runtime, nunca imprimas su valor."
 fi
 
 # Dumps completos del entorno (printenv / env pelado) que listarían secretos cargados.
 if printf '%s' "$cmd" | grep -Eq '(^|[|;&]|&&|\|\|)[[:space:]]*(printenv|env)[[:space:]]*($|[|;&<>])'; then
   deny "BLOCKED (ebrain harness): volcar el entorno completo puede filtrar secretos al contexto. Consultá una variable no-secreta específica si la necesitás."
+fi
+
+# Dumps de variables vía shell builtins (export -p / declare -p / typeset -p listan valores cargados).
+if printf '%s' "$cmd" | grep -Eq '(^|[|;&]|&&|\|\|)[[:space:]]*(export|declare|typeset)[[:space:]]+-[[:alpha:]]*p\b'; then
+  deny "BLOCKED (ebrain harness): 'export -p'/'declare -p' vuelca variables (incl. secretos) al contexto. Consultá una variable específica no-secreta."
 fi
 
 exit 0

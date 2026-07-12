@@ -15,6 +15,9 @@
 
 # Cliente / código ajeno — nunca entra, aunque matcheara otra regla.
 TRUST_DENY='brisas-del-golfo|dekko'
+# Proyectos PROPIOS de Eduardo aunque el remote actual sea de un colaborador/temporal (el oficial será
+# suyo; se migran después). Override del deny-por-remote-ajeno, PERO nunca del hard-deny de cliente.
+TRUST_ALLOW_SLUGS_OWNED='busnet-app|busnet'
 # Remotes propios (ownership demostrable). Ampliá acá si sumás una org/host propio.
 TRUST_ALLOW_REMOTES='(github|gitlab)\.com[:/]aedneth/'
 # Repos local-only (sin remote propio) que SÍ son de Eduardo: vaults + infra.
@@ -25,9 +28,12 @@ TRUST_REDACT='sk-[A-Za-z0-9_-]{20,}|postgres://[^ ]*:[^ ]*@|mysql://[^ ]*:[^ ]*@
 # trust_federate_ok <repo_dir> <slug> → 0 = federar, 1 = denegar
 trust_federate_ok() {
   local repo="$1" slug="$2" remote
+  # 1) hard-deny de cliente (absoluto, primero — nada lo revierte).
   printf '%s' "$slug" | grep -Eiq "$TRUST_DENY" && return 1
   remote="$(git -C "$repo" remote get-url origin 2>/dev/null || true)"
   printf '%s' "$remote" | grep -Eiq "$TRUST_DENY" && return 1
+  # 2) proyecto propio declarado (override del remote ajeno temporal; NO revierte el hard-deny de arriba).
+  printf '%s' "$slug" | grep -Eiq "^($TRUST_ALLOW_SLUGS_OWNED)$" && return 0
   if [ -n "$remote" ]; then
     printf '%s' "$remote" | grep -Eiq "$TRUST_ALLOW_REMOTES" && return 0
     return 1   # tiene remote pero no es propio → default-deny
