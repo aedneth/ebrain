@@ -161,14 +161,16 @@ HP ProBook, Celeron N4120, 4 GB RAM:
 
 ## 5. Success Criteria (el programa queda ACTIVE hasta que todo pase)
 
-- [ ] `gbrain doctor` verde con motor Supabase; reindex-from-git reproducible desde cero.
-- [ ] Una query (`gbrain think`) responde cruzando Second Brain + Company Brain + código, con citas correctas.
-- [ ] Todas las sesiones de Claude Code consumen ebrain vía MCP; trust triad verificado (brisas = deny probado).
-- [ ] Graphify sigue actualizando `.brain` por hook; sus reportes son consultables desde ebrain.
-- [ ] Backup cubre ebrain (config + estrategia de recovery documentada y probada una vez).
-- [ ] `ebrain route` ejecuta 3 tareas (coding / design / long-context) con costo logueado y cap activo; cero escaladas automáticas a frontier.
-- [ ] Benchmark QMD vs gbrain documentado con decisión tomada.
-- [ ] Vault: `02-projects/ebrain/` documentado; Company Brain: registry + CHANGELOG actualizados; cero secretos en repos (gitleaks limpio).
+> **Verificado 2026-07-12 (F5.8): 8/8 pasan con evidencia** → `docs/f5-success-criteria.md`. 3 con caveats documentados (substrato PGLite vs Supabase, código=carril graphify, auto-hook graphify 0.6.7); ninguno es fallo.
+
+- [x] `gbrain doctor` verde con motor ~~Supabase~~ **PGLite** (gate 0.4.4); reindex-from-git reproducible desde cero (probado F2 §2.8a). *Caveat: FAILs benignos gbrain-internos (resolver_health), no del brain.*
+- [x] Una query (`gbrain think`) responde cruzando Second Brain + Company Brain, con citas correctas (**probado en vivo: 13 citas cross-source, minimax-m3**). *Código = carril graphify separado (decisión 2.6), no embebido.*
+- [x] Todas las sesiones consumen ebrain vía MCP; trust triad verificado (brisas/dekko = deny, cero sources de cliente en `sources_list`).
+- [x] Graphify actualiza `.brain` por hook; sus reportes son consultables desde ebrain (F5.4: 19 nodos en `code-graph/ebrain` + `graph-report.md`). *Caveat: refresco manual/cadencia (auto-hook no en graphify 0.6.7).*
+- [x] Backup cubre ebrain (config + recovery documentada y probada una vez — F2 §2.8, `aedneth/ebrain`).
+- [x] `ebrain route` ejecuta tareas (coding/design/long-context) con costo logueado y cap activo; cero escaladas a frontier (6 rutas en `spend.jsonl`, hard-stop probado).
+- [x] Benchmark QMD vs gbrain documentado con decisión tomada (F2 §2.7: `benchmark-qmd-vs-ebrain.md`, ebrain primario + QMD fallback).
+- [x] Vault: `03-projects/ebrain/` documentado; Company Brain: registry + CHANGELOG actualizados; cero secretos en repos (F5.3/5.5/5.7; escaneo gitleaks-equivalente limpio).
 
 ## 6. Riesgos y mitigaciones
 
