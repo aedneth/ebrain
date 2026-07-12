@@ -114,7 +114,9 @@ if [ -n "$HOOKS_CONFIG" ] && [ "$HOOKS_CONFIG" != "null" ]; then
     echo "  hook ⚠ config $HOOKS_CONFIG no existe todavía (crealo con los entries del manifest)"; rc=1
   fi
 elif [ "$HOOKS_FORMAT" = "none" ]; then
-  echo "  hooks: adapter 'generic' (sin runtime de hooks) — cableado por git-hooks/CLI/cron (manual)"
+  GUARD_MODE="$(mget guard)"; [ -z "$GUARD_MODE" ] && GUARD_MODE="n/a"
+  echo "  hooks: clase no-hook (sin intercepción de runtime). Guard = ${GUARD_MODE} (norma + aislamiento, NO técnico)."
+  echo "         contexto/write-back por: bus MCP (lectura) + 'ebrain remember' (escritura) + git-hooks/CLI."
 fi
 
 # b) normas presentes

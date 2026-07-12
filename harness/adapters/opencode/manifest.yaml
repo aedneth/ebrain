@@ -1,0 +1,23 @@
+# adapter: opencode — OpenCode (sst/opencode), agente CLI open-source multiproveedor. Rol en el
+# ecosistema (docs/OPEN-CODE.md): caballo de batalla BARATO para scripts/scaffolding/escaneo de
+# archivos grandes con modelos chinos + OpenCode Zen (free). NO tiene runtime de hooks → CLASE NO-HOOK:
+# la unificación es el bus MCP de memoria + normas en su AGENTS.md (leído vía config.instructions) +
+# guard ADVISORY (sin intercepción técnica; el guard vive como norma + aislamiento por directorio).
+# Nota: opencode SÍ tiene sistema de plugins JS/TS → un guard real es futura mejora (hardening).
+agent: opencode
+description: OpenCode CLI — caballo de batalla barato (modelos chinos + Zen free). Clase no-hook (MCP + normas + guard advisory).
+norms:
+  target: ~/.config/opencode/AGENTS.md
+  mode: managed-block
+hooks:
+  config: null
+  format: none
+  dir: null
+  events: {}
+  wrappers: []
+mcp:
+  register: "bash $HOME/eBrain/harness/core/mcp-wire.sh opencode"
+env:
+  AGENT_NAME: opencode
+doctor: "opencode --version"
+guard: advisory
