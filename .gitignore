@@ -17,3 +17,10 @@ memory/
 
 # harness — backups locales del render de normas (no versionar)
 harness/.backups/
+
+# per-project brain (norma CKIS: NUNCA versionar .brain/.claude/graphify-out)
+# ebrain se auto-registra en Dev Brain vía brain-init (F5.4); su .brain y su
+# .claude/settings.json son runtime local, no artefactos del repo.
+.brain/
+.claude/
+graphify-out/
