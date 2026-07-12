@@ -15,6 +15,16 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-11 — ADR-002: capa unificada de harness + memoria agéntica permanente (audit Fable 5)
+
+- **Insight de Eduardo (pivote central):** dejar de re-implementar el harness CKIS por-agente; crear UNA capa provider-agnostic (harness + memoria permanente) servida por ebrain. La lectura de memoria ya es agnóstica (MCP); falta unificar harness + write-back.
+- **Audit Fable 5 (3er pase, deep):** deuda real y compuesta O(agentes×capas); **hueco de capacidad confirmado — Codex (primario) deja 0 session logs** (los 348 del Dev Brain son de Claude). Capa unificada = movimiento correcto **como normalización fina** sobre el contrato ya-convergido, no framework. Unifica 2.6b + brain-init + skill-federation.
+- **`docs/adr/ADR-002-unified-harness.md`** (proposed): arquitectura `~/eBrain/harness/` (contract congelado + core canónico + adapters manifest + `ebrain harness install`); **write-back loop** = nuevo source git-backed `agent-memory` (markdown→git→sync, no put directo), 3 tiers (floor hooks / sweep `sessions-federate` / skill `remember`); generaliza CKIS a L1→**L1.5 agent-memory**→L2→L3; test de aceptación "agregar agente = un manifest".
+- **Plan SPRINT 4.C.2 (4.6h1–h6):** H1 write-back floor (BUILD FIRST) → H2 guard merge+contract freeze → H3 remember → H4 NORMS único → H5 manifests+install → H6 brain-init adapter. Riesgos acotados (drift→fixture tests en doctor; polución→cuarentena+human-gate; seguridad→trust-policy+redact+gitleaks).
+- **Estado:** ADR proposed, **gate humano de Eduardo antes de construir H1** (crea el source `agent-memory` + cablea write-back de Codex = cambio estructural).
+
+---
+
 ## 2026-07-11 — F4.6: harness DURO de Codex (hooks) — guard de secretos + contexto en session-start
 
 - **Insight de Eduardo:** bajo `danger-full-access` el `AGENTS.md` es blando; el control duro es el **harness (hooks/scripts/guardrails)** que trabaja seguro + con contexto SIN interrumpir con permisos.
