@@ -16,7 +16,9 @@ mkdir -p "$DST" "$(dirname "$REG")"
 
 # Fuentes en orden de prioridad (first-wins en colisión de nombre).
 # formato: "etiqueta_source|dir_base|nombre_archivo"
+# harness va primero: sus skills nativas (p.ej. `remember`) son el canon y ganan cualquier colisión.
 SOURCES=(
+  "harness|$HOME/eBrain/harness/skills|SKILL.md"
   "ckis|$HOME/Documents/Second Brain/.claude/ckis-skills|skill.md"
   "company|$HOME/Documents/Company Brain/.claude/skills|skill.md"
   "gstack|$HOME/.claude/skills|SKILL.md"

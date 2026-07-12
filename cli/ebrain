@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# ebrain — CLI unificado del harness/knowledge layer. Dispatcher fino sobre las piezas canónicas.
+# Instalado como ~/.local/bin/ebrain (launcher) → este archivo. Todo vive en $EBRAIN_HOME (~/eBrain).
+set -uo pipefail
+
+EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
+CORE="$EBRAIN_HOME/harness/core"
+SCRIPTS="$EBRAIN_HOME/scripts"
+CFG="$HOME/.config/ebrain"
+
+run() { local f="$1"; shift; if [ -x "$f" ] || [ -f "$f" ]; then bash "$f" "$@"; else echo "ebrain: '$f' no existe todavía (¿fase pendiente?)." >&2; return 127; fi; }
+
+usage() {
+  cat <<'EOF'
+ebrain — capa unificada de harness + memoria agéntica (provider-agnostic)
+
+  ebrain remember [--project S] [--tags a,b] "<learning>"   escribir a memoria agéntica permanente
+  ebrain q "<pregunta>"                                      buscar (fan-out cross-source)
+  ebrain route --cap <cap> "<prompt>"                        one-shot ruteado (stack OpenRouter capado)
+  ebrain harness install <agent>                             instalar/actualizar el harness de un agente
+  ebrain harness doctor [agent]                              verificar el harness (guard/hooks/mcp)
+  ebrain norms render <archivo>                              render del bloque de normas gestionado
+  ebrain federate sessions|skills                            barrer .brain/ o skills a la memoria federada
+  ebrain help
+
+Agentes soportados por install: claude · codex · gemini · generic
+EOF
+}
+
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  remember)  run "$CORE/remember.sh" "$@" ;;
+  q|query)   run "$SCRIPTS/ebrain-q" "$@" ;;
+  route)     if [ -x "$CFG/ebrain-route" ]; then "$CFG/ebrain-route" "$@"; else echo "ebrain: falta $CFG/ebrain-route" >&2; exit 127; fi ;;
+  harness)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      install) run "$CORE/install.sh" "$@" ;;
+      doctor)  run "$CORE/install.sh" --doctor "$@" ;;
+      *) echo "ebrain harness: usá 'install <agent>' o 'doctor [agent]'." >&2; exit 2 ;;
+    esac ;;
+  norms)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      render) run "$CORE/render-norms.sh" "$@" ;;
+      *) echo "ebrain norms: usá 'render <archivo>'." >&2; exit 2 ;;
+    esac ;;
+  federate)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      sessions) run "$SCRIPTS/sessions-federate" "$@" ;;
+      skills)   run "$SCRIPTS/skills-federate" "$@" ;;
+      *) echo "ebrain federate: usá 'sessions' o 'skills'." >&2; exit 2 ;;
+    esac ;;
+  help|-h|--help) usage ;;
+  *) echo "ebrain: subcomando desconocido '$cmd'." >&2; usage; exit 2 ;;
+esac

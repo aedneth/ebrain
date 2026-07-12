@@ -1,7 +1,12 @@
 # registry.yaml — catálogo federado de skills canónicas (generado por skills-federate)
 # fuente de verdad para el skillpack que ebrain publica vía list_skills (MCP).
-generated: 2026-07-11T22:55:28Z
+generated: 2026-07-12T04:47:33Z
 skills:
+  - name: remember
+    source: harness
+    trigger: "remember"
+    one_line: "Persist a durable, high-signal learning to permanent agentic memory (ebrain agent-memory source) so ANY agent — Claude, "
+    optional: true
   - name: braindump
     source: ckis
     one_line: "Capture raw, unstructured thoughts from Eduardo into the inbox with light classification and frontmatter. Use when Eduar"
