@@ -152,6 +152,18 @@ Convención de estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado
 - [x] 4.6h5 **Manifests + `ebrain harness install <agent>` — HECHO + tesis probada.** `harness/adapters/{claude,codex,gemini,generic}/manifest.yaml` (declarativos) + `harness/core/{inject-context.sh, install.sh, manifest-get.ts}`. **claude+codex install = doctor OK, CERO cambio de comportamiento** (wrappers regenerados; `overlay/codex-harness` migrado a adapter `codex` — su `session-context.sh` inline ahora es wrapper del core). **gemini = agente nuevo, 5/5 criterios de aceptación:** (1) guard niega (self-test exit 2) ✓, (2) contexto ebrain inyectado ✓, (3) sesión → `.brain/sessions/*` con `agent: gemini` + índice Dev Brain ✓, (4) tras sweep, ebrain recupera la sesión de gemini a **0.87** ✓, (5) `remember` en el skillpack ✓. El doctor marca en **rojo** (rc=1) el único pendiente real: cablear `hooks.json` de gemini (formato sin verificar = riesgo N=2, no silencioso).
 - [ ] 4.6h6 **Adapterizar brain-init** (loopea adapters) + adapter `generic`/Hermes (post-4.9).
 
+### 4.C.3 Auditoría Fable 5 del harness + arsenal (2026-07-11)
+- [x] **Audit Fable 5** read-only (117k tok): harness sólido, sin blocker de código; 4 MUST de gobernanza.
+- [x] **MUST#1** trust allow-list única `harness/core/trust.sh` (DEFAULT-DENY; remote aedneth o slug propio; hard-deny cliente; redact unificado con AKIA/gh*_/glpat/AIza). `busnet-app` = propio (override remote temporal de Cristian). Consumida por sessions-federate + remember.
+- [x] **MUST#2** `install.sh` fail-hard si el parser no lee `agent` (mata éxito-silencioso).
+- [x] **MUST#3** `log-session.sh` UTF-8-safe (sándwich iconv) + índice Dev Brain reparado (binario→grep-able).
+- [ ] **MUST#4** (humano, último test) sesión Codex real de humo — H1 tiene 0 sesiones reales; si `subagent_stop` no dispara al cierre, fallback git post-commit.
+- [x] **Nice** guard endurecido (readers +base64/dd/openssl/sort…, anclado como palabra, cred-file relativo, dumps `export/declare -p`; +6 fixtures; contract 16/16, 0 falsos positivos nuevos). Es tripwire, no control duro (ROUTING §2.1 corregido).
+- [x] **Nice** log-session anti-colisión (seg+PID) + skills-federate aliases→comentario.
+- [ ] **Nice** (post) `install --wire` (escribir hooks-config claude-json) + `doctor --all` en cron.
+- [x] **Arsenal +2** opencode + cursor = adapters clase no-hook (MCP bus + normas nativas + guard advisory). `mcp-wire.sh`. Bus LIVE (cursor: ebrain ready, 102 tools). `ebrain harness install/doctor --all` gobierna los 6 en un comando.
+- [x] **Cross-provider probado** (claude/codex/opencode/gemini en UNA agent-memory) + **benchmark real ~31× menos gasto** (`docs/benchmark-routing-cost.md`).
+
 ### 4.D Integración motor + evaluación Hermes
 - [ ] 4.8 Apuntar providers LLM de gbrain (dream cycle, judges, brainstorm, `think`) a OpenRouter con perfil `:floor`; confirmar que embeddings siguen en su provider directo (OpenRouter no tiene embeddings API); verificar presupuesto respetado en una corrida.
 - [ ] 4.9 **Evaluación Hermes** (opt-in, sin adopción todavía): instalar en la laptop SOLO para prueba corta (venv fuera del source tree, gateway apagado al terminar); configurar provider OpenRouter con la misma key; probar 1 cron y 1 tarea vía CLI; medir RAM real consumida; cotizar VPS $5 vs Modal/Daytona serverless. Entregar `docs/hermes-evaluation.md` con recomendación y costos. **Gate humano: Eduardo decide adopción y hábitat.** Si adopta: `skills.write_approval: true`, `memory.write_approval: true`, `max_concurrent_sessions` bajo.
