@@ -34,14 +34,14 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
 
 > Mandato: **primero una CLI robusta; la TUI se construye encima.** Todo panel futuro = un subcomando `--json` contract-tested acá. Piezas nuevas en TypeScript/bun (`cli/`), patrón route.ts; las bash existentes ganan `--json` con jq.
 
-- [ ] 6.1.1 `ebrain status --json` (extender `harness/core/status.sh`): `{brain:{state,served_by,sources},spend:{mtd,cap,remaining},fleet:{agents:[{name,ok}]},memory:{learnings,sessions}}`. Lock-aware como hoy. **Verify:** `ebrain status --json | jq -e '.brain and .spend and .fleet and .memory'`.
-- [ ] 6.1.2 `ebrain doctor --json` (extender `doctor.sh`): array `checks:[{id,level:ok|warn|fail,msg}]` + `rc`. **Verify:** jq -e sobre schema; rc coherente con niveles.
-- [ ] 6.1.3 `ebrain spend --json` (nuevo `cli/spend.ts`): MTD por cap desde `spend.jsonl` + caps de `routing.yaml` + gap conocido de gbrain (flag `gbrain_untracked:true`). **Verify:** bun test con ledger fixture.
-- [ ] 6.1.4 `ebrain fleet --json` (nuevo, envuelve `install.sh --doctor` por adapter): estado por agente + clase RAM (`heavy|light`) declarada en cada `manifest.yaml` (agregar campo). **Verify:** 6 agentes listados, clases correctas.
-- [ ] 6.1.5 `ebrain memory recent --json` (nuevo `cli/memory.ts`): últimos N learnings de agent-memory + últimas sesiones cross-`.brain` (índice Dev Brain). Sin tocar el lock (es filesystem). **Verify:** bun test con fixtures.
+- [x] 6.1.1 `ebrain status --json` (extender `harness/core/status.sh`): `{brain:{state,served_by,sources},spend:{mtd,cap,remaining},fleet:{agents:[{name,ok}]},memory:{learnings,sessions}}`. Lock-aware como hoy. **Verify:** `ebrain status --json | jq -e '.brain and .spend and .fleet and .memory'`.
+- [x] 6.1.2 `ebrain doctor --json` (extender `doctor.sh`): array `checks:[{id,level:ok|warn|fail,msg}]` + `rc`. **Verify:** jq -e sobre schema; rc coherente con niveles.
+- [x] 6.1.3 `ebrain spend --json` (nuevo `cli/spend.ts`): MTD por cap desde `spend.jsonl` + caps de `routing.yaml` + gap conocido de gbrain (flag `gbrain_untracked:true`). **Verify:** bun test con ledger fixture.
+- [x] 6.1.4 `ebrain fleet --json` (nuevo, envuelve `install.sh --doctor` por adapter): estado por agente + clase RAM (`heavy|light`) declarada en cada `manifest.yaml` (agregar campo). **Verify:** 6 agentes listados, clases correctas.
+- [x] 6.1.5 `ebrain memory recent --json` (nuevo `cli/memory.ts`): últimos N learnings de agent-memory + últimas sesiones cross-`.brain` (índice Dev Brain). Sin tocar el lock (es filesystem). **Verify:** bun test con fixtures.
 - [ ] 6.1.6 `ebrain sessions <list|new|peek|send|kill> --json` (nuevo `cli/sessions.ts` sobre tmux): naming `ebr-<agente>-<slug>`; `new` inyecta env/cmd del manifest del adapter; `send`/`kill` exigen `--yes`; `peek` = `capture-pane -p` (últimas N líneas, pasadas por el scrubber de secretos). **Verify:** E2E contra `scripts/fake-agent.sh` (se crea acá en versión mínima): new→list→peek→send→kill, asserts.
 - [ ] 6.1.7 `ebrain advise "<tarea>" --json` v0 (nuevo `cli/advise.ts`): fuente de verdad `config/advisor-rules.yaml` (capacidades→keywords; carriles: `route --cap X` one-shot / codex sesión / claude auditoría / gemini multimodal / opencode+stack); lee `routing.yaml` para cadenas y costos. Salida: `{lane,agent,model,reason,est_cost,alternatives[],frontier:bool}`. **Verify:** bun test con 10 tareas fixture (criterio de éxito #5, primera pasada).
-- [ ] 6.1.8 Contract-tests unificados: `tui/test/contract/` (bun test + zod) valida el schema de TODOS los `--json`; cablear al `contract-test.sh` del harness para que `ebrain doctor` lo vigile. **Verify:** suite verde; romper un campo a propósito → falla.
+- [x] 6.1.8 Contract-tests unificados: `tui/test/contract/` (bun test + zod) valida el schema de TODOS los `--json`; cablear al `contract-test.sh` del harness para que `ebrain doctor` lo vigile. **Verify:** suite verde; romper un campo a propósito → falla.
 - [ ] 6.1.9 **GATE F6.1**: `ebrain help` actualizado con los subcomandos nuevos; suite completa verde; commit de fase. `[AUDIT_PASS]`.
 
 ## FASE 6.2 — Design system (Claude Design)

@@ -4,6 +4,15 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-13 — F6.1 (chunk read-only) construido + auditado por Opus: CLI backend `--json`
+
+- **Worker Sonnet construyó** (commits `a29edc3`..`527d548`, uno por tarea): `status.sh --json` (`{brain,spend,fleet,memory}`, lock-aware), `doctor.sh --json` (`{checks[],rc}`), nuevos `cli/{spend,fleet,memory}.ts` (patrón route.ts), `class: heavy|light` en los 6 manifests (heavy=claude/codex/cursor/opencode), y `cli/contract.test.ts` (zod, 52 tests, cableado a `contract-test.sh`). Rutas runtime halladas: `~/.config/ebrain/{routing.yaml,spend.jsonl}`, memoria en `~/eBrain/memory/learnings/`.
+- **Auditoría Opus (maker≠checker)** encontró 2 issues reales → devueltos y resueltos: (1) `fleet --json` en **28s** — `install.sh --doctor` corría `contract-test.sh` 6× (guard run-once `EBRAIN_CONTRACT_TESTED` por el worker) + los doctors per-adapter son lentos/independientes (codex ~5.5s, gemini ~4.3s) y corrían secuenciales → **Opus paralelizó** `fleet.ts` (`doctorOk` async + `Promise.all`, commit `6418d53`): **28s→7.6s**. (2) `bun test` pelado colgaba (>2min) escaneando `vendor/**/*.test.ts` → `bunfig.toml` acota discovery a `cli/`: **>2min→192ms**.
+- **Auditado y aprobado:** fix del hook `pre-commit.security` (agrega `bun.lock` a los lockfiles reconocidos — **no debilita** el guard, sigue bloqueando sin lockfile). `ebrain help` lista spend/fleet/memory. `doctor --json` **31s→17s**.
+- **Estado:** 6.1.1–6.1.5, 6.1.8 = **DONE + auditados**. Falta el chunk 2: **6.1.6 (sessions/tmux con guards+scrubber)** y **6.1.7 (advise v0)** → luego GATE 6.1.9. **6.2.1 (design-system) ya exportado por Eduardo.**
+
+---
+
 ## 2026-07-12 — F6.0 CERRADA: reverse engineering de las 5 TUIs + GATE `[AUDIT_PASS]` (ADR-003 ratificado, Opción D)
 
 - **6.0.1 — clones shallow a `vendor/`** (gitignored, read-only): `sst/opencode@cf75036`, `openai/codex@c888e8e`, `google-gemini/gemini-cli@f354eeb`. SHAs + stack en `discovery/00-environment.md §F6`. Reportes en `discovery/tui/` (no `05-10`: `05` lo ocupa F0).
