@@ -3,7 +3,7 @@ type: adr
 project: ebrain
 id: ADR-003
 created: 2026-07-12
-status: proposed — pendiente de ratificar en GATE F6.0 (post reverse-engineering TUIs)
+status: accepted — ratificado en GATE F6.0 (2026-07-12) tras el reverse-engineering de las 5 TUIs; Opción D confirmada, Opción E (opentui) evaluada y rechazada
 tags: [ebrain, tui, stack, tmux, bun, flowclock, orquestación]
 related: [ADR-002-unified-harness.md, ULTRAPLAN-TUI.md, SPRINT-TUI.md, ../prompts/CLAUDE-DESIGN-BRIEF.md]
 ---
@@ -68,3 +68,14 @@ Lenguaje visual = el canon de las TUIs agénticas que Eduardo usa a diario: **Cl
 ## Ratificación
 
 Esta ADR se ratifica (o corrige) en el **GATE F6.0**, cuando el reverse engineering de las 5 TUIs confirme que el kit FlowClock + tmux cubren la anatomía observada (layout, input model, slash palette, theming). Si el RE revela un requisito que el kit no puede cubrir a costo razonable, se reabre la opción B (Go/bubbletea) ANTES de escribir código de app.
+
+### Resolución — GATE F6.0 (2026-07-12) · `[AUDIT_PASS]`
+
+El RE de las 5 TUIs (`discovery/tui/{opencode,codex,gemini-cli,claude-code,cursor}.md` + `_synthesis.md`) confirmó el ADR y **reveló una opción nueva que se evaluó y rechazó**:
+
+- **D1 (stack de render) — Opción D RATIFICADA.** El RE reveló que OpenCode ya no corre en bubbletea/Go ni en Ink, sino en **`@opentui/{core,solid,keymap}`** (Bun/TS) — lo que **confirmó el runtime bun+TS** pero abrió una **Opción E: adoptar opentui** (no contemplada al escribir el ADR). Evaluada en `_synthesis.md §2` y **rechazada**: (a) las "batteries" de opentui (streaming/markdown/diff/code-highlight) brillan justo donde ebrain NO juega — ebrain **orquesta** las TUIs de los agentes vía tmux, no renderiza chat; (b) E paga binarios nativos por OS/arch/libc + tree-sitter WASM (supply-chain/peso) sin beneficio para el scope, en una laptop mono-plataforma (solo linux-x64) de 4GB; (c) "no construir de cero" se satisface con D (reuso del kit propio de 2.6K loc + tmux — no se construye ni renderer ni multiplexor). Gap-list acotado (`_synthesis.md §4`): solo **ScrollList y Table** con trabajo real.
+- **Decisión de Eduardo (fork D-vs-E elevado, no auto-aprobado):** **D**. De OpenCode solo se quería el **estilo**, ya capturado en el `design-system/` legítimo de ebrain (export de Claude Design). **No se adopta opentui.**
+- **D2 (tmux data plane), D3 (CLI-first `--json`), rechazo de Ink (opción A): RATIFICADOS por evidencia convergente de primera mano.** Dos referentes independientes (OpenCode y Claude Code) resuelven "N agentes vivos" con **dashboard + peek + full-attach, sin tabs embebidas** = exactamente el plano tmux. La evidencia de costo de Ink (gemini: warn a 7GB RSS, doble reconciler, yoga, 4 firefights) es de primera mano.
+- **Steer de Eduardo para la construcción:** portar activamente UX de las TUIs de referencia, **especialmente el `agent view` de Claude Code** (cambiar entre ver qué hace cada agente; lanzar/observar múltiples agentes) → blueprint directo del **panel Sessions** (`_synthesis.md §4`: filas agrupadas por estado, `Space`=peek, `Enter`=attach, `←`=detach, auto-resumen throttled ≤1/15s → throttle del `capture-pane`). Los patrones stack-agnósticos a robar están listados en `_synthesis.md §4`.
+
+**Conclusión:** ADR-003 aceptado tal cual (D+tmux+CLI-first). No se reabre bubbletea. Desbloquea **FASE 6.1** (CLI backend) ‖ **6.2.2** (el paso humano 6.2.1 ya está hecho: Eduardo exportó `design-system/`).

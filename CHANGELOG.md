@@ -4,6 +4,17 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-12 — F6.0 CERRADA: reverse engineering de las 5 TUIs + GATE `[AUDIT_PASS]` (ADR-003 ratificado, Opción D)
+
+- **6.0.1 — clones shallow a `vendor/`** (gitignored, read-only): `sst/opencode@cf75036`, `openai/codex@c888e8e`, `google-gemini/gemini-cli@f354eeb`. SHAs + stack en `discovery/00-environment.md §F6`. Reportes en `discovery/tui/` (no `05-10`: `05` lo ocupa F0).
+- **6.0.2–6.0.6 — RE de las 5 TUIs** (5 workers Sonnet paralelos, patrón F0; relanzados tras reset de cuota, 4/5 reportes ya habían aterrizado): `discovery/tui/{opencode,codex,gemini-cli,claude-code,cursor}.md`, cada uno cubre la rúbrica (a)–(g) con archivo:línea (los 3 open-source) o docs públicas sin decompilación (claude-code/cursor cerradas).
+- **Hallazgo central:** OpenCode migró su TUI a **`@opentui/{core,solid,keymap}`** (Bun/TS; ni bubbletea/Go ni Ink) → confirmó el runtime bun+TS **y abrió una Opción E (adoptar opentui)** no contemplada en el ADR. Evidencia de costo de Ink de primera mano (gemini `useMemoryMonitor.ts:11` **warn a 7GB RSS**, Ink forkeado, doble reconciler, yoga, 4 firefights de perf).
+- **6.0.7 — síntesis** (`discovery/tui/_synthesis.md`): matriz rúbrica × (5 TUIs + FlowClock), canon de keybindings (evita colisión con prefix tmux), **gap-list del kit FlowClock** (solo ScrollList y Table con trabajo real; el kit resuelve el motor de render/layout/input/palette/confirm/gauge), patrones stack-agnósticos a robar, y la bifurcación D-vs-E.
+- **6.0.8 — GATE `[AUDIT_PASS]` (Opus):** **ADR-003 RATIFICADO (Opción D — extraer kit FlowClock).** D2 (tmux data plane) doblemente validado (OpenCode + Claude Code resuelven multi-agente con dashboard+peek+attach, sin tabs); D3 (CLI-first) y rechazo de Ink ratificados. **Opción E (opentui) evaluada y rechazada** (batteries irrelevantes al scope orquestador de ebrain + binarios nativos/WASM sin beneficio en 4GB mono-plataforma). **Fork elevado a Eduardo (no auto-aprobado): eligió D** — de OpenCode solo el estilo, ya capturado en `design-system/`. **Steer:** portar UX de referencia, **especialmente el `agent view` de Claude Code** (cambiar entre ver qué hace cada agente) → blueprint del panel Sessions.
+- **6.2.1 (paso humano) ya HECHO:** Eduardo exportó el `design-system/` de Claude Design (tokens, wordmark-matrix, 7 mockups, componentes) → desbloquea **6.1 (CLI backend) ‖ 6.2.2 (design-sync-tui)**. Commit síntesis `ade3f60` (los 5 reportes los versionó el auto-backup).
+
+---
+
 ## 2026-07-12 — F6 PLANEADA: TUI ebrain (régimen operativo visual) — ULTRAPLAN + SPRINT + ADR-003 + design brief
 
 - **Mandato de Eduardo:** envolver TODO ebrain en una TUI daily-driver (patrón FlowClock CLI→TUI, estética Claude Code/OpenCode incl. wordmark pixel-block bicolor): orquestar terminales agénticas multi-proveedor (claude/codex/gemini/opencode/cursor/route-stack) sobre las capas de memoria/harness/routing ya construidas, con visualización en vivo + advisor de carril por tarea.
