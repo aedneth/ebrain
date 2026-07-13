@@ -2,9 +2,17 @@
 # contract-test.sh — corre los fixtures del contrato contra el guard canónico y, opcionalmente,
 # hace TEST DE PARIDAD contra otro guard (p.ej. el viejo block-env-read.sh) para probar equivalencia
 # de comportamiento ANTES de reemplazarlo por un wrapper. Corre en `ebrain doctor` (alarma de drift).
+#
+# También corre el contrato JSON unificado (SPRINT-TUI 6.1.8): `bun test cli/contract.test.ts`
+# (zod) valida el schema de los CINCO `--json` de F6.1 (status/doctor/spend/fleet/memory) contra
+# FIXTURES — nunca spawns en vivo de los scripts reales. Por qué fixtures y no vivo: doctor.sh
+# invoca ESTE script; un spawn en vivo de `doctor.sh --json` desde el suite sería un ciclo
+# (doctor→contract-test→bun test→doctor→…). Ver el header de cli/contract.test.ts para el detalle.
+#
 # Uso: contract-test.sh [guard] [guard_paridad_opcional]
 set -uo pipefail
 HARNESS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+EBRAIN_HOME="$(cd "$HARNESS/.." && pwd)"
 GUARD="${1:-$HARNESS/core/guard-secrets.sh}"
 PARITY="${2:-}"
 FIX="$HARNESS/contract/fixtures"
@@ -20,5 +28,25 @@ for f in "$FIX"/*.json; do
     [ "$pgot" != "$got" ] && { parity_fail=$((parity_fail+1)); echo "  ⚠ paridad $name: canónico=$got viejo=$pgot"; }
   fi
 done
-echo "contract-test: $pass ok, $fail fallidos$([ -n "$PARITY" ] && echo " · paridad: $parity_fail divergencias")"
-[ "$fail" = 0 ] && [ "$parity_fail" = 0 ]
+
+# ── contrato JSON (zod) — no bloquea si bun no está disponible (WARN, no FAIL) ──────────────────
+json_ok=1
+JSON_TEST="$EBRAIN_HOME/cli/contract.test.ts"
+BUN="${BUN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN=bun
+if [ -f "$JSON_TEST" ]; then
+  if command -v "$BUN" >/dev/null 2>&1; then
+    jt="$(mktemp)"
+    if "$BUN" test "$JSON_TEST" >"$jt" 2>&1; then
+      json_ok=1
+    else
+      json_ok=0
+      echo "  ✗ contrato JSON (zod) FALLÓ — $(tail -3 "$jt" | tr '\n' ' ')"
+    fi
+    rm -f "$jt"
+  else
+    echo "  ⚠ bun no disponible — salteo contrato JSON (zod) ($JSON_TEST)"
+  fi
+fi
+
+echo "contract-test: $pass ok, $fail fallidos$([ -n "$PARITY" ] && echo " · paridad: $parity_fail divergencias") · JSON(zod): $([ "$json_ok" = 1 ] && echo ok || echo FAIL)"
+[ "$fail" = 0 ] && [ "$parity_fail" = 0 ] && [ "$json_ok" = 1 ]
