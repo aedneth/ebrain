@@ -76,3 +76,20 @@ Clones shallow (`--depth 1`, gitignored, read-only) capturados 2026-07-12 para e
 | `cursor/cursor-agent` | (cerrada, sin clone) | n/a | n/a | RE conductual |
 
 **Hallazgo temprano (pre-audit, a confirmar por el worker OpenCode):** opencode no tiene `.go` → refuerza ADR-003 D1 (el canon estético #1 de Eduardo corre en TS, no en Go/bubbletea). Si se confirma qué framework de render usa `packages/tui`, es insumo directo del GATE 6.0.8.
+
+## §F6.3.6 — `ebrain ui` boot time + RSS (medido en el Celeron real, 2026-07-13)
+
+Medido en ESTA máquina (HP ProBook · Celeron N4120 · 3.6 GiB RAM — la misma de la tabla de arriba, no un proxy). Método: sin TTY real disponible en la sesión del worker, se probó el boot+exit COMPLETO igual (no solo import de módulo) alimentando `q` por stdin vía pipe a través del dispatcher real:
+
+```
+/usr/bin/time -v bash -c 'TERM=xterm bash cli/ebrain ui < <(echo -n q) > /dev/null'
+```
+
+Esto ejerce la cadena real `bash cli/ebrain` → `run_bun` (cd a dir neutral) → `exec bun run tui/src/app.ts` → `runUi()`: entra alt-screen, hace 1 render, recibe `q` por el pipe (createEmitter de `startNavReader` funciona igual sobre un stream no-TTY), corre `reduce()` → `quit:true` → `restoreTerminal()` → `screen.exit()` → resuelve. Verificado con `xxd` sobre el stdout capturado: la secuencia de bytes es exactamente `ENTER_ALT_SCREEN + CLEAR_SCREEN` al boot y `EXIT_ALT_SCREEN` (`\x1b[?25h\x1b[?1049l`) al final — el terminal se restaura sin colgarse, exit code 0.
+
+| Métrica | Valor (3 corridas) |
+|---|---|
+| Wall clock (boot → alt-screen → quit → restore → exit) | 0.08–0.09 s |
+| Maximum resident set size (`/usr/bin/time -v`, agregado bash→bash→bun vía wait4) | 43.1–43.2 MiB (44108–44196 KB) |
+
+RSS aquí es predominantemente el runtime de bun cargando `app.ts` + sus imports (kit, 6 widgets usados por home, theme, commands) — bash en sí aporta unos pocos MiB. Bien dentro del presupuesto 4GB-safe (GUARDRAILS §9: máx 2 procesos pesados simultáneos); `ebrain ui` es liviano incluso comparado con un solo adapter agéntico.

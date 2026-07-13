@@ -4,6 +4,18 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-13 — F6.3.3 + 6.3.6: app shell bootable + `ebrain ui` `[AUDIT_PASS]` (la TUI arranca)
+
+- **`ebrain ui` bootea.** `tui/src/app.ts`: `buildFrame(state,size,theme)` PURO (StatusBar→TabBar→hairline→vista→HintBar→Footer, compuesto con kit `splitV`/`splitH` + los 16 widgets) · `reduce(state,key)→{state,quit,forceRedraw}` PURO (nav 1-6/tab/shift+tab, quit) · `runUi()` main loop (alt-screen+diffFrames del kit, resize SIGWINCH, **terminal SIEMPRE restaurada**: try/finally + SIGINT/SIGTERM + uncaughtException). Registry central `tui/src/commands.ts` → HintBar+Footer generados de ahí (regla claude-code: nunca hardcode, keybinds/hints/help siempre en sync).
+- **Fidelidad al mockup:** el shell replica `ui_kits/ebrain/shell.jsx` (orden de filas exacto) y el home replica `screens-a HomeScreen` (wordmark block centrado + panel `sistema` con gauges + `sesiones activas` focus + `ultimas memorias` violeta) — verificado renderizando el frame (32×120, todas las filas width 120, cero-hex). Las otras 5 tabs = stubs (vistas reales en F6.4–6.6).
+- **Decisión de tabs (DS manda):** `home·sessions·launch·memory·routing·doctor` (del mockup), NO el `Overview·Fleet` del SPRINT. `launch`→tab, `fleet`→telemetría del StatusBar + vista doctor. Reconfigura levemente 6.5.4/6.6.1; anotado para revisar si Fleet merece vista propia.
+- **Kit extendido:** `shift+tab` (`\x1b[Z`→`{name:"shifttab"}`) — gap real del kit vendored, scoped como divergencia propia de ebrain (Ctrl-C `\x03` verificado intacto tras el edit).
+- **6.3.6:** caso `ui)` en `cli/ebrain` con guards (bun/TERM-no-dumb/≥80×24). **Boot 0.08s · RSS 43 MiB en el Celeron N4120** (criterio #1 del GATE 6.3.7 holgado; presupuesto ADR-003 ≤100MB) — `discovery/00-environment.md §F6.3.6`. Smoke sin TTY prueba boot→render→quit→restore (exit 0, alt enter/exit).
+- **Auditoría Opus:** 29 tests app; guard 80×24; `TERM=dumb ebrain ui`→mensaje+rc1; suite completa **377 pass**; cero-hex (salvo theme.ts) + cero-emoji.
+- **Sigue:** Ola 3b = 6.3.4 palette (`/`·`ctrl+p`, consume el registry) + 6.3.5 help (`?`, autogen del registry) → GATE 6.3.7.
+
+---
+
 ## 2026-07-13 — F6.3.2 CERRADA: 16 widgets DS-bound (kit → widget library) `[AUDIT_PASS]`
 
 - **16 widgets** construidos por 2 workers Sonnet ‖ (core/data/dialog + chrome/layout/brand) → `tui/src/widgets/{core,data,chrome,layout,brand,dialog}/`. Cada uno función pura `(props, theme) → string[]`, **theme inyectado** (determinista, cero hex hardcodeado), **1:1 con su contrato del design system** (props+enums de `_adherence.oxlintrc.json`, render matcheando el `.jsx`). Inventario: badge·gauge·toast·spinner (core) · table·scrolllist·sessioncard (data) · tabbar·statusbar·hintbar·keyhint·footer (chrome) · panel·terminalpeek (layout) · wordmark (brand) · confirm (dialog).

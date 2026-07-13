@@ -62,9 +62,11 @@ export const COMMANDS: Command[] = [
   { id: "nav.cyclePrev", title: "vista anterior", summary: "ciclar a la pestana anterior", key: "shift+tab", group: "nav" },
 
   // ── global — stub targets for the next chunk (6.3.4 palette / 6.3.5 help).
+  // Order matches screens-a.jsx HomeScreen hints exactly: 1-6 vistas · / palette ·
+  // l launch · ? ayuda — hintsForTab() preserves COMMANDS array order below.
   { id: "palette.open", title: "palette", summary: "abrir la paleta de comandos (proximamente)", key: "/", group: "global", showInHintBar: true },
-  { id: "app.help", title: "ayuda", summary: "mostrar la ayuda autogenerada del registry (proximamente)", key: "?", group: "global", showInHintBar: true },
   { id: "nav.launchShortcut", title: "launch", summary: "atajo directo a la vista launch", key: "l", group: "global", showInHintBar: true },
+  { id: "app.help", title: "ayuda", summary: "mostrar la ayuda autogenerada del registry (proximamente)", key: "?", group: "global", showInHintBar: true },
   { id: "app.quit", title: "salir", summary: "salir de ebrain ui (q, ctrl+c dos veces, o ctrl+d)", key: "q", group: "global" },
   { id: "app.redraw", title: "redraw", summary: "forzar redibujado completo de la pantalla", key: "ctrl+l", group: "global" },
 ];

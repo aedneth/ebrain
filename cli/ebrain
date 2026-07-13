@@ -41,6 +41,7 @@ ebrain — capa unificada de harness + memoria agéntica (provider-agnostic)
   ebrain harness doctor [agent]                              verificar el harness de UN agente (guard/hooks/mcp)
   ebrain doctor [--json]                                     salud CKIS completa (launchers/config/contract/sources/gasto)
   ebrain status [--json]                                     snapshot rápido (brain/gasto/flota/memoria)
+  ebrain ui                                                   TUI interactivo (home real + 5 vistas placeholder, SPRINT-TUI 6.3)
   ebrain spend [--json]                                      gasto MTD por capacidad vs cap de routing.yaml
   ebrain fleet [--json]                                      salud + clase RAM (heavy|light) de los 6 adapters
   ebrain memory recent [--json] [--limit N]                  últimos learnings + sesiones (agent-memory + Dev Brain)
@@ -70,6 +71,16 @@ case "$cmd" in
   sessions)  run_bun "$EBRAIN_HOME/cli/sessions.ts" "$@" ;;
   advise)    run_bun "$EBRAIN_HOME/cli/advise.ts" "$@" ;;
   route)     if [ -x "$CFG/ebrain-route" ]; then "$CFG/ebrain-route" "$@"; else echo "ebrain: falta $CFG/ebrain-route" >&2; exit 127; fi ;;
+  ui)
+    # Guard BEFORE run_bun: an interactive alt-screen app needs a real terminal —
+    # TERM unset/dumb means no ANSI escapes will render sanely (piped output, cron,
+    # a dumb serial console). app.ts's own min-80x24 self-check (buildFrame) covers
+    # the OTHER half of "can this actually run" once a real terminal is confirmed.
+    if [ -z "${TERM:-}" ] || [ "$TERM" = "dumb" ]; then
+      echo "ebrain ui: hace falta una terminal interactiva real (TERM no definido o 'dumb')." >&2
+      exit 1
+    fi
+    run_bun "$EBRAIN_HOME/tui/src/app.ts" "$@" ;;
   harness)
     sub="${1:-}"; shift || true
     all_agents() { for m in "$EBRAIN_HOME"/harness/adapters/*/manifest.yaml; do [ -f "$m" ] && basename "$(dirname "$m")"; done; }
