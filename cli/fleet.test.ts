@@ -50,7 +50,7 @@ test("readClass: heavy/light declarados, ausente → unknown, YAML corrupto → 
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("doctorOk: rc=0 del script → true, rc!=0 → false", () => {
+test("doctorOk: rc=0 del script → true, rc!=0 → false", async () => {
   const dir = freshDir();
   const okScript = join(dir, "ok.sh");
   writeFileSync(okScript, "#!/usr/bin/env bash\nexit 0\n");
@@ -59,8 +59,8 @@ test("doctorOk: rc=0 del script → true, rc!=0 → false", () => {
   writeFileSync(failScript, "#!/usr/bin/env bash\nexit 1\n");
   chmodSync(failScript, 0o755);
 
-  expect(doctorOk("any-agent", okScript)).toBe(true);
-  expect(doctorOk("any-agent", failScript)).toBe(false);
+  expect(await doctorOk("any-agent", okScript)).toBe(true);
+  expect(await doctorOk("any-agent", failScript)).toBe(false);
   rmSync(dir, { recursive: true, force: true });
 });
 

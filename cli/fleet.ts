@@ -47,30 +47,32 @@ export async function readClass(agent: string, dir = ADAPTERS_DIR): Promise<Agen
 }
 
 // rc=0 de `install.sh --doctor <agent>` → ok. Mismo criterio que doctor.sh usa para "adapter $a".
-export function doctorOk(agent: string, installSh = INSTALL_SH): boolean {
-  // EBRAIN_CONTRACT_TESTED=1: install.sh --doctor invoca contract-test.sh (guard fixtures + JSON zod
-  // suite) por adapter; correrlo 6× para un LISTADO es el cuello de botella (SPRINT-TUI 6.1.8 perf:
-  // fleet 28s→~5s). El contrato es un chequeo GLOBAL, no per-adapter — es competencia de `ebrain
-  // doctor`, que lo corre una vez autoritativo. Fleet lo saltea en las 6 spawns (contract-test.sh
-  // short-circuita con exit 0). Env spread completo: Bun REEMPLAZA el entorno si se pasa `env`, así
-  // que preservamos PATH/HOME/etc. o install.sh no encontraría bun.
-  const proc = Bun.spawnSync(["bash", installSh, "--doctor", agent], {
+// Async (Bun.spawn, no spawnSync) para que main() pueda correr los 6 doctors EN PARALELO: son
+// independientes y I/O-bound (cada uno probea su propio agente — codex ~5.5s, gemini ~4.3s dominan;
+// secuencial ⇒ ~15s). En paralelo el total ≈ max(adapter) ≈ ≤6s (SPRINT-TUI 6.1.8 perf).
+// EBRAIN_CONTRACT_TESTED=1: el contrato es un chequeo GLOBAL (competencia de `ebrain doctor`, que lo
+// corre 1× autoritativo), no per-adapter — fleet lo saltea en las 6 spawns (contract-test.sh sale 0).
+// Env spread completo: Bun REEMPLAZA el entorno si se pasa `env`, así que preservamos PATH/HOME/etc.
+export async function doctorOk(agent: string, installSh = INSTALL_SH): Promise<boolean> {
+  const proc = Bun.spawn(["bash", installSh, "--doctor", agent], {
     stdout: "ignore",
     stderr: "ignore",
     env: { ...process.env, EBRAIN_CONTRACT_TESTED: "1" },
   });
-  return proc.exitCode === 0;
+  return (await proc.exited) === 0;
 }
 
 async function main() {
   const json = process.argv.includes("--json");
   const agents = listAdapters();
-  const results: AgentStatus[] = [];
-  for (const name of agents) {
-    const cls = await readClass(name);
-    const ok = doctorOk(name);
-    results.push({ name, ok, class: cls });
-  }
+  // Paralelo: Promise.all preserva el orden de `agents` (ya sorted). Los 6 spawns concurrentes son
+  // probes livianos (no agentes pesados) → seguro en el Celeron de 4GB.
+  const results: AgentStatus[] = await Promise.all(
+    agents.map(async (name) => {
+      const [cls, ok] = await Promise.all([readClass(name), doctorOk(name)]);
+      return { name, ok, class: cls } as AgentStatus;
+    }),
+  );
 
   if (json) {
     console.log(JSON.stringify({ agents: results }, null, 2));
