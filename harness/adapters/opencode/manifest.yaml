@@ -22,3 +22,4 @@ env:
   AGENT_NAME: opencode
 doctor: "opencode --version"
 guard: advisory
+launch: opencode   # SPRINT-TUI 6.1.6 — comando que `ebrain sessions new opencode <slug>` corre en tmux

@@ -25,3 +25,4 @@ mcp:
 env:
   AGENT_NAME: gemini
 doctor: "gemini --version"
+launch: gemini   # SPRINT-TUI 6.1.6 — comando que `ebrain sessions new gemini <slug>` corre en tmux

@@ -24,3 +24,4 @@ mcp:
 env:
   AGENT_NAME: codex
 doctor: "codex doctor"
+launch: codex   # SPRINT-TUI 6.1.6 — comando que `ebrain sessions new codex <slug>` corre en tmux

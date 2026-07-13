@@ -22,3 +22,4 @@ mcp:
 env:
   AGENT_NAME: generic
 doctor: null
+launch: bash   # SPRINT-TUI 6.1.6 — sin CLI propio (piso no-hook): shell interactivo simple
