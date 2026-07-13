@@ -48,7 +48,17 @@ export async function readClass(agent: string, dir = ADAPTERS_DIR): Promise<Agen
 
 // rc=0 de `install.sh --doctor <agent>` → ok. Mismo criterio que doctor.sh usa para "adapter $a".
 export function doctorOk(agent: string, installSh = INSTALL_SH): boolean {
-  const proc = Bun.spawnSync(["bash", installSh, "--doctor", agent], { stdout: "ignore", stderr: "ignore" });
+  // EBRAIN_CONTRACT_TESTED=1: install.sh --doctor invoca contract-test.sh (guard fixtures + JSON zod
+  // suite) por adapter; correrlo 6× para un LISTADO es el cuello de botella (SPRINT-TUI 6.1.8 perf:
+  // fleet 28s→~5s). El contrato es un chequeo GLOBAL, no per-adapter — es competencia de `ebrain
+  // doctor`, que lo corre una vez autoritativo. Fleet lo saltea en las 6 spawns (contract-test.sh
+  // short-circuita con exit 0). Env spread completo: Bun REEMPLAZA el entorno si se pasa `env`, así
+  // que preservamos PATH/HOME/etc. o install.sh no encontraría bun.
+  const proc = Bun.spawnSync(["bash", installSh, "--doctor", agent], {
+    stdout: "ignore",
+    stderr: "ignore",
+    env: { ...process.env, EBRAIN_CONTRACT_TESTED: "1" },
+  });
   return proc.exitCode === 0;
 }
 

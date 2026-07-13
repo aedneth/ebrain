@@ -1,0 +1,10 @@
+# bunfig.toml — configuración de bun para el repo ebrain.
+#
+# [test].root: acota el DESCUBRIMIENTO de tests de `bun test` (sin argumentos) a cli/. Sin esto,
+# `bun test` desde la raíz escanea recursivamente e incluye vendor/**/*.test.ts (miles de tests de
+# los clones read-only de opencode/codex/gemini-cli) → cuelga >2min (footgun, SPRINT-TUI 6.1.8).
+# Todos los tests de PRIMERA PARTE viven en cli/ (route/spend/fleet/memory/contract). Correr un
+# archivo explícito (p.ej. `bun test cli/contract.test.ts`, como hace contract-test.sh con ruta
+# absoluta) sigue funcionando igual: root solo cambia el directorio de escaneo por defecto.
+[test]
+root = "cli"

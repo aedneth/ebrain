@@ -10,7 +10,21 @@
 # (doctor→contract-test→bun test→doctor→…). Ver el header de cli/contract.test.ts para el detalle.
 #
 # Uso: contract-test.sh [guard] [guard_paridad_opcional]
+#
+# RUN-ONCE por árbol de proceso (SPRINT-TUI 6.1.8, perf): el contrato (guard fixtures + JSON zod)
+# es un chequeo GLOBAL, no per-adapter. `ebrain doctor` y `ebrain fleet` invocan `install.sh
+# --doctor` para los 6 adapters, y cada install.sh corre ESTE script → el contrato corría 6-7×
+# por comando (≈2s c/u ⇒ fleet 28s, doctor 31s). Con EBRAIN_CONTRACT_TESTED=1 en el entorno, este
+# script hace short-circuit (exit 0) — quien lo corrió una vez arriba en el árbol setea la var para
+# sus hijos. Un `ebrain harness doctor <agent>` suelto (var sin setear) lo corre una vez, como antes.
+# NO cambia semántica de rc: skip = "ya verificado como verde en este árbol" (exit 0).
 set -uo pipefail
+
+if [ "${EBRAIN_CONTRACT_TESTED:-}" = "1" ]; then
+  echo "contract-test: skipped (ya corrió en este árbol de proceso · EBRAIN_CONTRACT_TESTED=1)"
+  exit 0
+fi
+
 HARNESS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EBRAIN_HOME="$(cd "$HARNESS/.." && pwd)"
 GUARD="${1:-$HARNESS/core/guard-secrets.sh}"

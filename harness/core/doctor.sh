@@ -61,6 +61,11 @@ else
 fi
 
 # ── guard / contract (alarma de drift) ───────────────────────────────────────
+# El contrato (guard fixtures + JSON zod) es GLOBAL, no per-adapter. Se corre UNA vez acá, autoritativo,
+# con la var sin setear; luego `export EBRAIN_CONTRACT_TESTED=1` hace que los 6 `install.sh --doctor`
+# de la sección de flota (que también invocan contract-test.sh) hagan short-circuit en vez de re-correr
+# la suite bun 6× (SPRINT-TUI 6.1.8 perf: doctor 31s→~18s). No cambia rc: este check ya registró
+# ok/fail arriba; los adapters no son el watchdog del contrato — este bloque sí.
 c_sec "guard de secretos (contract-test)"
 ct_tmp="$(mktemp)"
 if bash "$CORE/contract-test.sh" >"$ct_tmp" 2>&1; then
@@ -70,6 +75,7 @@ else
   [ "$JSON" = 1 ] || grep -E '✗|⚠' "$ct_tmp" | sed 's/^/       /'
 fi
 rm -f "$ct_tmp"
+export EBRAIN_CONTRACT_TESTED=1   # ver comentario arriba: dedup del contrato en el árbol de este doctor
 
 # ── flota de adapters ────────────────────────────────────────────────────────
 c_sec "flota (harness adapters)"
