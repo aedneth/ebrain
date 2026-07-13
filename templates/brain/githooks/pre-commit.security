@@ -14,9 +14,11 @@ FAIL=0
 WARNINGS=""
 
 # ── Check 1: Lockfile must exist ────────────────────────────────────────────
-if [ -f "package.json" ] && ! [ -f "package-lock.json" ] && ! [ -f "pnpm-lock.yaml" ] && ! [ -f "yarn.lock" ]; then
-  echo "🔴 SECURITY BLOCK: No lockfile found (package-lock.json / pnpm-lock.yaml)."
-  echo "   Run 'npm install' or 'pnpm install' to generate one and commit it."
+# bun.lock/bun.lockb accepted alongside the npm-ecosystem lockfiles — several projects
+# (ebrain, the CLI suite) are bun-native and have no package-lock.json by design.
+if [ -f "package.json" ] && ! [ -f "package-lock.json" ] && ! [ -f "pnpm-lock.yaml" ] && ! [ -f "yarn.lock" ] && ! [ -f "bun.lock" ] && ! [ -f "bun.lockb" ]; then
+  echo "🔴 SECURITY BLOCK: No lockfile found (package-lock.json / pnpm-lock.yaml / yarn.lock / bun.lock)."
+  echo "   Run 'npm install' / 'pnpm install' / 'bun install' to generate one and commit it."
   FAIL=1
 fi
 
