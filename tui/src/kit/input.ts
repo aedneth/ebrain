@@ -24,6 +24,7 @@ export type Key =
   | { name: "right" }
   | { name: "enter" }
   | { name: "tab" }
+  | { name: "shifttab" }
   | { name: "escape" }
   | { name: "backspace" }
   | { name: "delete" }
@@ -63,6 +64,10 @@ const SEQUENCES: Record<string, Key> = {
   "\x1b[8~": { name: "end" },
   // Delete / "Supr" (forward delete)
   "\x1b[3~": { name: "delete" },
+  // Shift+Tab (CBT — Cursor Backward Tabulation), added SPRINT-TUI 6.3.3 for
+  // ebrain's own kit (this file "diverges as ebrain's own kit" per the header
+  // above — not an upstream FlowClock sequence, added locally for tab-cycle-back).
+  "\x1b[Z": { name: "shifttab" },
 };
 
 const CTRL_C = "";
@@ -73,7 +78,7 @@ const CTRL_C = "";
  * Handles:
  *   - Arrow keys (`\x1b[A/B/C/D`, `\x1bOA/B/C/D`)
  *   - Enter (`\r` or `\n`)
- *   - Tab (`\t`)
+ *   - Tab (`\t`) / Shift+Tab (`\x1b[Z`)
  *   - Escape (bare `\x1b`)
  *   - Backspace (`\x7f`)
  *   - Home / End (various sequences)

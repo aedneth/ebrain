@@ -100,6 +100,10 @@ describe("parseKey", () => {
     expect(parseKey("\x1b[3~")).toEqual({ name: "delete" });
   });
 
+  it("parses Shift+Tab (CSI Z, added SPRINT-TUI 6.3.3)", () => {
+    expect(parseKey("\x1b[Z")).toEqual({ name: "shifttab" });
+  });
+
   it("parses Ctrl-C as char with empty string char", () => {
     expect(parseKey("\x03")).toEqual({ name: "char", char: "\x03" });
   });
@@ -140,6 +144,10 @@ describe("tokenize — multi-char chunks no longer drop characters", () => {
 
   it("recognizes escape sequences embedded in a burst (arrow auto-repeat)", () => {
     expect(tokenize("\x1b[A\x1b[A")).toEqual([{ name: "up" }, { name: "up" }]);
+  });
+
+  it("recognizes Shift+Tab as a single token, not escape+chars", () => {
+    expect(tokenize("\x1b[Z")).toEqual([{ name: "shifttab" }]);
   });
 
   it("mixes text and control bytes correctly", () => {
