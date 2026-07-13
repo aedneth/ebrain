@@ -10,6 +10,19 @@ CFG="$HOME/.config/ebrain"
 
 run() { local f="$1"; shift; if [ -x "$f" ] || [ -f "$f" ]; then bash "$f" "$@"; else echo "ebrain: '$f' no existe todavía (¿fase pendiente?)." >&2; return 127; fi; }
 
+# run_bun <script.ts> [args...] — corre un cli/*.ts (bun) desde un cwd neutral (~/.config/ebrain/wd,
+# el mismo que usan gbrain-run/ebrain-route): Bun auto-carga un .env del cwd, y `ebrain` puede
+# invocarse desde CUALQUIER directorio (incl. uno de cliente con su propio .env) — este cd evita
+# que ese .env ajeno entre al proceso. Los cli/*.ts nuevos (spend/fleet/memory) no tocan secretos,
+# pero el patrón se mantiene por consistencia y defensa en profundidad.
+BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN_BIN=bun
+run_bun() {
+  local f="$1"; shift
+  if [ ! -f "$f" ]; then echo "ebrain: '$f' no existe todavía (¿fase pendiente?)." >&2; return 127; fi
+  if ! command -v "$BUN_BIN" >/dev/null 2>&1; then echo "ebrain: 'bun' no disponible ($BUN_BIN)." >&2; return 127; fi
+  (cd "$CFG/wd" 2>/dev/null || cd /tmp; exec "$BUN_BIN" run "$f" "$@")
+}
+
 usage() {
   cat <<'EOF'
 ebrain — capa unificada de harness + memoria agéntica (provider-agnostic)
@@ -19,8 +32,9 @@ ebrain — capa unificada de harness + memoria agéntica (provider-agnostic)
   ebrain route --cap <cap> "<prompt>"                        one-shot ruteado (stack OpenRouter capado)
   ebrain harness install <agent>                             instalar/actualizar el harness de un agente
   ebrain harness doctor [agent]                              verificar el harness de UN agente (guard/hooks/mcp)
-  ebrain doctor                                              salud CKIS completa (launchers/config/contract/sources/gasto)
-  ebrain status                                              snapshot rápido (brain/gasto/flota/memoria)
+  ebrain doctor [--json]                                     salud CKIS completa (launchers/config/contract/sources/gasto)
+  ebrain status [--json]                                     snapshot rápido (brain/gasto/flota/memoria)
+  ebrain spend [--json]                                      gasto MTD por capacidad vs cap de routing.yaml
   ebrain norms render <archivo>                              render del bloque de normas gestionado
   ebrain federate sessions|skills                            barrer .brain/ o skills a la memoria federada
   ebrain help
@@ -35,6 +49,7 @@ case "$cmd" in
   q|query)   run "$SCRIPTS/ebrain-q" "$@" ;;
   doctor)    run "$CORE/doctor.sh" "$@" ;;
   status)    run "$CORE/status.sh" "$@" ;;
+  spend)     run_bun "$EBRAIN_HOME/cli/spend.ts" "$@" ;;
   route)     if [ -x "$CFG/ebrain-route" ]; then "$CFG/ebrain-route" "$@"; else echo "ebrain: falta $CFG/ebrain-route" >&2; exit 127; fi ;;
   harness)
     sub="${1:-}"; shift || true
