@@ -3,6 +3,7 @@
 # eventos del runtime. Es la red de seguridad de la tesis: ningún agente queda sin harness por no
 # tener hooks. Las normas se entregan como doc (el agente debe leerlo / incluirlo en su system prompt).
 agent: generic
+class: light   # gobernador RAM (F6.4.6): 4GB Celeron — liviano, no cuenta contra "un heavy a la vez"
 description: Piso sin-hooks para cualquier agente. Guard/contexto/write-back vía git-hooks + CLI + cron; normas por doc.
 norms:
   target: ~/.config/ebrain/generic-NORMS.md

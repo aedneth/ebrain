@@ -3,6 +3,7 @@
 # `format: claude-json` es la ASUNCIÓN de convergencia; si un payload real diverge, el contrato
 # congelado + los contract tests en doctor lo marcan (drift = doctor rojo, no silencioso).
 agent: gemini
+class: light   # gobernador RAM (F6.4.6): 4GB Celeron — liviano, no cuenta contra "un heavy a la vez"
 description: Gemini CLI — agente free/experimental. Adapter completo (guard + contexto + write-back + normas + MCP).
 norms:
   target: ~/.gemini/GEMINI.md

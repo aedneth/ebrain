@@ -2,6 +2,7 @@
 # Migra el antiguo overlay/codex-harness a esta capa canónica: los hooks pasan a ser wrappers
 # de los scripts core del harness. install = idempotente, zero-behavior-change (ya estaba cableado).
 agent: codex
+class: heavy   # gobernador RAM (F6.4.6): 4GB Celeron, "un heavy a la vez"
 description: Codex CLI — cerebro/driver primario. Adapter completo (guard + contexto + write-back + normas + MCP).
 norms:
   target: ~/.codex/AGENTS.md

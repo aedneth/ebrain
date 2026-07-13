@@ -2,6 +2,7 @@
 # secretos + el bloque de normas. El contexto de sesión y el session-logging los maneja CKIS (hooks
 # propios del vault) → el harness NO los toca. Por eso `install claude` = verificación + zero cambio.
 agent: claude
+class: heavy   # gobernador RAM (F6.4.6): 4GB Celeron, "un heavy a la vez"
 description: Claude Code — orquestador/auditor. Guard + normas gestionados por el harness; contexto y write-back los maneja CKIS.
 norms:
   target: ~/.claude/CLAUDE.md

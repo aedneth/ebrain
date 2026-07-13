@@ -35,6 +35,7 @@ ebrain — capa unificada de harness + memoria agéntica (provider-agnostic)
   ebrain doctor [--json]                                     salud CKIS completa (launchers/config/contract/sources/gasto)
   ebrain status [--json]                                     snapshot rápido (brain/gasto/flota/memoria)
   ebrain spend [--json]                                      gasto MTD por capacidad vs cap de routing.yaml
+  ebrain fleet [--json]                                      salud + clase RAM (heavy|light) de los 6 adapters
   ebrain norms render <archivo>                              render del bloque de normas gestionado
   ebrain federate sessions|skills                            barrer .brain/ o skills a la memoria federada
   ebrain help
@@ -50,6 +51,7 @@ case "$cmd" in
   doctor)    run "$CORE/doctor.sh" "$@" ;;
   status)    run "$CORE/status.sh" "$@" ;;
   spend)     run_bun "$EBRAIN_HOME/cli/spend.ts" "$@" ;;
+  fleet)     run_bun "$EBRAIN_HOME/cli/fleet.ts" "$@" ;;
   route)     if [ -x "$CFG/ebrain-route" ]; then "$CFG/ebrain-route" "$@"; else echo "ebrain: falta $CFG/ebrain-route" >&2; exit 127; fi ;;
   harness)
     sub="${1:-}"; shift || true

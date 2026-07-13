@@ -1,0 +1,76 @@
+#!/usr/bin/env bun
+/**
+ * ebrain fleet — estado de salud + clase RAM de los adapters del harness (SPRINT-TUI 6.1.4).
+ * Envuelve `install.sh --doctor <agent>` (el MISMO chequeo que corre doctor.sh y
+ * `ebrain harness doctor` por adapter — cero lógica de negocio nueva, solo agregación) y le suma
+ * la clase RAM (`class: heavy|light`) declarada en cada manifest.yaml — insumo del gobernador de
+ * RAM (F6.4.6: "un heavy a la vez" en el Celeron de 4GB). heavy = codex/claude/cursor/opencode;
+ * light = gemini/generic.
+ *
+ * Uso:
+ *   ebrain fleet --json     # {agents:[{name,ok,class}]}
+ *   ebrain fleet            # texto plano
+ */
+import { readdirSync, existsSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
+
+const HOME = homedir();
+const EBRAIN_HOME = process.env.EBRAIN_HOME || join(HOME, "eBrain");
+const ADAPTERS_DIR = join(EBRAIN_HOME, "harness", "adapters");
+const INSTALL_SH = join(EBRAIN_HOME, "harness", "core", "install.sh");
+
+export type AgentClass = "heavy" | "light" | "unknown";
+export interface AgentStatus { name: string; ok: boolean; class: AgentClass }
+
+// Un adapter = un subdirectorio de ADAPTERS_DIR con manifest.yaml (mismo criterio que
+// `all_agents()` en install.sh/doctor.sh — no duplica una lista hardcodeada de nombres).
+export function listAdapters(dir = ADAPTERS_DIR): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && existsSync(join(dir, d.name, "manifest.yaml")))
+    .map((d) => d.name)
+    .sort();
+}
+
+// class ausente/inválida en el manifest → "unknown" (fail-visible, no asume heavy ni light).
+export async function readClass(agent: string, dir = ADAPTERS_DIR): Promise<AgentClass> {
+  const manifestPath = join(dir, agent, "manifest.yaml");
+  const f = Bun.file(manifestPath);
+  if (!(await f.exists())) return "unknown";
+  try {
+    const doc = (Bun as unknown as { YAML: { parse: (s: string) => Record<string, unknown> } }).YAML.parse(await f.text());
+    return doc?.class === "heavy" || doc?.class === "light" ? (doc.class as AgentClass) : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+// rc=0 de `install.sh --doctor <agent>` → ok. Mismo criterio que doctor.sh usa para "adapter $a".
+export function doctorOk(agent: string, installSh = INSTALL_SH): boolean {
+  const proc = Bun.spawnSync(["bash", installSh, "--doctor", agent], { stdout: "ignore", stderr: "ignore" });
+  return proc.exitCode === 0;
+}
+
+async function main() {
+  const json = process.argv.includes("--json");
+  const agents = listAdapters();
+  const results: AgentStatus[] = [];
+  for (const name of agents) {
+    const cls = await readClass(name);
+    const ok = doctorOk(name);
+    results.push({ name, ok, class: cls });
+  }
+
+  if (json) {
+    console.log(JSON.stringify({ agents: results }, null, 2));
+    return;
+  }
+
+  console.log("ebrain fleet");
+  for (const a of results) {
+    console.log(`  ${a.ok ? "ok  " : "warn"}  ${a.name.padEnd(10)} class=${a.class}`);
+  }
+}
+
+if (import.meta.main) main().catch((e) => { console.error(`✗ ${e?.message ?? e}`); process.exit(1); });

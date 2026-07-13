@@ -4,6 +4,7 @@
 # + normas como Cursor rule + guard ADVISORY. El auto-load de reglas globales por el CLI no está
 # verificado (como el hooks.json de gemini) → el doctor reporta "presente", no "cargado".
 agent: cursor
+class: heavy   # gobernador RAM (F6.4.6): 4GB Celeron, "un heavy a la vez"
 description: Cursor CLI (agent) — edición visual + CLI scriptable con modelos Anthropic. Clase no-hook (MCP + rule + guard advisory).
 norms:
   target: ~/.cursor/rules/ebrain-norms.mdc

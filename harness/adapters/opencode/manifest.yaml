@@ -5,6 +5,7 @@
 # guard ADVISORY (sin intercepción técnica; el guard vive como norma + aislamiento por directorio).
 # Nota: opencode SÍ tiene sistema de plugins JS/TS → un guard real es futura mejora (hardening).
 agent: opencode
+class: heavy   # gobernador RAM (F6.4.6): 4GB Celeron, "un heavy a la vez"
 description: OpenCode CLI — caballo de batalla barato (modelos chinos + Zen free). Clase no-hook (MCP + normas + guard advisory).
 norms:
   target: ~/.config/opencode/AGENTS.md
