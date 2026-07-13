@@ -9,49 +9,65 @@
 #
 # rc=1 SOLO si un check DURO falla: launcher faltante, routing.yaml/dotenv ausente,
 # contract-test con divergencia, o SOURCE DE CLIENTE detectado. Los WARN no tumban rc.
+#
+# --json (SPRINT-TUI 6.1.2): corre EXACTAMENTE los mismos checks (mismo costo/lock-awareness)
+# pero en vez de texto coloreado emite UN objeto JSON a stdout y nada más —
+# {checks:[{id,level:"ok"|"warn"|"fail",msg}], rc} — con rc coherente con el peor nivel (igual
+# que el path humano: rc=1 solo si hay algún fail). El path humano (sin --json) es el de siempre.
 set -uo pipefail
 
 EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
 CORE="$EBRAIN_HOME/harness/core"
 CFG="$HOME/.config/ebrain"
 
-WARN=0; FAILN=0
-c_ok(){   printf '  \033[32mok\033[0m   %s\n' "$1"; }
-c_warn(){ printf '  \033[33mwarn\033[0m %s\n' "$1"; WARN=$((WARN+1)); }
-c_fail(){ printf '  \033[31mFAIL\033[0m %s\n' "$1"; FAILN=$((FAILN+1)); }
-c_sec(){  printf '\n\033[1m%s\033[0m\n' "$1"; }
+JSON=0
+for _da in "$@"; do [ "$_da" = "--json" ] && JSON=1; done
 
-printf '\033[1mebrain doctor\033[0m — %s\n' "$(date '+%Y-%m-%d %H:%M')"
+WARN=0; FAILN=0
+declare -a CHECKS=()
+
+add_check() { # level id msg
+  CHECKS+=("$(jq -n --arg id "$2" --arg level "$1" --arg msg "$3" '{id:$id, level:$level, msg:$msg}')")
+}
+
+# c_ok/c_warn/c_fail <id> <msg> — siempre acumulan el check estructurado; el texto coloreado
+# solo se imprime en el path humano (JSON=0).
+c_ok(){   add_check ok "$1" "$2";                       [ "$JSON" = 1 ] || printf '  \033[32mok\033[0m   %s\n' "$2"; }
+c_warn(){ add_check warn "$1" "$2"; WARN=$((WARN+1));   [ "$JSON" = 1 ] || printf '  \033[33mwarn\033[0m %s\n' "$2"; }
+c_fail(){ add_check fail "$1" "$2"; FAILN=$((FAILN+1));  [ "$JSON" = 1 ] || printf '  \033[31mFAIL\033[0m %s\n' "$2"; }
+c_sec(){  [ "$JSON" = 1 ] || printf '\n\033[1m%s\033[0m\n' "$1"; }
+
+[ "$JSON" = 1 ] || printf '\033[1mebrain doctor\033[0m — %s\n' "$(date '+%Y-%m-%d %H:%M')"
 
 # ── launchers ────────────────────────────────────────────────────────────────
 c_sec "launchers"
 for f in gbrain-run gbrain-mcp ebrain-route ebrain-q; do
-  if [ -x "$CFG/$f" ]; then c_ok "$f"; else c_fail "$f falta o no ejecutable ($CFG/$f)"; fi
+  if [ -x "$CFG/$f" ]; then c_ok "launcher:$f" "$f"; else c_fail "launcher:$f" "$f falta o no ejecutable ($CFG/$f)"; fi
 done
-if command -v ebrain >/dev/null 2>&1; then c_ok "ebrain en PATH ($(command -v ebrain))"; else c_warn "ebrain no está en PATH (~/.local/bin)"; fi
+if command -v ebrain >/dev/null 2>&1; then c_ok "path:ebrain" "ebrain en PATH ($(command -v ebrain))"; else c_warn "path:ebrain" "ebrain no está en PATH (~/.local/bin)"; fi
 
 # ── config ───────────────────────────────────────────────────────────────────
 c_sec "config"
-[ -f "$CFG/routing.yaml" ] && c_ok "routing.yaml" || c_fail "routing.yaml falta ($CFG/routing.yaml)"
+[ -f "$CFG/routing.yaml" ] && c_ok "config:routing.yaml" "routing.yaml" || c_fail "config:routing.yaml" "routing.yaml falta ($CFG/routing.yaml)"
 if [ -f "$CFG/.env" ]; then
   perm="$(stat -c '%a' "$CFG/.env" 2>/dev/null || echo '?')"
-  [ "$perm" = "600" ] && c_ok "dotenv de config presente (chmod 600)" || c_warn "dotenv presente pero perms=$perm (esperado 600)"
+  [ "$perm" = "600" ] && c_ok "config:dotenv:perm" "dotenv de config presente (chmod 600)" || c_warn "config:dotenv:perm" "dotenv presente pero perms=$perm (esperado 600)"
   # presencia de keys SIN imprimir valor (subshell: source carga sin volcar; solo -n)
   for k in OPENAI_API_KEY OPENROUTER_API_KEY; do
-    if ( set +u; . "$CFG/.env" >/dev/null 2>&1; [ -n "${!k:-}" ] ); then c_ok "$k set"; else c_warn "$k no presente en la config"; fi
+    if ( set +u; . "$CFG/.env" >/dev/null 2>&1; [ -n "${!k:-}" ] ); then c_ok "config:env:$k" "$k set"; else c_warn "config:env:$k" "$k no presente en la config"; fi
   done
 else
-  c_fail "dotenv de config falta ($CFG/.env)"
+  c_fail "config:dotenv" "dotenv de config falta ($CFG/.env)"
 fi
 
 # ── guard / contract (alarma de drift) ───────────────────────────────────────
 c_sec "guard de secretos (contract-test)"
 ct_tmp="$(mktemp)"
 if bash "$CORE/contract-test.sh" >"$ct_tmp" 2>&1; then
-  c_ok "$(tail -1 "$ct_tmp")"
+  c_ok "guard:contract-test" "$(tail -1 "$ct_tmp")"
 else
-  c_fail "$(tail -1 "$ct_tmp")"
-  grep -E '✗|⚠' "$ct_tmp" | sed 's/^/       /'
+  c_fail "guard:contract-test" "$(tail -1 "$ct_tmp")"
+  [ "$JSON" = 1 ] || grep -E '✗|⚠' "$ct_tmp" | sed 's/^/       /'
 fi
 rm -f "$ct_tmp"
 
@@ -60,7 +76,7 @@ c_sec "flota (harness adapters)"
 all_agents(){ for m in "$EBRAIN_HOME"/harness/adapters/*/manifest.yaml; do [ -f "$m" ] && basename "$(dirname "$m")"; done; }
 for a in $(all_agents); do
   a_tmp="$(mktemp)"
-  if bash "$CORE/install.sh" --doctor "$a" >"$a_tmp" 2>&1; then c_ok "adapter $a"; else c_warn "adapter $a: pendiente (ver 'ebrain harness doctor $a')"; fi
+  if bash "$CORE/install.sh" --doctor "$a" >"$a_tmp" 2>&1; then c_ok "adapter:$a" "adapter $a"; else c_warn "adapter:$a" "adapter $a: pendiente (ver 'ebrain harness doctor $a')"; fi
   rm -f "$a_tmp"
 done
 
@@ -68,15 +84,15 @@ done
 c_sec "sources (aislamiento de cliente)"
 serve_pid="$(pgrep -f 'cli\.ts serve' 2>/dev/null | head -1 || true)"
 if [ -n "$serve_pid" ]; then
-  c_warn "brain servido por MCP (PID $serve_pid) → lock PGLite activo; chequeo directo de sources diferido (corre con MCP abajo, p.ej. cron nocturno)"
+  c_warn "sources:isolation" "brain servido por MCP (PID $serve_pid) → lock PGLite activo; chequeo directo de sources diferido (corre con MCP abajo, p.ej. cron nocturno)"
 else
   src_out="$(cd /tmp && timeout 60 "$CFG/gbrain-run" sources list --timeout=45000 2>&1 || true)"
   if printf '%s' "$src_out" | grep -qiE 'brisas|dekko'; then
-    c_fail "SOURCE DE CLIENTE detectado en el brain: $(printf '%s' "$src_out" | grep -iE 'brisas|dekko' | head -1)"
+    c_fail "sources:isolation" "SOURCE DE CLIENTE detectado en el brain: $(printf '%s' "$src_out" | grep -iE 'brisas|dekko' | head -1)"
   elif printf '%s' "$src_out" | grep -qiE 'second-brain|company-brain|agent-memory'; then
-    c_ok "sources = solo propios (second-brain / company-brain / agent-memory); cero cliente"
+    c_ok "sources:isolation" "sources = solo propios (second-brain / company-brain / agent-memory); cero cliente"
   else
-    c_warn "no pude leer sources: $(printf '%s' "$src_out" | head -1)"
+    c_warn "sources:isolation" "no pude leer sources: $(printf '%s' "$src_out" | head -1)"
   fi
 fi
 
@@ -88,36 +104,44 @@ cap="${cap:-10}"
 if [ -f "$spend" ]; then
   mtd="$(awk -F'"usd":' -v m="$(date +%Y-%m)" '$0 ~ "\"ts\":\""m {split($2,a,"[,}]"); s+=a[1]} END{printf "%.4f", s+0}' "$spend")"
   if awk -v s="$mtd" -v c="$cap" 'BEGIN{exit !(s+0 >= c+0)}'; then
-    c_fail "gasto MTD \$$mtd ≥ cap \$$cap (route.ts abortará)"
+    c_fail "spend:mtd" "gasto MTD \$$mtd ≥ cap \$$cap (route.ts abortará)"
   elif awk -v s="$mtd" -v c="$cap" 'BEGIN{exit !(s+0 >= 0.8*(c+0))}'; then
-    c_warn "gasto MTD \$$mtd (≥80% del cap \$$cap)"
+    c_warn "spend:mtd" "gasto MTD \$$mtd (≥80% del cap \$$cap)"
   else
-    c_ok "gasto MTD \$$mtd / cap \$$cap"
+    c_ok "spend:mtd" "gasto MTD \$$mtd / cap \$$cap"
   fi
 else
-  c_warn "spend.jsonl aún no existe (sin rutas registradas)"
+  c_warn "spend:mtd" "spend.jsonl aún no existe (sin rutas registradas)"
 fi
-c_warn "gap conocido: el spend de gbrain (think/dream) NO entra al ledger local; su cap real es server-side"
+c_warn "spend:gbrain-gap" "gap conocido: el spend de gbrain (think/dream) NO entra al ledger local; su cap real es server-side"
 
 # ── brain (motor gbrain) ─────────────────────────────────────────────────────
 c_sec "brain (motor gbrain)"
 if [ -n "$serve_pid" ]; then
-  c_ok "brain UP (MCP serve, PID $serve_pid); stats vía tools MCP o 'ebrain status' con MCP idle"
+  c_ok "brain:engine" "brain UP (MCP serve, PID $serve_pid); stats vía tools MCP o 'ebrain status' con MCP idle"
 else
   h_tmp="$(mktemp)"
   if (cd /tmp && timeout 60 "$CFG/gbrain-run" doctor >"$h_tmp" 2>&1); then :; fi
   if grep -q 'GBrain Health Check' "$h_tmp"; then
-    c_ok "gbrain doctor corrió (WARN internos de resolver_health/skills = no-bloqueantes para ebrain)"
+    c_ok "brain:engine" "gbrain doctor corrió (WARN internos de resolver_health/skills = no-bloqueantes para ebrain)"
   else
-    c_warn "gbrain doctor no dio salud legible: $(head -1 "$h_tmp")"
+    c_warn "brain:engine" "gbrain doctor no dio salud legible: $(head -1 "$h_tmp")"
   fi
   rm -f "$h_tmp"
 fi
 
 # ── veredicto ────────────────────────────────────────────────────────────────
-echo
-if [ "$FAILN" -gt 0 ]; then
-  printf '\033[31mebrain doctor: %d FAIL · %d warn\033[0m\n' "$FAILN" "$WARN"; exit 1
-else
-  printf '\033[32mebrain doctor: OK\033[0m · %d warn\n' "$WARN"; exit 0
+rc=0; [ "$FAILN" -gt 0 ] && rc=1
+
+if [ "$JSON" = 1 ]; then
+  printf '%s\n' "${CHECKS[@]}" | jq -s --argjson rc "$rc" '{checks: ., rc: $rc}'
+  exit "$rc"
 fi
+
+echo
+if [ "$rc" -gt 0 ]; then
+  printf '\033[31mebrain doctor: %d FAIL · %d warn\033[0m\n' "$FAILN" "$WARN"
+else
+  printf '\033[32mebrain doctor: OK\033[0m · %d warn\n' "$WARN"
+fi
+exit "$rc"
