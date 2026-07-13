@@ -8,6 +8,13 @@ CORE="$EBRAIN_HOME/harness/core"
 SCRIPTS="$EBRAIN_HOME/scripts"
 CFG="$HOME/.config/ebrain"
 
+# `run_bun` hace `cd` a un dir neutral ANTES de correr el script (ver comentario abajo) — eso pisa
+# `process.cwd()` dentro del script bun. `sessions new` (SPRINT-TUI 6.1.6) SÍ le importa el cwd real
+# desde donde se invocó `ebrain` (default de la sesión tmux si no se pasa --cwd explícito) → lo
+# capturamos ACÁ, antes de cualquier cd, y lo exportamos para que sessions.ts pueda usarlo como
+# fallback. Inofensivo para spend/fleet/memory (no leen esta var).
+export EBRAIN_CALLER_CWD="$PWD"
+
 run() { local f="$1"; shift; if [ -x "$f" ] || [ -f "$f" ]; then bash "$f" "$@"; else echo "ebrain: '$f' no existe todavía (¿fase pendiente?)." >&2; return 127; fi; }
 
 # run_bun <script.ts> [args...] — corre un cli/*.ts (bun) desde un cwd neutral (~/.config/ebrain/wd,
@@ -37,6 +44,12 @@ ebrain — capa unificada de harness + memoria agéntica (provider-agnostic)
   ebrain spend [--json]                                      gasto MTD por capacidad vs cap de routing.yaml
   ebrain fleet [--json]                                      salud + clase RAM (heavy|light) de los 6 adapters
   ebrain memory recent [--json] [--limit N]                  últimos learnings + sesiones (agent-memory + Dev Brain)
+  ebrain sessions list [--json]                               sesiones tmux ebr-* activas
+  ebrain sessions new <agent> <slug> [--cwd D] [--json]       nueva sesión tmux (harness env inyectado; deny-list cliente)
+  ebrain sessions peek <name> [--lines N] [--json]            capture-pane (scrubbeado — cero secretos crudos)
+  ebrain sessions send <name> "<texto>" --yes [--json]        send-keys (exige --yes)
+  ebrain sessions kill <name> --yes [--json]                  kill-session (exige --yes)
+  ebrain advise "<tarea>" [--json]                            advisor v0: carril/agente/modelo/costo recomendado (NUNCA lanza)
   ebrain norms render <archivo>                              render del bloque de normas gestionado
   ebrain federate sessions|skills                            barrer .brain/ o skills a la memoria federada
   ebrain help
@@ -54,6 +67,8 @@ case "$cmd" in
   spend)     run_bun "$EBRAIN_HOME/cli/spend.ts" "$@" ;;
   fleet)     run_bun "$EBRAIN_HOME/cli/fleet.ts" "$@" ;;
   memory)    run_bun "$EBRAIN_HOME/cli/memory.ts" "$@" ;;
+  sessions)  run_bun "$EBRAIN_HOME/cli/sessions.ts" "$@" ;;
+  advise)    run_bun "$EBRAIN_HOME/cli/advise.ts" "$@" ;;
   route)     if [ -x "$CFG/ebrain-route" ]; then "$CFG/ebrain-route" "$@"; else echo "ebrain: falta $CFG/ebrain-route" >&2; exit 127; fi ;;
   harness)
     sub="${1:-}"; shift || true

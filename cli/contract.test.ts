@@ -1,6 +1,7 @@
 /**
- * cli/contract.test.ts — contrato JSON unificado (SPRINT-TUI 6.1.8): valida con zod el schema de
- * los CINCO `--json` del F6.1 (status/doctor/spend/fleet/memory recent) contra fixtures.
+ * cli/contract.test.ts — contrato JSON unificado (SPRINT-TUI 6.1.8, extendido en 6.1.6/6.1.7):
+ * valida con zod el schema de los `--json` de F6.1 (status/doctor/spend/fleet/memory recent/
+ * sessions list+peek+mutate/advise) contra fixtures.
  *
  * Por qué FIXTURES y no spawns en vivo de los scripts reales: harness/core/doctor.sh invoca
  * contract-test.sh como uno de sus propios checks, y contract-test.sh (después de F6.1.8) corre
@@ -8,11 +9,13 @@
  * doctor.sh → contract-test.sh → bun test contract.test.ts → doctor.sh --json → contract-test.sh
  * → … (recursión infinita). `fleet.ts` tiene el mismo problema transitivo: llama a
  * `install.sh --doctor <agent>` por cada adapter, e install.sh TAMBIÉN invoca contract-test.sh como
- * parte de su propio doctor. Para no tener un diseño asimétrico y fragil (2 en vivo + 3 fixture,
- * a merced de que alguien agregue mañana una llamada a contract-test.sh en spend.ts/memory.ts y
- * reintroduzca el ciclo sin darse cuenta), las CINCO se validan igual: contra fixtures, nunca
- * spawneando el CLI real. Los `jq -e` / `bun test` de cada tarea 6.1.1–6.1.5 ya probaron el output
- * REAL en vivo — esta suite fija el SCHEMA para que draft futuro no lo rompa en silencio.
+ * parte de su propio doctor. Para no tener un diseño asimétrico y fragil (algunos en vivo + otros
+ * fixture, a merced de que alguien agregue mañana una llamada a contract-test.sh en un cli/*.ts y
+ * reintroduzca el ciclo sin darse cuenta), TODOS se validan igual: contra fixtures, nunca
+ * spawneando el CLI real (ni siquiera sessions.ts/advise.ts, que hoy no tienen ese riesgo — la
+ * convención se mantiene pareja para que nunca dependa de auditar caso por caso). Los `jq -e` /
+ * `bun test` / smoke manual de cada tarea ya probaron el output REAL en vivo — esta suite fija el
+ * SCHEMA para que un cambio futuro no lo rompa en silencio.
  *
  * `bun test cli/contract.test.ts`. Para ver que realmente valida: rompé un campo del fixture (tipo
  * incorrecto, campo faltante, valor fuera de enum) y el test correspondiente debe fallar.
@@ -266,5 +269,175 @@ describe("6.1.5 memory recent --json", () => {
   });
   test("learnings/sessions vacíos son válidos (vault recién creado, sin historia aún)", () => {
     expect(MemorySchema.safeParse({ learnings: [], sessions: [] }).success).toBe(true);
+  });
+});
+
+// ── 6.1.6 ebrain sessions <list|peek|new|send|kill> --json ─────────────────────────────────
+const SessionRowSchema = z.object({
+  name: z.string().regex(/^ebr-/, "prefijo ebr- obligatorio"),
+  agent: z.string().min(1),
+  slug: z.string().min(1),
+  cwd: z.string(),
+  created: z.string(),
+  attached: z.boolean(),
+});
+const SessionsListSchema = z.object({ sessions: z.array(SessionRowSchema) });
+
+// Fixture = captura real de `ebrain sessions list --json` (2026-07-13, sesión E2E fake-agent viva).
+const sessionsListFixture = {
+  sessions: [
+    { name: "ebr-generic-smoketest", agent: "generic", slug: "smoketest", cwd: "/tmp/ebrain-manual-smoke", created: "2026-07-13T17:44:49.000Z", attached: false },
+  ],
+};
+
+describe("6.1.6 sessions list --json", () => {
+  test("fixture real pasa el schema", () => {
+    expect(() => SessionsListSchema.parse(sessionsListFixture)).not.toThrow();
+  });
+  test("lista vacía (sin server tmux o sin sesiones ebr-*) es válida", () => {
+    expect(SessionsListSchema.safeParse({ sessions: [] }).success).toBe(true);
+  });
+  test("nombre sin prefijo 'ebr-' (naming contract roto) → falla", () => {
+    const broken = { sessions: [{ ...sessionsListFixture.sessions[0], name: "otra-cosa" }] };
+    expect(SessionsListSchema.safeParse(broken).success).toBe(false);
+  });
+  test("'attached' no-boolean → falla", () => {
+    const broken = { sessions: [{ ...sessionsListFixture.sessions[0], attached: "no" }] };
+    expect(SessionsListSchema.safeParse(broken).success).toBe(false);
+  });
+});
+
+// `peek` — el contrato MÁS security-critical del programa: el texto SIEMPRE debe estar scrubbeado
+// antes de llegar acá (cli/sessions.ts peekSession()). El fixture "ok" incluye una línea que
+// PARECÍA un secreto en el pane crudo pero ya llegó redactada — fija el contrato de forma, no repite
+// el test de contenido del scrubber (eso vive en cli/sessions.test.ts, contra la función real).
+const SessionsPeekOkSchema = z.object({ ok: z.literal(true), name: z.string(), lines: z.number().int().positive(), text: z.string() });
+const SessionsErrorSchema = z.object({ ok: z.literal(false), error: z.object({ type: z.string(), message: z.string() }) });
+const SessionsPeekSchema = z.union([SessionsPeekOkSchema, SessionsErrorSchema]);
+
+const sessionsPeekFixture = {
+  ok: true,
+  name: "ebr-claude-korvex",
+  lines: 50,
+  text: "fake-agent: listo (AGENT_NAME=claude)\n$ export OPENROUTER_API_KEY=[REDACTED]\n[fake-agent 17:44:50] tick",
+};
+
+describe("6.1.6 sessions peek --json (scrubber — hard requirement)", () => {
+  test("fixture ok (ya scrubbeado) pasa el schema", () => {
+    expect(() => SessionsPeekSchema.parse(sessionsPeekFixture)).not.toThrow();
+  });
+  test("un fixture con un secreto CRUDO (no redactado) sigue pasando el schema de FORMA — el schema"
+    + " no puede detectar contenido, por eso el scrubber se prueba aparte contra la función real"
+    + " (cli/sessions.test.ts); este test documenta ese límite explícitamente.", () => {
+    const leaky = { ...sessionsPeekFixture, text: "OPENROUTER_API_KEY=sk-or-v1-realvalue-no-debería-pasar" };
+    expect(SessionsPeekSchema.safeParse(leaky).success).toBe(true); // forma válida — el CONTENIDO se audita aparte
+  });
+  test("error tipado (sesión no encontrada) pasa el schema de error", () => {
+    const err = { ok: false, error: { type: "not-found", message: "can't find session ebr-x" } };
+    expect(() => SessionsPeekSchema.parse(err)).not.toThrow();
+  });
+  test("'lines' no-positivo → falla", () => {
+    expect(SessionsPeekSchema.safeParse({ ...sessionsPeekFixture, lines: 0 }).success).toBe(false);
+  });
+});
+
+// `new` / `send` / `kill` — envelope común de mutación: éxito con payload propio, o error tipado.
+// El caso que este contrato DEBE fijar es el refuso sin --yes (send/kill) — hard requirement 6.1.6.
+const SessionsMutateSchema = z.union([
+  z.object({ ok: z.literal(true) }).passthrough(),
+  z.object({ ok: z.literal(false), error: z.object({ type: z.string(), message: z.string() }) }).passthrough(),
+]);
+
+describe("6.1.6 sessions new/send/kill --json (mutate envelope + candado --yes)", () => {
+  test("new: éxito trae session:{name,agent,slug,cwd}", () => {
+    const ok = { ok: true, session: { name: "ebr-generic-smoketest", agent: "generic", slug: "smoketest", cwd: "/tmp/ebrain-manual-smoke" } };
+    expect(() => SessionsMutateSchema.parse(ok)).not.toThrow();
+  });
+  test("send SIN --yes: ok:false, error.type='confirm-required', trae 'would' (nunca ejecuta)", () => {
+    const refused = { ok: false, error: { type: "confirm-required", message: "falta --yes" }, would: { name: "ebr-x", text: "hola" } };
+    const parsed = SessionsMutateSchema.parse(refused);
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok) expect(parsed.error.type).toBe("confirm-required");
+  });
+  test("kill SIN --yes: mismo candado", () => {
+    const refused = { ok: false, error: { type: "confirm-required", message: "falta --yes" }, would: { name: "ebr-x" } };
+    expect(() => SessionsMutateSchema.parse(refused)).not.toThrow();
+  });
+  test("cwd de cliente (deny-list) → error tipado 'deny-client'", () => {
+    const denied = { ok: false, error: { type: "deny-client", message: "cwd resuelve bajo un repo de cliente" } };
+    const parsed = SessionsMutateSchema.parse(denied);
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok) expect(parsed.error.type).toBe("deny-client");
+  });
+  test("ok sin booleano literal (rompe forma) → falla", () => {
+    expect(SessionsMutateSchema.safeParse({ ok: "yes", session: {} }).success).toBe(false);
+  });
+});
+
+// ── 6.1.7 ebrain advise "<tarea>" --json ────────────────────────────────────────────────────
+const AdviseSchema = z.object({
+  task: z.string().min(1),
+  capability: z.enum(["coding", "agentic", "web_design", "long_context", "terminal", "general"]),
+  lane: z.string().min(1),
+  agent: z.string().min(1),
+  model: z.string().min(1),
+  reason: z.string().min(1),
+  est_cost: z.object({ usd: z.number().nullable(), note: z.string() }),
+  alternatives: z.array(z.object({ lane: z.string(), agent: z.string(), model: z.string(), note: z.string() })),
+  frontier: z.boolean(),
+});
+
+// Fixture 1 = captura real de `ebrain advise "..." --json` (one-shot barato, no-frontier, 2026-07-13).
+const adviseOneShotFixture = {
+  task: "Summarize this batch of transcripts into a daily digest",
+  capability: "long_context",
+  lane: "one_shot_route",
+  agent: "route",
+  model: "minimax/minimax-m3",
+  reason: "tarea clasificada como capacidad 'long_context' (keywords: summarize, digest, transcript, batch) — señal one-shot (batch, digest, summarize) → carril barato en vez de sesión interactiva — carril 'one_shot_route': one-shot barato vía `ebrain route --cap <capacidad>` — stack OpenRouter capado $10/mo",
+  est_cost: { usd: 0.0027, note: "estimado (3000in/1500out tokens asumidos @ minimax/minimax-m3, pricing docs/model-registry.md 2026-07-11) — NO es billing real" },
+  alternatives: [
+    { lane: "one_shot_route", agent: "route", model: "qwen/qwen3.5-plus-20260420", note: "fallback de la cadena (routing.yaml)" },
+    { lane: "one_shot_route", agent: "route", model: "qwen/qwen3.5-flash-02-23", note: "floor/gratis de la cadena (routing.yaml)" },
+    { lane: "interactive_opencode", agent: "opencode", model: "opencode", note: "si la tarea crece más allá de un one-shot, subí a sesión interactiva" },
+  ],
+  frontier: false,
+};
+
+// Fixture 2 = carril frontier (auditoría/arquitectura) — candado F4/D5: SIEMPRE recomendación, jamás default.
+const adviseFrontierFixture = {
+  task: "Do an architecture audit of the ebrain harness before we ship v1",
+  capability: "general",
+  lane: "claude_audit",
+  agent: "claude",
+  model: "claude-opus (Fable 5 para gates de alto riesgo) — FRONTIER",
+  reason: "señales de auditoría/arquitectura detectadas (architecture, audit) → override duro sobre cualquier capacidad — carril 'claude_audit': auditoría/arquitectura — SOLO RECOMENDACIÓN, exige confirmación explícita antes de lanzar — ⚠ FRONTIER — esto es SOLO una recomendación; requiere confirmación explícita antes de lanzar (candado F4/D5, el advisor NUNCA auto-escala ni auto-lanza).",
+  est_cost: { usd: 0, note: "cubierto por suscripción/crédito existente (claude) — no pasa por el ledger de route.ts" },
+  alternatives: [
+    { lane: "interactive_codex", agent: "codex", model: "codex-cli (modelo nativo OpenAI, créditos $2500 — Tier 0 cerebro/constructor)", note: "más barato pero sin el mismo nivel de rigor maker≠checker — usar solo si el riesgo es bajo" },
+  ],
+  frontier: true,
+};
+
+describe("6.1.7 advise --json", () => {
+  test("fixture one-shot (no-frontier) pasa el schema", () => {
+    expect(() => AdviseSchema.parse(adviseOneShotFixture)).not.toThrow();
+  });
+  test("fixture frontier pasa el schema Y trae la advertencia de confirmación en 'reason' (candado F4/D5)", () => {
+    const parsed = AdviseSchema.parse(adviseFrontierFixture);
+    expect(parsed.frontier).toBe(true);
+    expect(parsed.reason.toLowerCase()).toContain("confirmaci");
+  });
+  test("capability fuera del enum → falla", () => {
+    expect(AdviseSchema.safeParse({ ...adviseOneShotFixture, capability: "reasoning" }).success).toBe(false);
+  });
+  test("frontier no-booleano → falla", () => {
+    expect(AdviseSchema.safeParse({ ...adviseOneShotFixture, frontier: "false" }).success).toBe(false);
+  });
+  test("alternatives no-array → falla", () => {
+    expect(AdviseSchema.safeParse({ ...adviseOneShotFixture, alternatives: {} }).success).toBe(false);
+  });
+  test("est_cost.usd acepta null (modelo sin pricing verificado) explícitamente, no un 0 inventado", () => {
+    expect(AdviseSchema.safeParse({ ...adviseOneShotFixture, est_cost: { usd: null, note: "pricing no verificado" } }).success).toBe(true);
   });
 });
