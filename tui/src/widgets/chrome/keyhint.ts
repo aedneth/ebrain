@@ -7,7 +7,7 @@
  * Deviation note (see task report): KeyHint.jsx colors the label
  * `var(--text-3)` (text.muted) UNCONDITIONALLY, not `var(--text-1)`/text.secondary
  * as paraphrased in the build brief. `disabledText` resolves to the exact same hex
- * as `text.muted` (#565F73), so using `theme.disabledText` for the label satisfies
+ * as `text.muted` (same token hex), so using `theme.disabledText` for the label satisfies
  * both "always dim like the jsx" and "disabled -> both theme.disabledText" at once.
  * `k` keeps `fontWeight: 700` (bold) in BOTH states per the jsx — only its color
  * switches between text.primary and disabledText.
@@ -30,5 +30,6 @@ export function keyHint(props: KeyHintProps, theme: Theme): string {
   const reset = theme.reset;
 
   const kColor = disabled ? theme.disabledText : theme.fg("text.primary");
-  return kColor + BOLD + k + reset + theme.disabledText + " " + label + reset;
+  const labelColor = disabled ? theme.disabledText : theme.fg("text.muted");
+  return kColor + BOLD + k + reset + labelColor + " " + label + reset;
 }
