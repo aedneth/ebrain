@@ -13,7 +13,9 @@ related: ["../../docs/adr/ADR-003-tui-stack.md", "../../docs/SPRINT-TUI.md"]
 
 > **Método:** cursor-agent es closed-source → **NO hay vendor/cursor** (a diferencia de opencode/codex/gemini-cli, que sí están clonados en `vendor/` per `discovery/00-environment.md` §F6). Este reporte es 100% RE conductual: documentación pública oficial (`cursor.com/docs/cli/*`) + resúmenes de búsqueda de fuentes secundarias. Cero decompilación, cero inspección de binario.
 >
-> **Limitación de esta corrida:** las tools `WebFetch`/`WebSearch` agotaron su cuota de sesión (reset ~22:10 America/El_Salvador, ~3h después del momento de research) tras 3 fetches completos + 2 searches. Quedaron sin confirmar: catálogo exhaustivo de slash-commands, theming, render stack, y exit codes — cada uno se marca explícitamente abajo como **no confirmado**, no como inferencia disfrazada de hecho.
+> **Limitación de esta corrida (original):** las tools `WebFetch`/`WebSearch` agotaron su cuota de sesión (reset ~22:10 America/El_Salvador, ~3h después del momento de research) tras 3 fetches completos + 2 searches. Quedaron sin confirmar: catálogo exhaustivo de slash-commands, theming, render stack, y exit codes — cada uno se marca explícitamente abajo como **no confirmado**, no como inferencia disfrazada de hecho.
+>
+> **Follow-up (2026-07-12, mismo día, task 6.0.6 gap-fill):** corrida adicional con cuota de `WebFetch`/`WebSearch` disponible, dirigida exclusivamente a los 4 gaps. Resultado: (c) slash-commands y (d) theming quedaron **resueltos con fuente oficial/comunitaria concreta**; (f) render stack se **reconfirmó como genuinamente no divulgado** (búsqueda dirigida adicional, cero resultado); (g/exit codes bajo `-p`) quedó **parcialmente resuelto** — sin tabla oficial de exit codes, pero con evidencia operacional concreta de foros (bug histórico de proceso que no terminaba, luego arreglado). Detalle en cada sección y fuentes nuevas abajo.
 
 ## Fuentes
 
@@ -29,7 +31,24 @@ related: ["../../docs/adr/ADR-003-tui-stack.md", "../../docs/SPRINT-TUI.md"]
 - [cheatsheets.zip/cursor-cli](https://cheatsheets.zip/cursor-cli)
 - [docs.praison.ai/docs/code/cursor-cli](https://docs.praison.ai/docs/code/cursor-cli)
 
-**Intentado y fallido por rate-limit** (no se debe asumir que estas URLs fueron leídas): `cursor.com/docs/cli/reference/parameters`, un fetch a `cursor.com/blog/cli`, y un WebSearch de theming.
+**Intentado y fallido por rate-limit en la corrida original** (no se debe asumir que estas URLs fueron leídas en esa corrida): `cursor.com/docs/cli/reference/parameters`, un fetch a `cursor.com/blog/cli`, y un WebSearch de theming.
+
+**Follow-up (task 6.0.6 gap-fill) — fetched completas:**
+- [cursor.com/docs/cli/reference/parameters](https://cursor.com/docs/cli/reference/parameters) — catálogo de flags (output-format, sandbox, force/yolo, trust, worktree, list-models, resume/continue)
+- [cursor.com/docs/cli/reference/slash-commands](https://cursor.com/docs/cli/reference/slash-commands) — catálogo oficial completo de slash-commands
+- [cursor.com/docs/cli/reference/configuration](https://cursor.com/docs/cli/reference/configuration) — opciones de config (`editor.vimMode`, `display.*`, hints, notifications) — confirma ausencia de opciones de color/tema
+- [cursor.com/docs/cli/headless](https://cursor.com/docs/cli/headless) (re-fetch dirigido a exit codes y schema de `--output-format json`/`stream-json`)
+- [cursor.com/docs/cli/github-actions](https://cursor.com/docs/cli/github-actions) — confirma que la doc oficial tampoco documenta exit codes ahí
+- [forum.cursor.com — "Cursor CLI headless mode does not release the terminal"](https://forum.cursor.com/t/cursor-cli-headless-mode-does-not-release-the-terminal/133624) — bug histórico de proceso `-p` que no terminaba, resuelto en build `2025.09.18-7ae6800`
+- [forum.cursor.com — "Cursor-agent --print doesn't exit after completing"](https://forum.cursor.com/t/cursor-agent-print-doesnt-exit-after-completing/150296) — recurrencia del mismo bug, confirmado arreglado por Cursor team ~mayo 2026
+- [forum.cursor.com — "Cursor-agent CLI input cursor invisible on light-theme terminals"](https://forum.cursor.com/t/cursor-agent-cli-input-cursor-invisible-on-light-theme-terminals-please-expose-theme-cursor-color-in-cli-config-json/160845/7) — evidencia directa sobre ausencia de theming + workaround `TERM_THEME=light`
+
+**Follow-up — solo snippet de WebSearch, NO fetched:**
+- [explainx.ai — Cursor CLI Slash Commands: Complete Reference](https://explainx.ai/blog/cursor-cli-slash-commands-complete-reference-guide-2026)
+- [toolsbase.dev — Cursor Cheat Sheet](https://toolsbase.dev/en/reference/cursor-commands)
+- [forum.cursor.com — "Cursor-agent in Github Action timeout"](https://forum.cursor.com/t/cursor-agent-in-github-action-timeout/135433) (solo snippet, citado como corroboración secundaria del patrón de hang, no como fuente primaria)
+
+**Fetched pero descartada como fuera de alcance:** [forum.cursor.com — "Colors not working on Agent Terminal"](https://forum.cursor.com/t/colors-not-working-on-agent-terminal/153088) — es sobre el panel "Agent Terminal" del **editor** Cursor (Composer), un producto distinto del `cursor-agent` CLI standalone que es el sujeto de este reporte. Se descarta explícitamente para no conflar los dos productos; no se usa como evidencia de theming del CLI.
 
 ━━━
 
@@ -71,20 +90,62 @@ related: ["../../docs/adr/ADR-003-tui-stack.md", "../../docs/SPRINT-TUI.md"]
 
 ## (c) Slash commands / commands
 
-**Documentados explícitamente:**
-- `/plan`, `/ask` — cambio de modo (también `--mode=ask`)
-- `/summarize` (alias `/compress`) — comprime/libera espacio de context window
-- `/resume` — resume de sesión (equivalente in-session a `agent resume`)
-- `/sandbox` — mencionado, semántica exacta no detallada en las páginas fetched
-- `/max-mode` — mencionado, semántica exacta no detallada
+**RESUELTO (follow-up 6.0.6)** — catálogo oficial completo vía [cursor.com/docs/cli/reference/slash-commands](https://cursor.com/docs/cli/reference/slash-commands):
 
-La doc afirma que "a slash-command menu exposes the models you can switch to, your skills, the built-in commands and any MCP" — esto implica un palette autocompletable (tipear `/` → lista filtrable), patrón familiar (mismo género que Claude Code / OpenCode).
+**Cambio de modo:**
+- `/plan` — entra a Plan mode, muestra el plan actual, o somete un prompt en Plan mode
+- `/ask` — toggle Ask mode (preguntas read-only)
+- `/debug` — toggle Debug mode o somete un prompt en Debug mode (modo no cubierto por la doc de `--mode`/`using` original — dato nuevo, no era parte de los 3 modos Agent/Plan/Ask ya documentados en §(b); aparece solo como slash-command)
+- `/shell` (alias `/sh`, `/run`) — entra a modo ejecución de shell directa
+- `/vim` — toggle Vim keybindings
 
-**No confirmado:** catálogo exhaustivo de slash-commands (p. ej. `/model`, `/clear`, `/help`, `/theme` si existen) — la búsqueda dirigida a esto se cortó por rate-limit de WebSearch. Marcar como **incompleto**, no inventar entradas.
+**Gestión de sesión:**
+- `/clear` (alias `/new`, `/new-chat`, `/newchat`) — arranca un chat nuevo
+- `/resume` — abre chats recientes y resume uno
+- `/fork` — bifurca el chat actual en una sesión nueva
+- `/rename` — renombra la sesión activa
+
+**Modelo / configuración:**
+- `/model` — selecciona modelo (`Tab` para editar)
+- `/max-mode` — toggle max mode sobre el modelo seleccionado
+- `/run-everything` — controla el comportamiento de auto-ejecución
+- `/config` — ajusta settings del CLI interactivamente
+
+**Contexto / display:**
+- `/summarize` (alias `/compress`) — comprime la conversación para liberar context window
+- `/rewind` — navega hacia atrás a mensajes anteriores
+- `/line-numbers` — toggle de numeración de líneas en code blocks renderizados
+- `/show-thinking` — toggle de visibilidad de thinking blocks
+- `/status-indicators` — toggle de indicadores de estado en el título de la terminal
+
+**Utilidad:**
+- `/logs` — acceso a información de debug logs
+- `/about` — muestra versión y detalles de cuenta
+- `/help` — documentación de comandos
+- `/update` — instala la última versión del agente
+- `/logout` — cierra sesión de Cursor
+- `/quit`, `/exit` — cierra la aplicación
+- `/copy-request-id`, `/copy-conversation-id` — copia identificadores
+- `/feedback`, `/mcp`, `/plugin`, `/sandbox`, `/bedrock` — herramientas/integraciones adicionales
+
+La doc además confirma que "a slash-command menu exposes the models you can switch to, your skills, the built-in commands and any MCP" — palette autocompletable (tipear `/` → lista filtrable), mismo género que Claude Code / OpenCode.
+
+**Nota:** no hay `/theme` en el catálogo oficial — consistente con el hallazgo de §(d): no existe theming vía slash-command ni de ningún otro tipo documentado.
 
 ## (d) Theming
 
-**No confirmado — sin fuente.** El fetch a `docs/cli/reference/parameters` y el WebSearch dirigido a "cursor-agent CLI colors theme dark light" fallaron por agotamiento de cuota de sesión antes de poder confirmar si existe `--theme`, `/theme`, o soporte de esquemas de color. **No hay evidencia pública recolectada de un sistema de theming para el CLI.** Cualquier suposición (p. ej. "hereda el theme del editor Cursor" o "respeta `$NO_COLOR`") sería especulación sin cita — se omite deliberadamente en vez de presentarla como hecho. **Follow-up abierto** para una corrida futura de research.
+**RESUELTO en lo esencial (follow-up 6.0.6): no existe un sistema de theming en `cursor-agent`.** Confirmado por dos vías independientes:
+
+1. **Página oficial de configuración** ([cursor.com/docs/cli/reference/configuration](https://cursor.com/docs/cli/reference/configuration)) documenta explícitamente las opciones de config disponibles — `editor.vimMode`, `display.showLineNumbers`, `display.showThinkingBlocks`, `display.showStatusIndicators`, `display.showStatusLineRunningTime`, `hints`, `notifications` — y **ninguna es de color/tema/apariencia**. Son toggles funcionales (mostrar/ocultar), no un color scheme.
+2. **Foro oficial de Cursor** ([hilo "input cursor invisible on light-theme terminals"](https://forum.cursor.com/t/cursor-agent-cli-input-cursor-invisible-on-light-theme-terminals-please-expose-theme-cursor-color-in-cli-config-json/160845/7)) — bug reportado por la comunidad: el cursor de input es invisible en terminales con theme claro (probablemente texto oscuro sobre fondo oscuro, asumiendo un tema fijo). Un Cursor team member lo reconoce explícitamente como **"a known bug"** y califica la propuesta de la comunidad (exponer color/tema en un `cli-config.json`) como **"a great suggestion"** que están evaluando por interés — es decir, **`cli-config.json` NO existe hoy**, es un feature request abierto, no una feature shippeada.
+
+**Workaround documentado por la comunidad (no oficial, no un flag/config real del CLI):** exportar `TERM_THEME=light` en el shell profile (`~/.zshrc`/`~/.bashrc`) mitiga el problema de contraste. Esto es evidencia indirecta de que el renderer sí lee ALGUNA variable de entorno relacionada a tema — pero es un workaround reportado por un usuario, **no confirmado por la doc oficial ni por un ingeniero de Cursor en ese hilo** como parte formal de la API. Tratarlo como pista operacional, no como contrato estable.
+
+**No hay evidencia de:** `--theme`/`/theme` (no aparece en el catálogo oficial de flags ni de slash-commands, ver §c), soporte de `NO_COLOR`/`FORCE_COLOR` (búsqueda dirigida sin resultado específico a `cursor-agent` — solo resultados genéricos sobre el estándar `NO_COLOR`), ni auto-detección de light/dark del terminal.
+
+**Distinción importante:** un hilo separado del foro ("Colors not working on Agent Terminal") describe un problema de ANSI-color/`TERM=dumb` en el panel **"Agent Terminal" del editor Cursor** (Composer) — un producto distinto del `cursor-agent` CLI standalone. Se excluye deliberadamente como evidencia de theming del CLI para no conflar los dos productos (ver nota en Fuentes).
+
+**Conclusión para ADR-003:** no asumir ningún color/tema propio de `cursor-agent` al diseñar la paridad visual de la TUI de ebrain — el CLI real de Cursor hoy no tiene un sistema de theming shippeado, solo un workaround de env var reportado por comunidad y un feature request abierto sin ETA.
 
 ## (e) Sesiones
 
@@ -111,11 +172,24 @@ La doc afirma que "a slash-command menu exposes the models you can switch to, yo
 
 **Handoff a cloud/background agent:** prefijar el mensaje con `&` (interactivo o en invocación) dispara un "Cloud Agent"/"Background Agent" que abre su propia branch y trabaja async, **desacoplado del terminal local**. Modelo de sesión completamente distinto al de tmux-local — ver riesgo en §g.
 
-**No confirmado:** exit codes del proceso `agent` en modo `-p` — ninguna de las páginas fetched los documenta. Antes de que ebrain confíe en el exit code para detectar éxito/fallo en un wrapper de tmux/CI, hay que verificarlo empíricamente (ej. correr `agent -p "..." --output-format json; echo $?` y observar).
+**PARCIALMENTE RESUELTO (follow-up 6.0.6) — exit codes del proceso `agent` en modo `-p`:**
+
+- **Sigue sin existir una tabla oficial de exit codes.** Ni `cursor.com/docs/cli/headless` ni `cursor.com/docs/cli/github-actions` (re-fetched dirigido específicamente a esto) enumeran códigos — la única referencia en la doc oficial es un snippet de ejemplo `if [ $? -eq 0 ]; then ...`, que confirma que SÍ hay una convención binaria éxito(0)/fallo(≠0) implícita, pero sin enumerar qué códigos de error específicos existen (p. ej. no hay un "exit 2 = auth error" documentado).
+- **Evidencia operacional de foro (no oficial, pero concreta y reproducible por otros usuarios):** hubo un bug histórico bien documentado donde `cursor-agent -p "<prompt>"` **completaba la tarea y emitía output correctamente, pero el proceso nunca terminaba** (no devolvía el shell, requería `Ctrl+C` o un wrapper `timeout` para no colgar un pipeline de CI/CD) — [reportado en foro](https://forum.cursor.com/t/cursor-cli-headless-mode-does-not-release-the-terminal/133624), confirmado resuelto por el reportante tras actualizar al build `2025.09.18-7ae6800`. El mismo patrón **reapareció** en una entrada posterior del foro ([enero–mayo 2026](https://forum.cursor.com/t/cursor-agent-print-doesnt-exit-after-completing/150296)), con Cursor team pidiendo re-test tras un fix; el reportante confirmó en mayo 2026 que "it exits now" (aunque con latencia de 30-55s incluso para queries triviales).
+- **Implicación directa para ebrain:** el contrato de "exit code confiable" para el adapter cursor **no se puede asumir ciegamente** — el historial reciente (ago 2025–may 2026) muestra al menos dos rondas de bugs de "proceso headless que no libera la terminal". La recomendación operacional (ya reflejada en §Evitar más abajo) es envolver toda invocación `-p` de ebrain en un `timeout` explícito del lado de ebrain, y no depender solo del exit code — usar además el campo de éxito/error del propio `--output-format json` (o el evento `type: "result"` de `stream-json`, ver abajo) como señal primaria de finalización.
+- **Schema observado (no formalmente documentado, pero consistente en ejemplos de doc oficial) para `stream-json`:** eventos con forma `{"type": "system"|"assistant"|"tool_call"|"result", "subtype": "init"|"started"|"completed", ...}`; eventos de tipo `tool_call` incluyen `tool_call.<writeToolCall|readToolCall>.args.path` y `tool_call.<...>.result.success` (con metadata como `linesCreated`, `fileSize`, `totalLines`); eventos con `--stream-partial-output` traen `timestamp_ms` y omiten `model_call_id` (que sí aparece en flushes bufferizados). **No hay un schema JSON formal publicado** (sin JSON Schema / OpenAPI) — esto es reconstrucción a partir de los ejemplos de código de la doc, no una garantía de estabilidad de formato entre versiones.
+- Dato adicional operacional (de la doc de GitHub Actions): la GitHub Action oficial de Cursor **reintenta automáticamente con `-p --output-format text`** si detecta output vacío o un posible mismatch de versión del CLI — un patrón de recuperación que vale la pena copiar en el adapter de ebrain (fallback a modo texto simple si `json`/`stream-json` devuelve vacío).
 
 ## (f) Render stack
 
-**No publicado / no confirmado en ninguna fuente fetched.** cursor-agent es closed-source (a diferencia de opencode/codex/gemini-cli, que ebrain ya tiene clonados en `vendor/` y cuyo stack de render se puede leer directamente del código — ver `discovery/00-environment.md` §F6). No hay indicación pública de si usa Ink/React (como Claude Code y gemini-cli), un renderer ANSI a medida, o algo más. **Marcar explícitamente como desconocido.** Cualquier conjetura ("probablemente Node/TS dado el linaje VS Code de Cursor") es especulación circunstancial sin cita — se documenta acá solo para que quede registrado como hipótesis no verificada, NO como insumo válido para ADR-003.
+**RECONFIRMADO como genuinamente no divulgado (follow-up 6.0.6) — no es un gap por falta de búsqueda, es ausencia real de fuente pública.** cursor-agent es closed-source (a diferencia de opencode/codex/gemini-cli, que ebrain ya tiene clonados en `vendor/` y cuyo stack de render se puede leer directamente del código — ver `discovery/00-environment.md` §F6).
+
+Búsquedas dirigidas adicionales en esta corrida (`cursor-agent CLI built with Ink React terminal renderer`, `"written in" Rust Go Node`, `cursor-agent cli "terminal UI" framework implementation blog announcement technical details`) no devolvieron ninguna fuente oficial ni de terceros que confirme el framework/runtime de render:
+- El blog de lanzamiento ([cursor.com/blog/cli](https://cursor.com/blog/cli)) describe features de producto (sesiones conversacionales, ediciones inline, confirmaciones, ejecución paralela en background) pero **cero mención de stack técnico**.
+- El único paquete npm público llamado `cursor-agent` (visto en resultados de búsqueda) es un proyecto de terceros no relacionado ("task sequence creator", último release hace un año) — **no es el binario real de Cursor**, que se distribuye vía `curl https://cursor.com/install -fsS | bash`, no vía npm registry. Se descarta explícitamente como pista falsa — no usar este paquete como evidencia de nada sobre el `cursor-agent` real.
+- No hay indicación pública de si usa Ink/React (como Claude Code y gemini-cli), un renderer ANSI a medida, o algo más.
+
+**Marcar explícitamente como desconocido — sin fecha de resolución posible sin decompilación, que está fuera de alcance por mandato del método.** Cualquier conjetura ("probablemente Node/TS dado el linaje VS Code de Cursor") es especulación circunstancial sin cita — se documenta acá solo para que quede registrado como hipótesis no verificada, NO como insumo válido para ADR-003. Este es el único de los 4 gaps que sigue genuinamente abierto tras el follow-up — no por límite de cuota, sino porque Cursor no lo publica.
 
 ## (g) Qué robar / qué evitar (foco: lanzar/observar dentro de tmux)
 
@@ -132,8 +206,9 @@ La doc afirma que "a slash-command menu exposes the models you can switch to, yo
 
 1. **El handoff `&` a cloud/background agent mueve el trabajo fuera del panel tmux local silenciosamente.** Si un `capture-pane` de una sesión ebrain-lanzada de golpe deja de mostrar actividad, no es necesariamente un colgado — puede ser un handoff a la nube. El adapter debería, por default, evitar/inhibir este atajo en sesiones lanzadas por ebrain (o al menos detectarlo y superficie-arlo explícitamente), para que un panel "silenciosamente vacío" no se trate como sesión muerta que hay que reiniciar.
 2. **El modo Review interactivo (`Ctrl+R`) es un sub-UI modal con su propia gramática de navegación** (arriba/abajo = scroll de hunks, izquierda/derecha = cambio de archivo). Conducirlo a ciegas con `send-keys` (sin `capture-pane` de feedback para saber qué archivo/hunk tiene foco) es frágil. Preferencia: nunca entrar a Review desde una sesión orquestada por ebrain — quedarse en `-p` headless para todo lo scripteado, reservar el attach interactivo para cuando Eduardo está mirando el panel en persona.
-3. **Theming y render stack quedaron sin confirmar en esta corrida** (rate-limit de WebFetch/WebSearch). No hay que hardcodear en ADR-003 ni en el design system ninguna suposición sobre los colores de cursor-agent o si usa Ink. Si la paridad visual específica con cursor-agent se vuelve un objetivo, hace falta una pasada de research de seguimiento (retomar con `cursor.com/docs/cli/reference/parameters` y una búsqueda dirigida a theming).
-4. **Exit codes no confirmados.** No construir la detección de éxito/fallo de un run headless de cursor-agent únicamente sobre el exit code del proceso hasta verificarlo empíricamente; preferir parsear el propio campo de éxito/error de `--output-format json` (una vez confirmado su schema) o escanear `stream-json` en busca de un mensaje terminal de tipo "done".
+3. **Theming: confirmado que no existe un sistema real (follow-up 6.0.6, ver §d).** No hay que hardcodear en ADR-003 ni en el design system ninguna suposición sobre los colores de cursor-agent heredados o configurables — no hay `--theme`/`/theme`, no hay `cli-config.json` (es un feature request abierto, no shippeado), y hay un bug reconocido de contraste en terminales claras. Si Eduardo quiere paridad visual real con cursor-agent en algún momento, no hay nada público que copiar — habría que observarlo corriendo (comportamiento, no doc).
+4. **Render stack: confirmado que sigue siendo desconocido (follow-up 6.0.6, ver §f) — no por falta de búsqueda sino por ausencia real de fuente pública.** No construir ADR-003 asumiendo Ink/React ni ningún otro framework para cursor-agent.
+5. **Exit codes: parcialmente resuelto (follow-up 6.0.6, ver §e).** No hay tabla oficial de exit codes, pero SÍ hay evidencia operacional de foro de al menos dos rondas de bugs de "proceso `-p` que no libera la terminal" (ago 2025 → mayo 2026, el segundo aparentemente ya arreglado). No construir la detección de éxito/fallo de un run headless de cursor-agent únicamente sobre el exit code; envolver siempre la invocación en un `timeout` explícito del lado de ebrain, y preferir parsear el campo de éxito/error de `--output-format json` o el evento `type: "result"` de `stream-json` (schema observado en ejemplos de doc, no formalmente publicado) como señal primaria de finalización.
 
 ━━━
 
@@ -144,4 +219,9 @@ La doc afirma que "a slash-command menu exposes the models you can switch to, yo
 3. `--force`/`--yolo` es la línea divisoria dura entre "propone" y "escribe de verdad" — el harness de ebrain debe tratarlo como el flag de riesgo explícito, análogo al full-auto de Codex y al skip-permissions de Claude Code.
 4. Si se necesita interactividad real (no headless) dentro de tmux, el newline seguro es `Ctrl+J`/`Alt+Enter`, NO `Shift+Enter` (documentado como dependiente del emulador, no garantizado bajo tmux).
 5. El atajo `&` de cloud/background agent es una trampa de observabilidad: saca el trabajo del panel local sin aviso — el adapter debe inhibirlo o detectarlo explícitamente, no tratarlo como "sesión colgada."
-6. Gaps abiertos que requieren una corrida de research de seguimiento (bloqueados por cuota de tool esta vez): catálogo exhaustivo de slash-commands, theming/colores, render stack, y exit codes del modo `-p`. No se rellenaron con inferencia — quedan marcados como desconocidos.
+6. **Gaps abiertos — estado tras follow-up 6.0.6:**
+   - **Slash-commands (§c): RESUELTO** — catálogo oficial completo de 25+ comandos vía `cursor.com/docs/cli/reference/slash-commands`.
+   - **Theming (§d): RESUELTO en lo esencial** — confirmado que no existe (no `--theme`/`/theme`, no `cli-config.json` real, bug reconocido de contraste, workaround comunitario no-oficial `TERM_THEME=light`).
+   - **Render stack (§f): SIGUE ABIERTO — genuinamente indocumentado**, reconfirmado tras búsqueda dirigida adicional. No es un gap de cuota, es ausencia real de fuente pública; solo se resolvería observando el binario en ejecución o esperando una divulgación de Cursor.
+   - **Exit codes / `-p` (§e): PARCIALMENTE RESUELTO** — sin tabla oficial, pero con evidencia operacional de foro (bug histórico de proceso colgado, corregido en dos rondas ago-2025→may-2026) que informa una recomendación concreta: envolver `-p` en `timeout` y no confiar solo en el exit code.
+   - Ninguno de los 4 se rellenó con inferencia sin marcar — cada hallazgo nuevo está citado a una URL específica (oficial o de foro), y lo que sigue sin fuente (render stack) permanece marcado como desconocido en vez de completarse con una conjetura.
