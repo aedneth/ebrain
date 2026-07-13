@@ -51,7 +51,7 @@ export function table(props: TableProps, theme: Theme): string[] {
     return s;
   };
 
-  const header = theme.fg("text.secondary") + buildRow(columns.map((c) => c.label)) + reset;
+  const header = theme.fg("text.muted") + buildRow(columns.map((c) => c.label)) + reset;
   const sep = theme.fg("background.border") + hairline.repeat(total) + reset;
 
   const bodyRows = rows.map((r, i) => {

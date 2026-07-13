@@ -4,6 +4,18 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-13 — F6.3.2 CERRADA: 16 widgets DS-bound (kit → widget library) `[AUDIT_PASS]`
+
+- **16 widgets** construidos por 2 workers Sonnet ‖ (core/data/dialog + chrome/layout/brand) → `tui/src/widgets/{core,data,chrome,layout,brand,dialog}/`. Cada uno función pura `(props, theme) → string[]`, **theme inyectado** (determinista, cero hex hardcodeado), **1:1 con su contrato del design system** (props+enums de `_adherence.oxlintrc.json`, render matcheando el `.jsx`). Inventario: badge·gauge·toast·spinner (core) · table·scrolllist·sessioncard (data) · tabbar·statusbar·hintbar·keyhint·footer (chrome) · panel·terminalpeek (layout) · wordmark (brand) · confirm (dialog).
+- **Auditoría Opus (maker≠checker)** — verificado en vivo renderizando cada widget difícil: Panel corners **redondeados `╭─╮`** (no-dialog, título izquierda como el `.jsx`) vs **rectos `┌─┐`** (dialog); TerminalPeek borde **siempre dim** (nunca teal — contenido ajeno); SessionCard `▸ ● agente nombre uptime estado` componiendo Badge; ScrollList ventana + marker ▸ + scrollbar █/░; Gauge auto-tone (warn≥75%/error≥90%); **Wordmark `WORDMARK_MATRIX` byte-verbatim del `.jsx`** (e/b/r/a/i/n idénticos — el elemento firma es fiel).
+- **Símbolos DS-sancionados:** Toast/Confirm usan `✓`/`✗` (U+2713/U+2717) — NO emoji, definidos localmente con fallback ASCII (`+`/`x`), fuera de theme.ts (el token `scrollbar` del DS es prosa `"█ (thumb) │ (track)"` → widget usa glifos `gauge` █/░, workaround correcto).
+- **Fix Opus:** header de Table `text.secondary`→`text.muted` (jsx-exact `--text-3`; body/sep/selected ya eran correctos) + test actualizado.
+- **Checks de gate (anticipando 6.3.7):** cero hex hardcodeado en `tui/src` salvo theme.ts (fuente de tokens); cero-emoji. Snapshots width-exacto + variante ASCII por grupo. **Suite completa `bun test ./cli ./tui`: 346 pass / 0 fail** (29 archivos, 1.58s).
+- **Nota:** naming de export inconsistente entre workers (`scrolllist`/`sessioncard` minúscula vs `terminalPeek`/`keyHint` camelCase) — sin impacto funcional; la Ola 3 (shell) importa por nombre exacto.
+- **Sigue:** Ola 3 = 6.3.3 shell (contra mockups `ui_kits/ebrain/`) · 6.3.4 palette · 6.3.5 help · 6.3.6 `ebrain ui` → GATE 6.3.7. Pendiente resolver divergencia de tabs (mockup `home/sessions/launch/memory/routing/doctor` vs SPRINT `Overview/Sessions/Memory/Routing/Fleet/Doctor`).
+
+---
+
 ## 2026-07-13 — F6.2 CERRADA (design-sync → theme.ts) + 6.3.1 (kit FlowClock extraído) `[AUDIT_PASS]`
 
 - **Steer de Eduardo (vinculante para todo F6):** la TUI se construye **contra el design system, no inspirada** en él. Los widgets reflejan **1:1** el contrato de cada componente (`design-system/components/**/*.{d.ts,prompt.md,jsx}` — props y enums enumerados en `_adherence.oxlintrc.json`); los mockups de `ui_kits/ebrain/` son **referencia de aceptación** de las vistas (esqueleto obligatorio StatusBar·TabBar·hairline·contenido·HintBar·Footer, un momento teal por vista, violeta=solo memoria); cero hex hardcodeado (todo vía `theme.ts`). Esto gobierna Olas 2 (widgets) y 3 (shell/paneles).

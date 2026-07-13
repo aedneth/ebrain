@@ -32,9 +32,9 @@ describe("table (truecolor/unicode)", () => {
     expect(strip(out[3])).toBe("14:35    codex            $1.10  ");
   });
 
-  it("selected row carries the selectedBg + primary text; header uses text.secondary", () => {
+  it("selected row carries the selectedBg + primary text; header uses text.muted (jsx-exact --text-3)", () => {
     const out = table({ columns: COLUMNS, rows: ROWS, selected: 0 }, t);
-    expect(out[0]).toContain(t.fg("text.secondary"));
+    expect(out[0]).toContain(t.fg("text.muted"));
     expect(out[1]).toContain(t.fg("background.border"));
     expect(out[2]).toContain(t.selectedBg);
     expect(out[3]).not.toContain(t.selectedBg);
