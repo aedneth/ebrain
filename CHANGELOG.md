@@ -4,6 +4,16 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-14 — P1 plug-and-play: `ebrain up` + `ebrain onboard --all` (HTTP-MCP idempotente)
+
+- **Nuevo `ebrain up`:** un comando asegura el daemon HTTP-MCP, recupera/acuña `EBRAIN_MCP_TOKEN` sin imprimirlo, corre smoke `tools/list`, y auto-registra agentes detectados. El token se guarda en `~/.config/ebrain/mcp-token.env` con chmod 600. El launcher `scripts/ebrain-brain` acuña el token **durante el boot, antes de bindear HTTP**, eliminando el baile manual stop/mint/start.
+- **Nuevo `ebrain onboard [--all|agent]`:** registra claude/codex/gemini/cursor/opencode en `http://127.0.0.1:8541/mcp`. Codex usa `--bearer-token-env-var EBRAIN_MCP_TOKEN`; Claude/Gemini/OpenCode usan header bearer; Cursor se mergea en `~/.cursor/mcp.json`. Los manifests `mcp.register` ahora delegan a `ebrain onboard <agent>`, así `ebrain harness install --mcp` no revierte al stdio.
+- **Fallback conservado:** `scripts/gbrain-mcp` sigue versionado como rollback stdio; no se borra el camino anterior. Las sesiones tmux (`ebrain sessions new`) inyectan `EBRAIN_MCP_TOKEN` desde el store para que agentes lanzados por TUI lean el brain sin shell-profile manual.
+- **Daemon hardening:** `ebrain-daemon start` ahora usa `setsid` cuando existe; `nohup` ignoraba SIGHUP pero dejaba el host en el process group del runner, que podía limpiar con SIGTERM al cerrar la llamada. Verificado healthy >55s post-start con SID/PGID propios.
+- **Verify:** `bun test ./cli/` = **135 pass / 0 fail**; `bun test ./tui/test/` = **360 pass / 0 fail**; `ebrain up` ejecutado 2× idempotente; smoke `tools/list` = **94 tools**; `ebrain onboard --all` = 5 OK. Queda pendiente para D.6/D.7: prueba exacta ≥2 agentes reales concurrentes + auditoría Opus/Fable.
+
+---
+
 ## 2026-07-14 — FASE D: daemon HTTP-MCP compartido LIVE + handoff a Codex (D.2/D.5 hechos, cutover en curso)
 
 - **Host daemon LIVE:** `gbrain serve --http --port 8541 --bind 127.0.0.1` (loopback) corriendo como dueño único del lock PGLite, vía `scripts/ebrain-brain` + `ebrain daemon {start|stop|status|restart}`. Verificado en vivo: `/health` 200, `/mcp` sin bearer 401, bearer válido (`gbrain auth create`) → **200**, escuchando solo en loopback, RSS 317MB / 561MB libres. Resuelve de raíz el "MCP nunca carga" (lock single-writer; cada `serve` stdio de agente hacía polling infinito).

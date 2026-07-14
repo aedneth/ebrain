@@ -17,7 +17,7 @@ hooks:
   events: {}
   wrappers: []
 mcp:
-  register: "bash $HOME/eBrain/harness/core/mcp-wire.sh opencode"
+  register: "ebrain onboard opencode"
 env:
   AGENT_NAME: opencode
 doctor: "opencode --version"

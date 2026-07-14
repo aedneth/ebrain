@@ -21,7 +21,7 @@ hooks:
     - { file: inject-context.sh, core: inject-context.sh, event: session_start }
     - { file: log-session.sh,    core: log-session.sh,    event: stop }
 mcp:
-  register: "gemini mcp add ebrain -- $HOME/.config/ebrain/gbrain-mcp"
+  register: "ebrain onboard gemini"
 env:
   AGENT_NAME: gemini
 doctor: "gemini --version"

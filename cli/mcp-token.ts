@@ -276,6 +276,21 @@ export async function healthCheck(url: string, timeoutMs = 3_000): Promise<boole
   }
 }
 
+export function toolsCountFromMcpBody(body: string): number {
+  const candidates = body.split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.startsWith("data:") ? line.slice("data:".length).trim() : line)
+    .filter((line) => line.startsWith("{"));
+  for (const candidate of candidates.length > 0 ? candidates : [body]) {
+    try {
+      const parsed = JSON.parse(candidate) as { result?: { tools?: unknown[] } };
+      if (Array.isArray(parsed.result?.tools)) return parsed.result.tools.length;
+    } catch { /* try next candidate */ }
+  }
+  return 0;
+}
+
 export async function toolsListSmoke(url: string, token: string, timeoutMs = 10_000): Promise<{ ok: true; tools: number } | { ok: false; message: string }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -292,14 +307,7 @@ export async function toolsListSmoke(url: string, token: string, timeoutMs = 10_
     });
     const body = await fetchTextSafe(res);
     if (!res.ok) return { ok: false, message: `tools/list returned HTTP ${res.status}: ${redactSecrets(body, [token])}` };
-    const jsonLine = body.split(/\r?\n/).find((line) => line.trim().startsWith("{")) ?? body;
-    try {
-      const parsed = JSON.parse(jsonLine) as { result?: { tools?: unknown[] } };
-      const tools = Array.isArray(parsed.result?.tools) ? parsed.result.tools.length : 0;
-      return { ok: true, tools };
-    } catch {
-      return { ok: true, tools: 0 };
-    }
+    return { ok: true, tools: toolsCountFromMcpBody(body) };
   } catch (e) {
     return { ok: false, message: redactSecrets(e instanceof Error ? e.message : String(e), [token]) };
   } finally {

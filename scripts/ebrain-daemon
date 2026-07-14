@@ -46,7 +46,14 @@ case "${1:-status}" in
     if [ ! -x "$LAUNCHER" ]; then echo "ebrain daemon: launcher no encontrado ($LAUNCHER)" >&2; exit 127; fi
     mkdir -p "$CFG"
     echo "ebrain daemon: arrancando host en 127.0.0.1:$PORT …"
-    nohup "$LAUNCHER" >>"$LOG" 2>&1 &
+    # `setsid` separa el process group del shell/harness que invoca este control.
+    # `nohup` solo ignora SIGHUP; algunos runners limpian el process group con
+    # SIGTERM al cerrar la llamada, lo que tumbaba el host segundos después.
+    if command -v setsid >/dev/null 2>&1; then
+      setsid "$LAUNCHER" >>"$LOG" 2>&1 &
+    else
+      nohup "$LAUNCHER" >>"$LOG" 2>&1 &
+    fi
     echo $! > "$PIDFILE"
     sleep 1
     if is_running; then

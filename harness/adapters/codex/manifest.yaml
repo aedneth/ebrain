@@ -20,7 +20,7 @@ hooks:
     - { file: session-context.sh,   core: inject-context.sh, event: session_start }
     - { file: log-session.sh,       core: log-session.sh,    event: stop }
 mcp:
-  register: "codex mcp add ebrain -- $HOME/.config/ebrain/gbrain-mcp"
+  register: "ebrain onboard codex"
 env:
   AGENT_NAME: codex
 doctor: "codex doctor"

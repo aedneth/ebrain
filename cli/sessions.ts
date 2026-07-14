@@ -25,6 +25,7 @@
 import { existsSync, realpathSync } from "fs";
 import { join, resolve } from "path";
 import { homedir } from "os";
+import { EBRAIN_MCP_TOKEN_ENV, readTokenFile, tokenStorePaths } from "./mcp-token.ts";
 
 const HOME = homedir();
 const EBRAIN_HOME = process.env.EBRAIN_HOME || join(HOME, "eBrain");
@@ -228,6 +229,9 @@ export async function newSession(agent: string, slug: string, opts: NewSessionOp
     cmd = resolved.cmd;
     env = { ...resolved.env, ...(opts.env ?? {}) };
   }
+
+  const mcpToken = readTokenFile(tokenStorePaths().tokenFile);
+  if (mcpToken && !env[EBRAIN_MCP_TOKEN_ENV]) env[EBRAIN_MCP_TOKEN_ENV] = mcpToken;
 
   const existing = await listSessions();
   if (existing.ok && existing.sessions.some((s) => s.name === name)) {

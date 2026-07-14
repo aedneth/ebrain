@@ -19,7 +19,7 @@ hooks:
     - "SessionStart: banner de contexto CKIS"
     - "session logging: hooks del vault CKIS"
 mcp:
-  register: null                  # el MCP ebrain ya está conectado en Claude Code
+  register: "ebrain onboard claude"
 env:
   AGENT_NAME: claude
 doctor: null

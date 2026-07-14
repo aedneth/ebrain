@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# ebrain-up — wrapper de `ebrain up/onboard`.
+# Carga SOLO el entorno privado necesario para que el comando pueda usar el
+# bootstrap admin token o el token MCP local, sin imprimir valores.
+set -euo pipefail
+
+EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
+CFG="$HOME/.config/ebrain"
+mkdir -p "$CFG/wd"
+
+ENV_FILE="$CFG/.env"
+if [ -f "$ENV_FILE" ]; then set -a; . "$ENV_FILE"; set +a; fi
+
+TOKEN_FILE="$CFG/mcp-token.env"
+if [ -f "$TOKEN_FILE" ]; then set -a; . "$TOKEN_FILE"; set +a; fi
+
+BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"
+command -v bun >/dev/null 2>&1 && BUN_BIN=bun
+
+exec "$BUN_BIN" run "$EBRAIN_HOME/cli/up.ts" "$@"
