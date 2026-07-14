@@ -29,7 +29,8 @@ while true; do
   # Bloquea hasta 2s esperando stdin — sin busy-loop. Timeout => sigue al próximo tick.
   if IFS= read -r -t 2 line; then
     if [ -n "${line}" ]; then
-      echo "fake-agent: recibí » ${line}"
+      # Formato estable (lo asserta cli/sessions.test.ts 6.1.6): "fake-agent: recibí: <line>".
+      echo "fake-agent: recibí: ${line}"
     fi
   fi
 done

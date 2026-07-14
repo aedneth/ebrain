@@ -74,7 +74,9 @@ describe("buildFrame — home snapshot (120x32)", () => {
 });
 
 describe("buildFrame — stub tabs render '<tab> — proximamente'", () => {
-  for (const tab of ["sessions", "launch", "memory", "routing", "doctor"] as const) {
+  // `sessions` is a REAL view as of F6.4.3 (see tui/test/sessions/panel.test.ts);
+  // the remaining four are still stubs until F6.5/6.6.
+  for (const tab of ["launch", "memory", "routing", "doctor"] as const) {
     it(`${tab} renders a stub panel`, () => {
       const frame = buildFrame({ tab, confirmQuit: false, cwd: "~" }, { cols: 120, rows: 32 }, theme);
       const plain = frame.map(stripAnsi).join("\n");
