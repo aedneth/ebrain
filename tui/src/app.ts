@@ -37,7 +37,16 @@ import { panel } from "./widgets/layout/panel.js";
 import { gauge } from "./widgets/core/gauge.js";
 import { sessioncard, type SessionState } from "./widgets/data/sessioncard.js";
 
-import { TABS, type TabName, hintsForTab } from "./commands.js";
+import { TABS, type TabName, hintsForTab, COMMANDS, type Command } from "./commands.js";
+import {
+  type PaletteState,
+  emptyPaletteState,
+  paletteApplyKey,
+  filterCommands,
+  toItems,
+} from "./palette.js";
+import { commandPalette } from "./widgets/input/commandpalette.js";
+import { renderHelp } from "./help.js";
 
 export { TABS, type TabName } from "./commands.js";
 
@@ -68,6 +77,9 @@ export interface FrameSize {
   rows: number;
 }
 
+/** A transient modal overlay composited over the base view (6.3.4/6.3.5). */
+export type Overlay = { kind: "palette"; palette: PaletteState } | { kind: "help" };
+
 export interface AppState {
   tab: TabName;
   /** true after a first Ctrl-C — a second Ctrl-C quits ("ctrl+c x2" per the registry). */
@@ -76,6 +88,8 @@ export interface AppState {
    * not run_bun's neutral working dir. Collapsed to "~/..." when under $HOME. */
   cwd: string;
   branch?: string;
+  /** Open command palette / help overlay, or null when none. */
+  overlay?: Overlay | null;
 }
 
 /** Caller's cwd: cli/ebrain exports EBRAIN_CALLER_CWD before cd-ing to run_bun's
@@ -108,7 +122,7 @@ function detectBranch(dir: string): string | undefined {
 
 export function initialState(): AppState {
   const dir = callerCwd();
-  return { tab: "home", confirmQuit: false, cwd: collapseHome(dir), branch: detectBranch(dir) };
+  return { tab: "home", confirmQuit: false, cwd: collapseHome(dir), branch: detectBranch(dir), overlay: null };
 }
 
 // ---------------------------------------------------------------------------
@@ -124,7 +138,34 @@ export interface ReduceResult {
 }
 
 function withTab(state: AppState, tab: TabName): AppState {
-  return { ...state, tab, confirmQuit: false };
+  return { ...state, tab, confirmQuit: false, overlay: null };
+}
+
+function openPalette(state: AppState): ReduceResult {
+  return settle({ ...state, confirmQuit: false, overlay: { kind: "palette", palette: { open: true, query: "", selected: 0 } } });
+}
+
+function openHelp(state: AppState): ReduceResult {
+  return settle({ ...state, confirmQuit: false, overlay: { kind: "help" } });
+}
+
+/**
+ * Execute a registry command selected from the palette. Maps `Command.id` to the
+ * same transitions the raw keybinds produce — so the palette and the keyboard can
+ * never diverge (both are views over `COMMANDS`). `state` arrives with the overlay
+ * already cleared by the caller.
+ */
+function runCommand(state: AppState, command: Command): ReduceResult {
+  const id = command.id;
+  if (id === "app.quit") return { state, quit: true, forceRedraw: false };
+  if (id === "app.redraw") return { state, quit: false, forceRedraw: true };
+  if (id === "app.help") return openHelp(state);
+  if (id === "palette.open") return openPalette(state);
+  if (id.startsWith("nav.")) {
+    const suffix = id.slice(4);
+    if ((TABS as readonly string[]).includes(suffix)) return settle(withTab(state, suffix as TabName));
+  }
+  return settle(state);
 }
 
 function settle(state: AppState): ReduceResult {
@@ -137,6 +178,25 @@ function settle(state: AppState): ReduceResult {
  * so app.test.ts can drive it directly without a fake TTY.
  */
 export function reduce(state: AppState, key: Key): ReduceResult {
+  // Overlay routing takes precedence over every base keybind while open.
+  if (state.overlay) {
+    if (state.overlay.kind === "palette") {
+      const r = paletteApplyKey(state.overlay.palette, key);
+      if (r.action?.type === "run") return runCommand({ ...state, overlay: null }, r.action.command);
+      if (r.action?.type === "close") return settle({ ...state, overlay: null });
+      return settle({ ...state, overlay: { kind: "palette", palette: r.state } });
+    }
+    // help overlay: esc / enter / ? / q dismiss it; any other key leaves it open.
+    if (
+      key.name === "escape" ||
+      key.name === "enter" ||
+      (key.name === "char" && (key.char === "?" || key.char === "q"))
+    ) {
+      return settle({ ...state, overlay: null });
+    }
+    return settle(state);
+  }
+
   if (key.name === "tab") {
     const idx = TABS.indexOf(state.tab);
     return settle(withTab(state, TABS[(idx + 1) % TABS.length]!));
@@ -163,8 +223,11 @@ export function reduce(state: AppState, key: Key): ReduceResult {
     }
     if (ch === "l") return settle(withTab(state, "launch"));
 
-    // "/" (palette) and "?" (help): registry entries exist (commands.ts) but are
-    // stub targets until 6.3.4/6.3.5 — no-op here beyond clearing the quit-confirm arm.
+    // Overlays: "/" or ctrl+p ("\x10") open the command palette; "?" opens help.
+    if (ch === "/" || ch === "\x10") return openPalette(state);
+    if (ch === "?") return openHelp(state);
+
+    // Any other printable char: no-op beyond clearing the quit-confirm arm.
     return settle({ ...state, confirmQuit: false });
   }
 
@@ -205,7 +268,52 @@ export function buildFrame(state: AppState, size: FrameSize, theme: Theme): stri
   // Defensive: guarantee exactly `rows` rows of exactly `cols` width regardless of
   // how the section arithmetic above landed.
   while (frame.length < rows) frame.push(" ".repeat(cols));
-  return frame.slice(0, rows).map((r) => padTo(truncate(r, cols), cols));
+  const base = frame.slice(0, rows).map((r) => padTo(truncate(r, cols), cols));
+
+  if (state.overlay) return compositeOverlay(base, state.overlay, size, theme);
+  return base;
+}
+
+// ---------------------------------------------------------------------------
+// Overlay compositing — palette (6.3.4) + help (6.3.5) modals.
+//
+// A band-clear composite: the box's row band is cleared to a plain void scrim and
+// the centered box placed on it; rows above/below keep the base view (so you still
+// see the tab context behind the modal). Exact width/height preserved.
+// ---------------------------------------------------------------------------
+
+function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme): { box: string[]; top: number; left: number } {
+  if (overlay.kind === "palette") {
+    const width = Math.min(64, Math.max(20, cols - 4));
+    const maxItems = Math.max(1, rows - 8);
+    const items = toItems(filterCommands(overlay.palette.query)).slice(0, maxItems);
+    const selected = Math.min(Math.max(0, overlay.palette.selected), Math.max(0, items.length - 1));
+    const box = commandPalette({ query: overlay.palette.query, items, selected, width }, theme);
+    const left = Math.max(0, Math.floor((cols - width) / 2));
+    const top = Math.max(0, Math.min(Math.floor(rows * 0.3), rows - box.length));
+    return { box, top, left };
+  }
+  const width = Math.min(66, Math.max(20, cols - 4));
+  const box = renderHelp(theme, COMMANDS, width);
+  const left = Math.max(0, Math.floor((cols - width) / 2));
+  const top = Math.max(0, Math.floor((rows - box.length) / 2));
+  return { box, top, left };
+}
+
+function compositeOverlay(base: string[], overlay: Overlay, size: FrameSize, theme: Theme): string[] {
+  const { cols, rows } = size;
+  const { box, top, left } = overlayBox(overlay, cols, rows, theme);
+  const out = base.slice();
+  for (let i = 0; i < box.length; i++) {
+    const y = top + i;
+    if (y < 0 || y >= rows) continue;
+    const boxRow = box[i]!;
+    const boxW = displayWidth(boxRow);
+    const leftPad = " ".repeat(Math.max(0, left));
+    const rightPad = " ".repeat(Math.max(0, cols - left - boxW));
+    out[y] = padTo(truncate(leftPad + boxRow + rightPad, cols), cols);
+  }
+  return out;
 }
 
 function buildStatusRow(theme: Theme, cols: number): string {

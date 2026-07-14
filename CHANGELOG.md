@@ -4,6 +4,16 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-13 — F6.3 CERRADA: command palette + help overlay + GATE 6.3.7 `[AUDIT_PASS]`
+
+- **6.3.4 command palette** (`/` · `ctrl+p`): `tui/src/widgets/input/commandpalette.ts` (contra `CommandPalette.jsx` — `›` prompt bold, query, caret `▌`, **borde teal focus = el momento de acento**, fuzzy subsequence con matches en teal bold, selected en `background.raised`, footer `↑↓ navegar · enter · esc`) + `tui/src/palette.ts` (state + `filterCommands` fuzzy + `paletteApplyKey`, portado de FlowClock, sobre el registry `COMMANDS`) + wiring en `app.ts` (overlay state, `runCommand` mapea `Command.id`→transición, compositing band-clear centrado ~30% desde arriba). Verificado: `/`→abre, "ss"→sessions, enter→ejecuta+cierra, esc→cierra.
+- **6.3.5 help overlay** (`?`): `tui/src/help.ts` `renderHelp` autogenera un dialog recto `┌─┐` agrupado nav/global **desde `COMMANDS`** — test dedicado itera el registry y asserta que cada `key` aparece → imposible desincronizar (regla claude-code). q dentro del overlay lo cierra sin matar el proceso.
+- **Nota de proceso:** 6.3.4/6.3.5 los construyó **Opus directamente** (fallback: los workers Sonnet venían muriendo por límite de sesión), con auto-auditoría rigurosa — pura lógica de reducer + render con snapshots. Integración probada extremo a extremo.
+- **GATE 6.3.7 `[AUDIT_PASS]`:** #1 boot **0.10s / RSS 43.2 MiB** con overlays (presupuesto ADR-003 ≤100MB); #8 `grep -rn '#[0-9a-fA-F]\{6\}' tui/src | grep -v theme` **vacío** (solo theme.ts tiene hex = el DS codificado). Suite completa **399 pass / 0 fail** (32 archivos), cero-emoji, boot→quit→restore limpio (alt enter/exit). **FASE 6.3 CERRADA.**
+- **Estado F6:** 6.0 ✅ 6.1 ✅ 6.2 ✅ **6.3 ✅** → sigue 6.4 (sustrato tmux: panel Sessions con peek/attach/kill, gobernador RAM, ADR-004) · 6.5 (paneles de conocimiento) · 6.6 (orquestación+advisor v1) · 6.7 (hardening+ship). La TUI ya arranca como cockpit navegable.
+
+---
+
 ## 2026-07-13 — F6.3.3 + 6.3.6: app shell bootable + `ebrain ui` `[AUDIT_PASS]` (la TUI arranca)
 
 - **`ebrain ui` bootea.** `tui/src/app.ts`: `buildFrame(state,size,theme)` PURO (StatusBar→TabBar→hairline→vista→HintBar→Footer, compuesto con kit `splitV`/`splitH` + los 16 widgets) · `reduce(state,key)→{state,quit,forceRedraw}` PURO (nav 1-6/tab/shift+tab, quit) · `runUi()` main loop (alt-screen+diffFrames del kit, resize SIGWINCH, **terminal SIEMPRE restaurada**: try/finally + SIGINT/SIGTERM + uncaughtException). Registry central `tui/src/commands.ts` → HintBar+Footer generados de ahí (regla claude-code: nunca hardcode, keybinds/hints/help siempre en sync).
