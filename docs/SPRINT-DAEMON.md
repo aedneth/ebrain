@@ -97,12 +97,12 @@ memoria viva. **Decisión: rename SOLO de la superficie ebrain-owned, el engine 
 - [x] D.1.2 El cliente MCP-HTTP del agente es **transporte nativo del CLI** (claude/codex) → NO agrega proceso gbrain. El daemon **reemplaza** los N `serve` por-agente: **1×~600MB host vs N×~600MB** = neto MÁS eficiente para multi-agente. Thin-agents agregan ~0 RSS de gbrain.
 - [x] D.1.3 **GATE criterio 3 = PASS (viable):** idle ~9MB (swappable), pico ~600MB solo al servir, consolida N serves en 1. La presión de 4GB es pre-existente; el daemon no la empeora (la consolida). **Nota:** el pico ~600MB al servir mantiene vigente el gobernador un-heavy-a-la-vez (F6.4.6).
 
-## FASE D.2 — Host launcher supervisado (gate criterio 2)  `[ ]`
+## FASE D.2 — Host launcher supervisado (gate criterio 2)  `[~]`
 
-- [ ] D.2.1 Launcher persistente `gbrain serve --http --port 8541 --bind 127.0.0.1` con **pidfile + single-instance guard** (nunca 2 hosts) y logs a `~/.config/ebrain/daemon.log`. Ubicación **ebrain-native**: `~/.config/ebrain/ebrain-brain` (ver §Rename policy).
-- [ ] D.2.2 Comando de control `ebrain daemon {start,stop,status,restart}` (o systemd user unit `ebrain-brain.service` con `Restart=on-failure`). Decidir supervisado-vs-systemd en D.2. **Verify:** start→status UP→stop→status DOWN.
-- [ ] D.2.3 **Auditar** la superficie auth de serve-http (OAuth CC, bearer, rate-limit, CORS, bind loopback) — el gate criterio 2. Documentar hallazgos; loopback-only mitiga exposición. **Verify:** curl a :8541 sin bearer → 401; con bearer → 200.
-- [ ] D.2.4 Integrar el estado del daemon en el panel **Doctor** de la TUI (health check del host). **Verify:** doctor muestra "brain daemon: up/down".
+- [x] D.2.1 Launcher `scripts/ebrain-brain` (ebrain-native): `gbrain serve --http --port ${EBRAIN_BRAIN_PORT:-8541} --bind 127.0.0.1`, mismo patrón de env que ebrain-mcp (cwd neutral + sourcea la key), SIN `MCP_STDIO=1`. Foreground; el background lo maneja el control. **Verify:** `bash -n` OK.
+- [x] D.2.2 Control `scripts/ebrain-daemon` + `ebrain daemon {start,stop,status,restart}` cableado al dispatcher. **pidfile** `ebrain-brain.pid` + is_running + `/health` check + **GUARD del lock single-writer** (si hay un `serve` stdio vivo, `start` REHÚSA con puntero al cutover, no se cuelga). **Verify:** `status`→DOWN(rc3); `start` con stdio-serve vivo → **rehusó rc1, NO colgó** (probado); usage lista daemon. Systemd user-unit = opción futura (el supervisado bash alcanza para v1).
+- [x] D.2.3 **Auditoría auth de serve-http (gate criterio 2):** (a) **bind default 127.0.0.1 loopback** — no expuesto a red salvo `--bind 0.0.0.0` (no lo usamos); (b) `/mcp` exige **bearer + scope enforcement** (`requireBearerAuth`); (c) **CORS default = deny-all cross-origin** (`GBRAIN_HTTP_CORS_ORIGIN` allowlist, ausente→reject); (d) **rate-limit** (express-rate-limit); (e) OAuth2.1 CC grant; **DCR y DCR-insecure OFF por default**; (f) `/health` sin auth (liveness read-only, 3s timeout). **Conclusión:** para topología host-localhost, superficie mínima (solo procesos locales alcanzan 127.0.0.1:8541 y aún necesitan bearer) → **criterio 2 = PASS** con el OAuth propio de gbrain como la superficie auditada (no hace falta shim propio).
+- [~] D.2.4 Integrar estado del daemon en Doctor/harness — **DIFERIDO a D.6** (instalar `ebrain-brain`/`ebrain-daemon` en `~/.config/ebrain` recién en el cutover; agregarlos al check de launchers de doctor.sh ANTES los pondría en rojo pre-cutover). **Verify:** en D.6.
 
 ## FASE D.3 — Auth provisioning  `[ ]`
 

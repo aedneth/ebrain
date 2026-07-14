@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# ebrain-brain — host launcher del daemon de cerebro compartido (FASE D / ADR-004).
+# Corre el motor gbrain como UN server HTTP-MCP persistente, dueño único del lock
+# single-writer de PGLite; todos los agentes se conectan por MCP-HTTP (sin lock por-agente).
+# Proceso en FOREGROUND — `ebrain daemon start` maneja el background + pidfile.
+# Mismo patrón de env que ebrain-mcp/ebrain-run (cwd neutral + sourcea la key).
+# NO lleva MCP_STDIO=1 (eso es el modo stdio); esto es HTTP en loopback.
+set -euo pipefail
+cd "$HOME/.config/ebrain/wd"          # cwd neutral: bun no auto-carga un .env ajeno
+ENV_FILE="$HOME/.config/ebrain/.env"
+if [ -f "$ENV_FILE" ]; then set -a; . "$ENV_FILE"; set +a; fi
+export GBRAIN_SKILLS_DIR="$HOME/.config/ebrain/skills"
+# F4.8 — chat LLM → OpenRouter (para que el tool MCP `think` funcione). Embeddings intactos.
+export GBRAIN_CHAT_MODEL="${GBRAIN_CHAT_MODEL:-openrouter:minimax/minimax-m3}"
+PORT="${EBRAIN_BRAIN_PORT:-8541}"
+exec bun run "$HOME/eBrain/vendor/gbrain/src/cli.ts" serve --http --port "$PORT" --bind 127.0.0.1

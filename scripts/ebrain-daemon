@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# ebrain-daemon — supervisa el host de cerebro compartido (FASE D / ADR-004).
+# Subcomandos: start | stop | status | restart.
+# El host es UN `gbrain serve --http` en loopback dueño del lock PGLite. Este control
+# maneja pidfile + single-instance + un GUARD del lock single-writer (si hay un `serve`
+# stdio vivo, arrancar el host se colgaría → se rehúsa con puntero al runbook de cutover).
+set -uo pipefail
+
+CFG="$HOME/.config/ebrain"
+PIDFILE="$CFG/ebrain-brain.pid"
+LOG="$CFG/daemon.log"
+PORT="${EBRAIN_BRAIN_PORT:-8541}"
+
+# Launcher: copia instalada en $CFG, con fallback al repo (para correr pre-install).
+LAUNCHER="$CFG/ebrain-brain"
+[ -x "$LAUNCHER" ] || LAUNCHER="${EBRAIN_HOME:-$HOME/eBrain}/scripts/ebrain-brain"
+
+is_running() {
+  [ -f "$PIDFILE" ] || return 1
+  local pid; pid="$(cat "$PIDFILE" 2>/dev/null)"
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+health() { curl -fsS -m 3 "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; }
+
+# ¿Hay un `gbrain serve` (stdio) vivo que NO sea nuestro host? Tiene el lock PGLite.
+stdio_serve_alive() {
+  local ours; ours="$(cat "$PIDFILE" 2>/dev/null || echo -1)"
+  local p
+  for p in $(pgrep -f "cli.ts serve" 2>/dev/null); do
+    [ "$p" = "$ours" ] && continue
+    return 0
+  done
+  return 1
+}
+
+case "${1:-status}" in
+  start)
+    if is_running; then echo "ebrain daemon: ya corre (PID $(cat "$PIDFILE")) · :$PORT"; exit 0; fi
+    if stdio_serve_alive; then
+      echo "ebrain daemon: hay un 'gbrain serve' (stdio) vivo con el lock single-writer de PGLite." >&2
+      echo "  El host HTTP se colgaría esperando el lock. Cerrá las sesiones MCP stdio primero" >&2
+      echo "  (incluida la de Claude Code orquestador). Ver runbook de cutover D.6 en docs/SPRINT-DAEMON.md." >&2
+      exit 1
+    fi
+    if [ ! -x "$LAUNCHER" ]; then echo "ebrain daemon: launcher no encontrado ($LAUNCHER)" >&2; exit 127; fi
+    mkdir -p "$CFG"
+    echo "ebrain daemon: arrancando host en 127.0.0.1:$PORT …"
+    nohup "$LAUNCHER" >>"$LOG" 2>&1 &
+    echo $! > "$PIDFILE"
+    sleep 1
+    if is_running; then
+      echo "ebrain daemon: UP (PID $(cat "$PIDFILE")) · log: $LOG"
+    else
+      echo "ebrain daemon: falló al arrancar (ver $LOG)" >&2; rm -f "$PIDFILE"; exit 1
+    fi
+    ;;
+  stop)
+    if ! is_running; then echo "ebrain daemon: no corre"; rm -f "$PIDFILE"; exit 0; fi
+    pid="$(cat "$PIDFILE")"
+    kill "$pid" 2>/dev/null
+    for _ in 1 2 3 4 5 6 7 8; do is_running || break; sleep 1; done
+    if is_running; then kill -9 "$pid" 2>/dev/null; fi
+    rm -f "$PIDFILE"
+    echo "ebrain daemon: DOWN"
+    ;;
+  status)
+    if is_running; then
+      if health; then
+        echo "ebrain daemon: UP (PID $(cat "$PIDFILE")) · :$PORT healthy"
+      else
+        echo "ebrain daemon: PID $(cat "$PIDFILE") vivo pero :$PORT no responde /health (¿arrancando?)"
+      fi
+    else
+      echo "ebrain daemon: DOWN"
+      exit 3
+    fi
+    ;;
+  restart)
+    "$0" stop
+    "$0" start
+    ;;
+  *)
+    echo "uso: ebrain daemon {start|stop|status|restart}" >&2
+    exit 2
+    ;;
+esac
