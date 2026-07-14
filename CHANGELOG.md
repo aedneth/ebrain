@@ -4,6 +4,16 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-14 — F6 UX hardening (review de daily-driver de Eduardo): theming contour-only + UI 100% inglés + hint de detach
+
+- **Fondos internos = bug visual.** El fondo de la terminal es del USUARIO y no se puede matchear; rellenar interiores de cajas cerradas con `background.surface/raised` bandea contra el fondo nativo y se ve buggy. **Quitados TODOS los rellenos interiores** (14 paneles + statusbar + campo del promptbox + palette + confirm + help). El design system ahora vive en los **CONTORNOS** (borde teal foco / dim blur) + tono de texto. Se mantienen los **cursores** de selección pequeños (tab activo, fila seleccionada) — son acentos intencionales, no rellenos de caja. Adaptación deliberada de los mockups de navegador al medio terminal (documentada en los widgets).
+- **Idioma: TUI 100% inglés** (es UI de sistema). Convertidos todos los strings user-facing (paneles, hints, overlays, mensajes de estado/error, guard de min-size) en app.ts/commands.ts/help.ts/widgets. Comentarios de código sin tocar.
+- **Attach — descubribilidad del detach.** Attachear cede el terminal por completo a tmux; la vuelta es el binding de detach de tmux (`Ctrl-b d`), que ebrain no controla. Agregado a la hint bar de sessions (persistente) + hint impreso en el handoff (`doAttach`).
+- **Verify:** TUI 354 + CLI 117 = 471 pass / 0 fail (snapshots actualizados al render contour-only + inglés). Home re-renderizado y verificado: cero banding interior, fondo nativo intacto. Commit `5ba4cce`.
+- **Pendiente F6.6 (interactividad, input de Eduardo pedido):** modelo de foco con **Tab** — `1-6` salto de vista · `Tab`/`Shift+Tab` mueven el anillo de foco entre cajas de la vista · `↑↓` navegan ítems de la caja enfocada · `Enter` drill-in contextual (sesión→attach, memoria→abrir, spend→routing). Base de F6.6.
+
+---
+
 ## 2026-07-14 — FASE 6.5 CERRADA: paneles de conocimiento (Overview/Memory/Routing/Doctor) + GATE 6.5.7 `[AUDIT_PASS]` (self-audit)
 
 - **Plano de datos de conocimiento** (`tui/src/knowledge/{contracts,run}.ts`): los 4 paneles leen los MISMOS subcomandos contract-tested de F6.1 vía spawn de `ebrain <sub> --json` — `buildFrame` sigue PURO, solo `runUi` (impuro) invoca los fetchers, que delegan a parsers puros. **Cero lógica huérfana (criterio #2 del gate):** ningún panel lee `routing.yaml`/`spend.jsonl`/fs directo. Slices async con estado `loading/ready/error` → **jamás spinner-forever**.
