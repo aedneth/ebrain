@@ -124,6 +124,19 @@ if [ -n "$NORMS_TARGET" ] && [ "$NORMS_TARGET" != "null" ] && [ -f "$NORMS_TARGE
   grep -q 'ebrain-norms:begin' "$NORMS_TARGET" && echo "  normas ✓ bloque presente en $NORMS_TARGET" || { echo "  normas ⚠ bloque ausente en $NORMS_TARGET"; rc=1; }
 fi
 
+# b.1) modo MCP declarado por el adapter (D.4.3)
+if [ -n "$MCP_REGISTER" ] && [ "$MCP_REGISTER" != "null" ]; then
+  if printf '%s' "$MCP_REGISTER" | grep -q 'ebrain onboard'; then
+    echo "  mcp ✓ http-daemon (ebrain onboard)"
+  elif printf '%s' "$MCP_REGISTER" | grep -qE 'gbrain-mcp|ebrain-mcp'; then
+    echo "  mcp ⚠ stdio-local fallback"
+  else
+    echo "  mcp ⚠ custom register: $MCP_REGISTER"
+  fi
+elif [ "$HOOKS_FORMAT" = "none" ]; then
+  echo "  mcp: no native MCP registration declared for this adapter"
+fi
+
 # c) contract tests del guard canónico (drift = rojo, no silencioso)
 if [ -f "$CORE/contract-test.sh" ]; then
   if bash "$CORE/contract-test.sh" "$CORE/guard-secrets.sh" >/dev/null 2>&1; then

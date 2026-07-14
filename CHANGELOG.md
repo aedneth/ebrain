@@ -4,6 +4,14 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-14 — P2 FASE D: doctor/harness ve el daemon + rename superficial de launchers
+
+- **D.2.4 / D.4.3:** `ebrain doctor --json` ahora reporta `daemon:status`, launchers del daemon y modo MCP por adapter (`adapter:<agent>:mcp = http-daemon`). `ebrain harness status` muestra el modo MCP declarado por los manifests. Verificado: daemon OK, claude/codex/gemini/cursor/opencode con `MCP=http-daemon`.
+- **D.4.4 rename superficial:** nuevos launchers `ebrain-run` y `ebrain-mcp`; `gbrain-run`/`gbrain-mcp` quedan como wrappers/symlinks compat para configs viejas y rollback stdio. Refs internos (`status`, `doctor`, `remember`, `mcp-wire`, `dream-cycle`, `ebrain-q`) prefieren `ebrain-run`/`ebrain-mcp` y caen a los nombres viejos si hace falta.
+- **Verify:** `bash -n` de launchers/core OK; `ebrain doctor --json` rc=0 con `daemon:status ok`; `ls -l ~/.config/ebrain/{ebrain-run,ebrain-mcp,gbrain-run,gbrain-mcp}` muestra ejecutables nuevos + symlinks compat. Queda pendiente D.6/D.7: prueba ≥2 agentes reales concurrentes + auditoría Opus/Fable.
+
+---
+
 ## 2026-07-14 — P1 plug-and-play: `ebrain up` + `ebrain onboard --all` (HTTP-MCP idempotente)
 
 - **Nuevo `ebrain up`:** un comando asegura el daemon HTTP-MCP, recupera/acuña `EBRAIN_MCP_TOKEN` sin imprimirlo, corre smoke `tools/list`, y auto-registra agentes detectados. El token se guarda en `~/.config/ebrain/mcp-token.env` con chmod 600. El launcher `scripts/ebrain-brain` acuña el token **durante el boot, antes de bindear HTTP**, eliminando el baile manual stop/mint/start.

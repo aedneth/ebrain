@@ -39,6 +39,7 @@ ebrain — capa unificada de harness + memoria agéntica (provider-agnostic)
   ebrain route --cap <cap> "<prompt>"                        one-shot ruteado (stack OpenRouter capado)
   ebrain harness install <agent>                             instalar/actualizar el harness de un agente
   ebrain harness doctor [agent]                              verificar el harness de UN agente (guard/hooks/mcp)
+  ebrain harness status                                      estado de la flota harness + modo MCP
   ebrain doctor [--json]                                     salud CKIS completa (launchers/config/contract/sources/gasto)
   ebrain status [--json]                                     snapshot rápido (brain/gasto/flota/memoria)
   ebrain ui                                                   TUI interactivo (home real + 5 vistas placeholder, SPRINT-TUI 6.3)
@@ -101,7 +102,10 @@ case "$cmd" in
           rc=0; for a in $(all_agents); do bash "$CORE/install.sh" --doctor "$a" || rc=1; done
           echo "── flota: $([ "$rc" = 0 ] && echo 'toda OK' || echo 'hay pendientes (rc=1)') ──"; exit $rc
         else run "$CORE/install.sh" --doctor "$@"; fi ;;
-      *) echo "ebrain harness: usá 'install <agent>|--all' o 'doctor [agent|--all]'." >&2; exit 2 ;;
+      status)
+        rc=0; for a in $(all_agents); do bash "$CORE/install.sh" --doctor "$a" || rc=1; done
+        echo "── flota: $([ "$rc" = 0 ] && echo 'toda OK' || echo 'hay pendientes (rc=1)') ──"; exit $rc ;;
+      *) echo "ebrain harness: usá 'install <agent>|--all', 'doctor [agent|--all]' o 'status'." >&2; exit 2 ;;
     esac ;;
   norms)
     sub="${1:-}"; shift || true

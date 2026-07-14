@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# ebrain-mcp — fallback stdio MCP launcher for the internal gbrain engine.
+# Primary path after FASE D is HTTP daemon (`ebrain up`); this remains for rollback.
+set -euo pipefail
+cd "$HOME/.config/ebrain/wd"
+ENV_FILE="$HOME/.config/ebrain/.env"
+if [ -f "$ENV_FILE" ]; then set -a; . "$ENV_FILE"; set +a; fi
+export MCP_STDIO=1
+export GBRAIN_SKILLS_DIR="$HOME/.config/ebrain/skills"
+export GBRAIN_CHAT_MODEL="${GBRAIN_CHAT_MODEL:-openrouter:minimax/minimax-m3}"
+BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"
+command -v bun >/dev/null 2>&1 && BUN_BIN=bun
+exec "$BUN_BIN" run "$HOME/eBrain/vendor/gbrain/src/cli.ts" serve

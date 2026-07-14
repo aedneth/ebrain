@@ -19,6 +19,8 @@ set -uo pipefail
 EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
 CORE="$EBRAIN_HOME/harness/core"
 CFG="$HOME/.config/ebrain"
+RUN="$CFG/ebrain-run"
+[ -x "$RUN" ] || RUN="$CFG/gbrain-run"
 
 JSON=0
 for _da in "$@"; do [ "$_da" = "--json" ] && JSON=1; done
@@ -41,10 +43,20 @@ c_sec(){  [ "$JSON" = 1 ] || printf '\n\033[1m%s\033[0m\n' "$1"; }
 
 # ── launchers ────────────────────────────────────────────────────────────────
 c_sec "launchers"
-for f in gbrain-run gbrain-mcp ebrain-route ebrain-q; do
+for f in ebrain-run ebrain-mcp ebrain-route ebrain-q ebrain-brain ebrain-daemon ebrain-up; do
   if [ -x "$CFG/$f" ]; then c_ok "launcher:$f" "$f"; else c_fail "launcher:$f" "$f falta o no ejecutable ($CFG/$f)"; fi
 done
+for f in gbrain-run gbrain-mcp; do
+  if [ -e "$CFG/$f" ]; then c_ok "launcher:compat:$f" "$f compat"; else c_warn "launcher:compat:$f" "$f compat ausente (fallback stdio/legacy podría requerirlo)"; fi
+done
 if command -v ebrain >/dev/null 2>&1; then c_ok "path:ebrain" "ebrain en PATH ($(command -v ebrain))"; else c_warn "path:ebrain" "ebrain no está en PATH (~/.local/bin)"; fi
+
+c_sec "daemon HTTP-MCP"
+if "$EBRAIN_HOME/scripts/ebrain-daemon" status >/dev/null 2>&1; then
+  c_ok "daemon:status" "daemon HTTP-MCP UP (:${EBRAIN_BRAIN_PORT:-8541} healthy)"
+else
+  c_warn "daemon:status" "daemon HTTP-MCP DOWN (fallback stdio disponible si se registra manualmente)"
+fi
 
 # ── config ───────────────────────────────────────────────────────────────────
 c_sec "config"
@@ -83,6 +95,11 @@ all_agents(){ for m in "$EBRAIN_HOME"/harness/adapters/*/manifest.yaml; do [ -f 
 for a in $(all_agents); do
   a_tmp="$(mktemp)"
   if bash "$CORE/install.sh" --doctor "$a" >"$a_tmp" 2>&1; then c_ok "adapter:$a" "adapter $a"; else c_warn "adapter:$a" "adapter $a: pendiente (ver 'ebrain harness doctor $a')"; fi
+  if grep -q 'mcp .*http-daemon' "$a_tmp" 2>/dev/null; then
+    c_ok "adapter:$a:mcp" "adapter $a MCP=http-daemon"
+  elif grep -q 'mcp .*stdio-local' "$a_tmp" 2>/dev/null; then
+    c_warn "adapter:$a:mcp" "adapter $a MCP=stdio-local"
+  fi
   rm -f "$a_tmp"
 done
 
@@ -92,7 +109,7 @@ serve_pid="$(pgrep -f 'cli\.ts serve' 2>/dev/null | head -1 || true)"
 if [ -n "$serve_pid" ]; then
   c_warn "sources:isolation" "brain servido por MCP (PID $serve_pid) → lock PGLite activo; chequeo directo de sources diferido (corre con MCP abajo, p.ej. cron nocturno)"
 else
-  src_out="$(cd /tmp && timeout 60 "$CFG/gbrain-run" sources list --timeout=45000 2>&1 || true)"
+  src_out="$(cd /tmp && timeout 60 "$RUN" sources list --timeout=45000 2>&1 || true)"
   if printf '%s' "$src_out" | grep -qiE 'brisas|dekko'; then
     c_fail "sources:isolation" "SOURCE DE CLIENTE detectado en el brain: $(printf '%s' "$src_out" | grep -iE 'brisas|dekko' | head -1)"
   elif printf '%s' "$src_out" | grep -qiE 'second-brain|company-brain|agent-memory'; then
@@ -127,7 +144,7 @@ if [ -n "$serve_pid" ]; then
   c_ok "brain:engine" "brain UP (MCP serve, PID $serve_pid); stats vía tools MCP o 'ebrain status' con MCP idle"
 else
   h_tmp="$(mktemp)"
-  if (cd /tmp && timeout 60 "$CFG/gbrain-run" doctor >"$h_tmp" 2>&1); then :; fi
+  if (cd /tmp && timeout 60 "$RUN" doctor >"$h_tmp" 2>&1); then :; fi
   if grep -q 'GBrain Health Check' "$h_tmp"; then
     c_ok "brain:engine" "el motor respondió (WARN internos de resolver_health/skills = no-bloqueantes para ebrain)"
   else

@@ -7,7 +7,8 @@
 # Uso:  ebrain-q "<pregunta>"  [topN]     (topN por defecto 10)
 set -euo pipefail
 
-RUN="$HOME/.config/ebrain/gbrain-run"
+RUN="$HOME/.config/ebrain/ebrain-run"
+[ -x "$RUN" ] || RUN="$HOME/.config/ebrain/gbrain-run"
 Q="${1:-}"
 TOP="${2:-10}"
 [ -z "$Q" ] && { echo "uso: ebrain-q \"<pregunta>\" [topN]"; exit 2; }

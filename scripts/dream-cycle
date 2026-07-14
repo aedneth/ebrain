@@ -18,7 +18,8 @@
 set -uo pipefail
 
 CFG="$HOME/.config/ebrain"
-LAUNCHER="$CFG/gbrain-run"
+LAUNCHER="$CFG/ebrain-run"
+[ -x "$LAUNCHER" ] || LAUNCHER="$CFG/gbrain-run"
 LOG="$CFG/dream.log"
 SUBAGENT_MODEL="openrouter:moonshotai/kimi-k2.6"   # tool-capable (verificado F4.1); cap server-side
 DRY=""; [ "${1:-}" = "--dry-run" ] && DRY="--dry-run"

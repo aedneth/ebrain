@@ -1,25 +1,4 @@
 #!/usr/bin/env bash
-# ebrain — launcher seguro de gbrain.
-# 1) cd a un cwd NEUTRAL sin .env: bun auto-carga el .env del cwd y pisaría la
-#    key; corriendo desde un dir vacío evita ese override (root cause F1 2026-07-10).
-# 2) Carga la key de embeddings desde ~/.config/ebrain/.env al ENTORNO del
-#    proceso de gbrain. La key NUNCA se imprime; solo se exporta.
-# Uso:  ~/.config/ebrain/gbrain-run <args de gbrain>   (usa rutas ABSOLUTAS en args)
+# compat: old surface name kept for existing configs. Prefer ebrain-run.
 set -euo pipefail
-WD="$HOME/.config/ebrain/wd"
-mkdir -p "$WD"
-cd "$WD"
-ENV_FILE="$HOME/.config/ebrain/.env"
-if [ -f "$ENV_FILE" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$ENV_FILE"
-  set +a
-fi
-export GBRAIN_SKILLS_DIR="$HOME/.config/ebrain/skills"
-# F4.8 — LLM de chat de gbrain (query-expansion, think, dream, judges) → stack chino vía OpenRouter.
-# Embeddings NO se tocan (siguen en openai:text-embedding-3-large @1536d; OpenRouter no tiene embeddings).
-# Un override en .env gana; default = modelo cheap-capable para síntesis con citas. Recipe openrouter
-# nativo (base_url default openrouter.ai/api/v1, requiere OPENROUTER_API_KEY ya cargada del .env).
-export GBRAIN_CHAT_MODEL="${GBRAIN_CHAT_MODEL:-openrouter:minimax/minimax-m3}"
-exec bun run "$HOME/eBrain/vendor/gbrain/src/cli.ts" "$@"
+exec "$HOME/eBrain/scripts/ebrain-run" "$@"

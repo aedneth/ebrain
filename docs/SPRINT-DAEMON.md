@@ -21,11 +21,13 @@ Opus audita cada gate con `[AUDIT_PASS]` antes de avanzar. Commit por fase. Ning
 brisas-del-golfo/dekko. Pasos `[HUMANO]` (secretos, cutover en vivo) los ejecuta Eduardo con Opus al lado.
 Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` bloqueado.
 
-**Estado P1 plug-and-play (Codex maker, 2026-07-14):** construido `ebrain up` + `ebrain onboard`.
+**Estado P1/P2 (Codex maker, 2026-07-14):** construido `ebrain up` + `ebrain onboard`.
 El boot del host asegura `EBRAIN_MCP_TOKEN` **antes** de bindear HTTP; el token queda en
 `~/.config/ebrain/mcp-token.env` (chmod 600, nunca impreso). `ebrain up` es idempotente:
 daemon healthy → token ready → smoke `tools/list` → registra claude/codex/gemini/cursor/opencode
 por HTTP-MCP. Verificado en vivo: `tools/list` = 94 tools; `ebrain onboard --all` re-ejecuta limpio.
+Doctor/harness ya reportan daemon + modo MCP; launchers nuevos `ebrain-run`/`ebrain-mcp` conviven con
+compat `gbrain-run`/`gbrain-mcp`.
 
 ━━━
 
@@ -108,7 +110,7 @@ memoria viva. **Decisión: rename SOLO de la superficie ebrain-owned, el engine 
 - [x] D.2.1 Launcher `scripts/ebrain-brain` (ebrain-native): asegura `EBRAIN_MCP_TOKEN` con `cli/up.ts ensure-token --boot --quiet` **antes de bindear HTTP**, luego `gbrain serve --http --port ${EBRAIN_BRAIN_PORT:-8541} --bind 127.0.0.1`; mismo patrón de env que ebrain-mcp (cwd neutral + sourcea la key), SIN `MCP_STDIO=1`. Foreground; el background lo maneja el control. **Verify:** `bash -n` OK; `ebrain up` idempotente.
 - [x] D.2.2 Control `scripts/ebrain-daemon` + `ebrain daemon {start,stop,status,restart}` cableado al dispatcher. **pidfile** `ebrain-brain.pid` + is_running + `/health` check + **GUARD del lock single-writer** (si hay un `serve` stdio vivo, `start` REHÚSA con puntero al cutover, no se cuelga). `start` usa `setsid` cuando existe para separar el process group del harness invocador; `nohup` solo era insuficiente bajo runners que limpian el group al cerrar. **Verify:** `status`→DOWN(rc3); `start` con stdio-serve vivo → **rehusó rc1, NO colgó** (probado); usage lista daemon; post-fix `start` siguió healthy >55s tras terminar la llamada. Systemd user-unit = opción futura (el supervisado bash alcanza para v1).
 - [x] D.2.3 **Auditoría auth de serve-http (gate criterio 2):** (a) **bind default 127.0.0.1 loopback** — no expuesto a red salvo `--bind 0.0.0.0` (no lo usamos); (b) `/mcp` exige **bearer + scope enforcement** (`requireBearerAuth`); (c) **CORS default = deny-all cross-origin** (`GBRAIN_HTTP_CORS_ORIGIN` allowlist, ausente→reject); (d) **rate-limit** (express-rate-limit); (e) OAuth2.1 CC grant; **DCR y DCR-insecure OFF por default**; (f) `/health` sin auth (liveness read-only, 3s timeout). **Conclusión:** para topología host-localhost, superficie mínima (solo procesos locales alcanzan 127.0.0.1:8541 y aún necesitan bearer) → **criterio 2 = PASS** con el OAuth propio de gbrain como la superficie auditada (no hace falta shim propio).
-- [~] D.2.4 Integrar estado del daemon en Doctor/harness — **DIFERIDO a D.6** (instalar `ebrain-brain`/`ebrain-daemon` en `~/.config/ebrain` recién en el cutover; agregarlos al check de launchers de doctor.sh ANTES los pondría en rojo pre-cutover). **Verify:** en D.6.
+- [x] D.2.4 Integrar estado del daemon en Doctor/harness: `ebrain doctor --json` emite `daemon:status` y checks de launchers `ebrain-brain`/`ebrain-daemon`/`ebrain-up`. **Verify:** `daemon:status ok`; rc doctor = 0.
 
 ## FASE D.3 — Auth provisioning  `[x]`
 
@@ -119,8 +121,8 @@ memoria viva. **Decisión: rename SOLO de la superficie ebrain-owned, el engine 
 
 - [x] D.4.1 Cambiar `mcp.register` de cada adapter de stdio (`gbrain-mcp`) a HTTP: manifests delegan a `ebrain onboard <agent>`; `onboard` registra claude/codex/gemini/cursor/opencode en `http://127.0.0.1:8541/mcp` con bearer. Codex usa `--bearer-token-env-var EBRAIN_MCP_TOKEN`; claude/gemini/opencode usan header; cursor mergea `~/.cursor/mcp.json`. **Verify:** `ebrain onboard --all` = 5 OK; `ebrain up` = smoke `tools/list` 94 tools.
 - [x] D.4.2 Mantener el stdio `gbrain-mcp` como **fallback** (no borrar) para rollback y para el modo sin-daemon. **Verify:** `scripts/gbrain-mcp` sigue versionado; `scripts/README.md` documenta fallback vs daemon.
-- [ ] D.4.4 **Rename de launchers (surface, ver §Rename policy):** `~/.config/ebrain/gbrain-run`→`ebrain-run` y `gbrain-mcp`→`ebrain-mcp` con **symlink de compat** del nombre viejo→nuevo (para no romper configs/registros vivos), y actualizar refs en repo (doctor.sh/status.sh/remember.sh/mcp-wire.sh/manifests + check-id `launcher:gbrain-run`). Se hace ACÁ (no antes) porque toca el MCP vivo y su hogar natural es el rewire. **Verify:** ambos nombres resuelven; suite verde.
-- [ ] D.4.3 Actualizar doctor/harness para reportar el modo MCP activo (stdio-local vs http-daemon) por agente. **Verify:** `ebrain harness status` lo muestra.
+- [x] D.4.4 **Rename de launchers (surface, ver §Rename policy):** `~/.config/ebrain/gbrain-run`→`ebrain-run` y `gbrain-mcp`→`ebrain-mcp` con **symlink de compat** del nombre viejo→nuevo; refs de repo actualizadas (`doctor.sh`/`status.sh`/`remember.sh`/`mcp-wire.sh`/scripts). **Verify:** `ls -l ~/.config/ebrain/{ebrain-run,ebrain-mcp,gbrain-run,gbrain-mcp}` muestra ejecutables nuevos + symlinks compat; suite verde.
+- [x] D.4.3 Actualizar doctor/harness para reportar el modo MCP activo (stdio-local vs http-daemon) por agente. **Verify:** `ebrain doctor --json` muestra `adapter:<agent>:mcp` ok para claude/codex/gemini/cursor/opencode; `ebrain harness status` imprime `mcp ✓ http-daemon`.
 
 ## FASE D.5 — ISOLATION GATE (criterio 4, obligatorio)  `[x]`
 

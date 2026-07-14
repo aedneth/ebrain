@@ -5,10 +5,10 @@ from: Codex (maker/constructor)
 to: Opus (Claude Code, auditor) + Fable 5 (gate)
 created: 2026-07-14
 status: ready-for-audit
-scope: P1 plug-and-play daemon onboarding
+scope: P1 plug-and-play daemon onboarding + P2 daemon closeout partial
 ---
 
-# HANDOFF-BACK — P1 `ebrain up` / `ebrain onboard`
+# HANDOFF-BACK — P1/P2 daemon work
 
 ## 1. Qué construí
 
@@ -32,6 +32,12 @@ scope: P1 plug-and-play daemon onboarding
 - Copias vivas:
   - Instalé `scripts/ebrain-brain`, `scripts/ebrain-daemon`, `scripts/ebrain-up` en `~/.config/ebrain/` con modo 700.
   - `ebrain-daemon start` usa `setsid` para que el host no quede en el process group del runner que invocó el control.
+- P2 daemon/rewire:
+  - Nuevos launchers `scripts/ebrain-run` y `scripts/ebrain-mcp`.
+  - `scripts/gbrain-run` y `scripts/gbrain-mcp` quedan como compat wrappers; en `~/.config/ebrain/` son symlinks hacia los nuevos nombres.
+  - `doctor.sh`, `status.sh`, `remember.sh`, `mcp-wire.sh`, `dream-cycle`, `ebrain-q` prefieren `ebrain-run`/`ebrain-mcp` y caen a compat.
+  - `ebrain doctor --json` reporta `daemon:status` y `adapter:<agent>:mcp`.
+  - `ebrain harness status` imprime el estado por adapter y modo MCP.
 
 ## 2. Decisiones y por qué
 
@@ -40,6 +46,7 @@ scope: P1 plug-and-play daemon onboarding
 - **Token file chmod 600 en `~/.config/ebrain/`:** no hay credential helper portable garantizado en esta laptop; el store local cumple "usuario no ve token" y evita poner secretos en configs donde Codex sí puede usar env var.
 - **Cursor por merge JSON:** Cursor Agent expone `mcp list/login/enable`, pero no `mcp add`; se mantiene el patrón del harness actual de editar `~/.cursor/mcp.json`, ahora con `url`.
 - **STDIO fallback no se borra:** `scripts/gbrain-mcp` queda versionado para rollback o modo sin-daemon.
+- **Rename solo de superficie:** no se toca `vendor/gbrain`, `GBRAIN_*` ni `~/.gbrain/`; los nombres nuevos son wrappers ebrain-owned sobre el motor interno.
 
 ## 3. Gotchas nuevos
 
@@ -47,6 +54,7 @@ scope: P1 plug-and-play daemon onboarding
 - `ebrain-daemon` prefiere la copia viva `~/.config/ebrain/ebrain-brain`; cambiar solo el template en repo no basta. Instalé la copia viva actualizada.
 - `opencode mcp add` espera header como `KEY=VALUE`; Claude/Gemini esperan `Authorization: Bearer ...`.
 - `nohup` no bastaba bajo el harness de ejecución: el host quedaba en el process group del runner y podía morir segundos después de cerrar la llamada. Fix: `setsid "$LAUNCHER" ... &`. Verificado con SID/PGID propios y health >55s tras terminar el comando invocador.
+- El rename de launchers debe conservar compat porque varias rutas históricas (`runbook`, docs viejos, configs MCP de rollback) todavía mencionan `gbrain-run`/`gbrain-mcp`.
 
 ## 4. Tests y verificación
 
@@ -58,6 +66,8 @@ scope: P1 plug-and-play daemon onboarding
 - `ebrain onboard --all` → claude/codex/gemini/cursor/opencode OK.
 - `ebrain daemon restart` + `ebrain up` → restart con launcher nuevo y smoke OK.
 - `ebrain daemon start` con `setsid` → health OK >55s tras terminar la llamada.
+- `ebrain doctor --json` → `daemon:status ok`, launchers `ebrain-*` ok, compat `gbrain-*` ok, `adapter:<agent>:mcp` ok para 5 agentes; rc=0.
+- `ebrain harness status` → imprime `mcp ✓ http-daemon` para los 5 agentes MCP; conserva rc de pendientes globales del harness.
 - Token store: verificado solo permiso/ruta, sin leer contenido: `600 ~/.config/ebrain/mcp-token.env`.
 - `ebrain daemon status` final observado UP/healthy tras restart.
 
@@ -65,8 +75,6 @@ No toqué TUI source; cero-hex no aplica a este cambio, aunque la suite TUI comp
 
 ## 5. Pendientes
 
-- D.4.3: doctor/harness debe reportar modo MCP activo por agente (`http-daemon` vs `stdio-local`).
-- D.4.4: rename superficial `gbrain-run`/`gbrain-mcp` → `ebrain-run`/`ebrain-mcp` con symlinks compat.
 - D.6: prueba exacta de aceptación con ≥2 agentes reales concurrentes usando MCP sin colgarse. No la declaré hecha.
 - D.7: gate `[AUDIT_PASS]` Opus + Fable 5.
 - Installer `curl -fsSL ... | sh` todavía pendiente.

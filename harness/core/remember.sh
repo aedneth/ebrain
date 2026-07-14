@@ -114,8 +114,10 @@ if [ -d "$MEM/.git" ]; then
 fi
 
 # sync a gbrain para que sea buscable de inmediato (una página = costo mínimo). --no-sync lo salta.
-if [ "$SYNC" = "1" ] && [ -x "$HOME/.config/ebrain/gbrain-run" ]; then
-  if "$HOME/.config/ebrain/gbrain-run" sync --source agent-memory >/dev/null 2>&1; then
+RUN="$HOME/.config/ebrain/ebrain-run"
+[ -x "$RUN" ] || RUN="$HOME/.config/ebrain/gbrain-run"
+if [ "$SYNC" = "1" ] && [ -x "$RUN" ]; then
+  if "$RUN" sync --source agent-memory >/dev/null 2>&1; then
     echo "  sync agent-memory ✓ (buscable en ebrain)"
   else
     echo "  (sync diferido — quedará en el próximo sweep)"

@@ -1,14 +1,4 @@
 #!/usr/bin/env bash
-# gbrain-mcp — launcher del MCP server de ebrain para Claude Code (stdio).
-# Mismo patrón que gbrain-run (cwd neutral + sourcea la key), + MCP_STDIO=1
-# para que el server no cierre si el gateway cierra su mitad de stdin tras el
-# handshake. La limpieza ante cierre de sesión la hace el watchdog de ppid.
+# compat: old fallback stdio MCP name kept for existing configs. Prefer ebrain-mcp.
 set -euo pipefail
-cd "$HOME/.config/ebrain/wd"          # cwd neutral: bun no auto-carga un .env ajeno
-ENV_FILE="$HOME/.config/ebrain/.env"
-if [ -f "$ENV_FILE" ]; then set -a; . "$ENV_FILE"; set +a; fi
-export MCP_STDIO=1
-export GBRAIN_SKILLS_DIR="$HOME/.config/ebrain/skills"
-# F4.8 — chat LLM → OpenRouter (para que el tool MCP `think` funcione en sesión). Embeddings intactos.
-export GBRAIN_CHAT_MODEL="${GBRAIN_CHAT_MODEL:-openrouter:minimax/minimax-m3}"
-exec bun run "$HOME/eBrain/vendor/gbrain/src/cli.ts" serve
+exec "$HOME/eBrain/scripts/ebrain-mcp" "$@"

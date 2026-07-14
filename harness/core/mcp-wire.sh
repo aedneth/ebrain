@@ -9,7 +9,8 @@
 set -uo pipefail
 
 agent="${1:?uso: mcp-wire.sh <cursor|opencode>}"
-SRV="$HOME/.config/ebrain/gbrain-mcp"
+SRV="$HOME/.config/ebrain/ebrain-mcp"
+[ -x "$SRV" ] || SRV="$HOME/.config/ebrain/gbrain-mcp"
 command -v jq >/dev/null 2>&1 || { echo "mcp-wire: jq requerido" >&2; exit 1; }
 [ -x "$SRV" ] || { echo "mcp-wire: falta el launcher MCP $SRV" >&2; exit 1; }
 

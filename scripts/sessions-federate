@@ -47,5 +47,7 @@ if [ -d "$MEM/.git" ]; then
 fi
 
 # sync del source agent-memory a gbrain (estructura + embeddings; volumen chico = costo mínimo)
-"$HOME/.config/ebrain/gbrain-run" sync --source agent-memory >/dev/null 2>&1 \
+RUN="$HOME/.config/ebrain/ebrain-run"
+[ -x "$RUN" ] || RUN="$HOME/.config/ebrain/gbrain-run"
+"$RUN" sync --source agent-memory >/dev/null 2>&1 \
   && echo "  gbrain sync agent-memory ✓" || echo "  (gbrain sync diferido — source aún no registrado?)"
