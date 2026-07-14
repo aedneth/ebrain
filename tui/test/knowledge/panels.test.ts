@@ -47,12 +47,12 @@ describe("Overview panel (6.5.1) + lock banner (6.5.5)", () => {
   it("raises the lock banner with server + cached timestamp when the brain read was cached", () => {
     const t = frameText(cached);
     expect(t).toContain("brain served by mcp:8541 (lock)");
-    expect(t).toContain("datos cacheados 14:31");
+    expect(t).toContain("cached 14:31");
   });
 
   it("shows real spend/fleet/memory in the sistema panel + last learning", () => {
     const t = frameText(cached);
-    expect(t).toContain("sistema");
+    expect(t).toContain("system");
     expect(t).toContain("$2.14/$10");
     expect(t).toContain("6/6");
     expect(t).toContain("128");
@@ -61,7 +61,7 @@ describe("Overview panel (6.5.1) + lock banner (6.5.5)", () => {
 
   it("no data yet degrades to a loading line, never a spinner-forever", () => {
     const t = frameText(base("home", {}));
-    expect(t).toContain("cargando estado del sistema");
+    expect(t).toContain("loading system status");
   });
 });
 
@@ -84,12 +84,12 @@ describe("Memory panel (6.5.2)", () => {
   it("renders results, session-logs, the search box and the remember hint", () => {
     const t = frameText(state);
     expect(t).toContain("deepseek v3 falla con tool-use paralelo");
-    expect(t).toContain("resultados");
+    expect(t).toContain("results");
     expect(t).toContain("session-logs");
     expect(t).toContain("07-14 12:45");
     expect(t).toContain("refactor router");
-    expect(t).toContain("r → recordar");
-    expect(t).toContain("busqueda semantica"); // informational PromptBox placeholder
+    expect(t).toContain("r → remember");
+    expect(t).toContain("semantic search"); // informational PromptBox placeholder
   });
 });
 
@@ -116,12 +116,12 @@ describe("Routing panel (6.5.3)", () => {
 
   it("renders the per-cap table, budget panel, gbrain flag and the deferred-chains note", () => {
     const t = frameText(state);
-    expect(t).toContain("capacidad");
+    expect(t).toContain("capability");
     expect(t).toContain("coding");
-    expect(t).toContain("total hoy");
-    expect(t).toContain("presupuesto · 2026-07");
-    expect(t).toContain("gbrain: gasto sin trackear");
-    expect(t).toContain("pendiente contrato routing --json"); // honest scoping (criterion #2)
+    expect(t).toContain("total today");
+    expect(t).toContain("budget · 2026-07");
+    expect(t).toContain("gbrain: untracked spend");
+    expect(t).toContain("pending routing --json contract"); // honest scoping (criterion #2)
   });
 });
 
@@ -168,7 +168,7 @@ describe("Doctor panel (6.5.4)", () => {
 
   it("shows the spinner label while a re-run is in flight (never a frozen forever-state)", () => {
     const running = { ...state, doctor: { ...state.doctor!, running: true } };
-    expect(frameText(running)).toContain("re-ejecutando checks");
+    expect(frameText(running)).toContain("re-running checks");
   });
 });
 

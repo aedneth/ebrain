@@ -85,7 +85,7 @@ describe("commandPalette widget (DS CommandPalette.jsx)", () => {
     const plain = rows.map(strip);
     expect(plain[0]).toContain("╭"); // rounded panel corners
     expect(plain[1]).toContain("›"); // prompt glyph
-    expect(plain.some((r) => r.includes("navegar"))).toBe(true); // footer hint
+    expect(plain.some((r) => r.includes("navigate"))).toBe(true); // footer hint
     // teal border escape present (the accent moment)
     expect(rows[0]).toContain(t.fg("accent.teal"));
   });
@@ -108,7 +108,7 @@ describe("palette app integration (reduce + buildFrame)", () => {
     expect(r.state.overlay?.kind).toBe("palette");
     const frame = buildFrame(r.state, size, t).map(strip).join("\n");
     expect(frame).toContain("›");
-    expect(frame).toContain("navegar");
+    expect(frame).toContain("navigate");
   });
 
   it("ctrl+p also opens the palette", () => {

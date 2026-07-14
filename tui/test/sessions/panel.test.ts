@@ -41,7 +41,7 @@ function stateOn(sessions: SessionsSlice): AppState {
 describe("buildSessionsView — fleet + live peek from a fixture", () => {
   test("fleet title carries the count and lists every session + uptime", () => {
     const frame = buildFrame(stateOn(slice()), size, t).map(strip).join("\n");
-    expect(frame).toContain("fleet · 3 sesiones");
+    expect(frame).toContain("fleet · 3 sessions");
     expect(frame).toContain("ebr-claude-korvex");
     expect(frame).toContain("ebr-codex-tests");
     expect(frame).toContain("ebr-gemini-web");
@@ -58,12 +58,12 @@ describe("buildSessionsView — fleet + live peek from a fixture", () => {
 
   test("empty fleet → guidance, never a spinner-forever", () => {
     const frame = buildFrame(stateOn(slice({ rows: [], status: "no-server" })), size, t).map(strip).join("\n");
-    expect(frame).toContain("sin sesiones activas");
+    expect(frame).toContain("no active sessions");
   });
 
   test("no-tmux state is explicit (not an error)", () => {
     const frame = buildFrame(stateOn(slice({ rows: [], status: "no-tmux" })), size, t).map(strip).join("\n");
-    expect(frame).toContain("tmux no esta instalado");
+    expect(frame).toContain("tmux is not installed");
   });
 
   test("hint bar shows the mockup's session actions", () => {

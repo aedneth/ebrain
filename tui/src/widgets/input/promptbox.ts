@@ -15,7 +15,7 @@ export interface PromptBoxProps {
   value?: string;
   placeholder?: string;
   focus?: boolean;
-  /** Dim, right-floated helper text (e.g. "enter enviar · esc cancelar"). */
+  /** Dim, right-floated helper text (e.g. "enter send · esc cancel"). */
   hint?: string;
   /** Total width in cells. */
   width: number;

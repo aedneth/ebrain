@@ -40,35 +40,34 @@ export interface Command {
 export const COMMANDS: Command[] = [
   // ── per-tab direct-jump (1..6) — individually addressable for the future
   // help overlay (6.3.5), collapsed to one "1-6" entry below for the hint bar.
-  { id: "nav.home", title: "home", summary: "ir a la vista home", key: "1", group: "nav" },
-  { id: "nav.sessions", title: "sessions", summary: "ir a la vista sessions", key: "2", group: "nav" },
-  { id: "nav.launch", title: "launch", summary: "ir a la vista launch", key: "3", group: "nav" },
-  { id: "nav.memory", title: "memory", summary: "ir a la vista memory", key: "4", group: "nav" },
-  { id: "nav.routing", title: "routing", summary: "ir a la vista routing", key: "5", group: "nav" },
-  { id: "nav.doctor", title: "doctor", summary: "ir a la vista doctor", key: "6", group: "nav" },
+  { id: "nav.home", title: "home", summary: "go to the home view", key: "1", group: "nav" },
+  { id: "nav.sessions", title: "sessions", summary: "go to the sessions view", key: "2", group: "nav" },
+  { id: "nav.launch", title: "launch", summary: "go to the launch view", key: "3", group: "nav" },
+  { id: "nav.memory", title: "memory", summary: "go to the memory view", key: "4", group: "nav" },
+  { id: "nav.routing", title: "routing", summary: "go to the routing view", key: "5", group: "nav" },
+  { id: "nav.doctor", title: "doctor", summary: "go to the doctor view", key: "6", group: "nav" },
 
   // ── compact hint-bar entry for the six jumps above (matches HomeScreen's
   // {k:'1-6', label:'vistas'} in screens-a.jsx) — not itself a dispatchable key.
   {
     id: "nav.tabs",
-    title: "vistas",
-    summary: "saltar a una vista por numero (1-6), o ciclar con tab / shift+tab",
+    title: "views",
+    summary: "jump to a view by number (1-6), or cycle with tab / shift+tab",
     key: "1-6",
     group: "nav",
     showInHintBar: true,
   },
 
-  { id: "nav.cycleNext", title: "siguiente vista", summary: "ciclar a la siguiente pestana", key: "tab", group: "nav" },
-  { id: "nav.cyclePrev", title: "vista anterior", summary: "ciclar a la pestana anterior", key: "shift+tab", group: "nav" },
+  { id: "nav.cycleNext", title: "next view", summary: "cycle to the next tab", key: "tab", group: "nav" },
+  { id: "nav.cyclePrev", title: "previous view", summary: "cycle to the previous tab", key: "shift+tab", group: "nav" },
 
-  // ── global — stub targets for the next chunk (6.3.4 palette / 6.3.5 help).
-  // Order matches screens-a.jsx HomeScreen hints exactly: 1-6 vistas · / palette ·
-  // l launch · ? ayuda — hintsForTab() preserves COMMANDS array order below.
-  { id: "palette.open", title: "palette", summary: "abrir la paleta de comandos (proximamente)", key: "/", group: "global", showInHintBar: true },
-  { id: "nav.launchShortcut", title: "launch", summary: "atajo directo a la vista launch", key: "l", group: "global", showInHintBar: true },
-  { id: "app.help", title: "ayuda", summary: "mostrar la ayuda autogenerada del registry (proximamente)", key: "?", group: "global", showInHintBar: true },
-  { id: "app.quit", title: "salir", summary: "salir de ebrain ui (q, ctrl+c dos veces, o ctrl+d)", key: "q", group: "global" },
-  { id: "app.redraw", title: "redraw", summary: "forzar redibujado completo de la pantalla", key: "ctrl+l", group: "global" },
+  // ── global. Order matches screens-a.jsx HomeScreen hints exactly: 1-6 views ·
+  // / palette · l launch · ? help — hintsForTab() preserves COMMANDS array order below.
+  { id: "palette.open", title: "palette", summary: "open the command palette", key: "/", group: "global", showInHintBar: true },
+  { id: "nav.launchShortcut", title: "launch", summary: "jump straight to the launch view", key: "l", group: "global", showInHintBar: true },
+  { id: "app.help", title: "help", summary: "show the auto-generated help from the registry", key: "?", group: "global", showInHintBar: true },
+  { id: "app.quit", title: "exit", summary: "exit ebrain ui (q, ctrl+c twice, or ctrl+d)", key: "q", group: "global" },
+  { id: "app.redraw", title: "redraw", summary: "force a full screen redraw", key: "ctrl+l", group: "global" },
 ];
 
 /** A single hint-bar entry: `{k, label}` per widgets/chrome/hintbar.ts's contract. */
@@ -83,23 +82,26 @@ export interface HintEntry {
  * (`↑↓ navegar · a attach · k kill · p prompt`). This module is their single source
  * of truth, so the hint bar can never drift from the keys reduce() actually handles. */
 const SESSION_HINTS: HintEntry[] = [
-  { k: "↑↓", label: "navegar" },
+  { k: "↑↓", label: "navigate" },
   { k: "a", label: "attach" },
   { k: "k", label: "kill" },
   { k: "p", label: "prompt" },
+  // `a` hands the terminal fully to tmux; this is the tmux detach binding that
+  // returns you to ebrain (discoverability — see doAttach's on-handoff hint).
+  { k: "ctrl+b d", label: "detach" },
 ];
 
 /** Per-view hints for the Launch panel (F6.4.5) — the básico subset of the mockup's
  * LaunchScreen hints (the full advisor wizard's `c contexto` lands in F6.6.1). */
 const LAUNCH_HINTS: HintEntry[] = [
-  { k: "↑↓←→", label: "agente" },
-  { k: "enter", label: "lanzar" },
+  { k: "↑↓←→", label: "agent" },
+  { k: "enter", label: "launch" },
 ];
 
 /** Per-view hints for the F6.5 knowledge panels — each matches the keys reduce()
  * actually handles for that tab (screens-b.jsx MemoryScreen / DoctorScreen). */
 const MEMORY_HINTS: HintEntry[] = [
-  { k: "↑↓", label: "resultados" },
+  { k: "↑↓", label: "results" },
   { k: "r", label: "remember" },
 ];
 const ROUTING_HINTS: HintEntry[] = [{ k: "↑↓", label: "caps" }];

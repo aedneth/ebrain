@@ -1,6 +1,6 @@
 /**
  * tui/test/launch.test.ts — the Launch view + RAM-governor gate (SPRINT-TUI 6.4.5/6.4.6).
- * buildLaunchView renders the agente grid; reduce drives selection + the launch effect,
+ * buildLaunchView renders the agent grid; reduce drives selection + the launch effect,
  * and the confirmLaunch overlay proves the governor override is explicit (only `y`).
  * All TTY-free — the actual newSession/governor I/O lives in the loop.
  *
@@ -20,14 +20,14 @@ function launchState(selected = 0): AppState {
   return { tab: "launch", confirmQuit: false, cwd: "~/eBrain", launch: { selected } };
 }
 
-describe("buildLaunchView — the agente grid (F6.4.5)", () => {
+describe("buildLaunchView — the agent grid (F6.4.5)", () => {
   test("lists the launchable agents + the lanzar hint", () => {
     const frame = buildFrame(launchState(), size, t).map(strip).join("\n");
-    expect(frame).toContain("lanzar agente");
+    expect(frame).toContain("launch agent");
     expect(frame).toContain("claude");
     expect(frame).toContain("gemini");
     expect(frame).toContain("generic");
-    expect(frame).toContain("enter → nueva sesion");
+    expect(frame).toContain("enter → new session");
   });
 
   test("shows heavy vs light class per agent", () => {
@@ -37,14 +37,14 @@ describe("buildLaunchView — the agente grid (F6.4.5)", () => {
   });
 
   test("footer reflects the selected agent", () => {
-    expect(buildFrame(launchState(0), size, t).map(strip).join("\n")).toContain("nueva sesion claude");
-    expect(buildFrame(launchState(2), size, t).map(strip).join("\n")).toContain("nueva sesion gemini");
+    expect(buildFrame(launchState(0), size, t).map(strip).join("\n")).toContain("new session claude");
+    expect(buildFrame(launchState(2), size, t).map(strip).join("\n")).toContain("new session gemini");
   });
 
-  test("hint bar shows agente + lanzar", () => {
+  test("hint bar shows agent + launch", () => {
     const frame = buildFrame(launchState(), size, t).map(strip).join("\n");
-    expect(frame).toContain("agente");
-    expect(frame).toContain("lanzar");
+    expect(frame).toContain("agent");
+    expect(frame).toContain("launch");
   });
 
   test("every row is exactly cols wide", () => {
@@ -89,8 +89,8 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
       overlay: { kind: "confirmLaunch", agent: "codex", cwd: "/home/x/proj", reason: "ya hay 1 heavy vivo · 800 MB libres" },
     };
     const frame = buildFrame(st, size, t).map(strip).join("\n");
-    expect(frame).toContain("gobernador RAM");
+    expect(frame).toContain("RAM governor");
     expect(frame).toContain("800 MB");
-    expect(frame).toContain("lanzar codex igual");
+    expect(frame).toContain("launch codex anyway");
   });
 });

@@ -15,7 +15,7 @@ import { panel } from "./widgets/layout/panel.js";
 
 const BOLD = "\x1b[1m";
 
-const GROUP_LABEL: Record<string, string> = { nav: "navegacion", global: "global" };
+const GROUP_LABEL: Record<string, string> = { nav: "navigation", global: "global" };
 const GROUP_ORDER = ["nav", "global"] as const;
 
 /** Render the help dialog as box rows (square corners — it is a modal). */
@@ -37,8 +37,9 @@ export function renderHelp(theme: Theme, commands: Command[] = COMMANDS, width =
   }
 
   body.push("");
-  body.push(theme.fg("text.muted") + "esc cerrar" + theme.reset);
+  body.push(theme.fg("text.muted") + "esc close" + theme.reset);
 
   const height = body.length + 2;
-  return panel({ title: "ayuda · keybindings", dialog: true, width, height, body, bg: "background.raised" }, theme);
+  // contour-only modal: the dialog border delineates it, no interior fill.
+  return panel({ title: "help · keybindings", dialog: true, width, height, body }, theme);
 }

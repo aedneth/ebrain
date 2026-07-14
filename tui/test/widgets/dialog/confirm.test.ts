@@ -33,11 +33,12 @@ describe("confirm (truecolor/unicode)", () => {
     expect(strip(out[5])).toBe("└" + "─".repeat(width - 2) + "┘");
   });
 
-  it("danger colors the border + confirm key in error; body on raised bg", () => {
+  it("danger colors the border + confirm key in error; contour-only (no interior fill)", () => {
     const out = confirm({ danger: true, title: "t", message: "m", width: 30 }, t);
     expect(out[0]).toContain(t.fg("semantic.error")); // danger border
     expect(out[4]).toContain(t.fg("semantic.error")); // [confirmKey] in error
-    expect(out[2]).toContain(t.bg("background.raised"));
+    // No interior fill — the dialog border delineates it (breaks native terminal bg).
+    for (const row of out) expect(row).not.toContain(t.bg("background.raised"));
     for (const row of out) expect(displayWidth(row)).toBe(30);
   });
 
@@ -45,8 +46,8 @@ describe("confirm (truecolor/unicode)", () => {
     const out = confirm({ title: "t", message: "m", width: 44 }, t);
     expect(out[0]).toContain(t.fg("text.muted"));
     expect(out[4]).toContain(t.fg("accent.teal")); // confirm key accent
-    expect(strip(out[4])).toContain("[y] confirmar");
-    expect(strip(out[4])).toContain("[n] cancelar");
+    expect(strip(out[4])).toContain("[y] confirm");
+    expect(strip(out[4])).toContain("[n] cancel");
     for (const row of out) expect(displayWidth(row)).toBe(44);
   });
 });

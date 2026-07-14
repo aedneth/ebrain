@@ -996,10 +996,10 @@ function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, rect: Rect
     const memoriesBody =
       learnings.length > 0
         ? learnings.slice(0, 3).map((l) => formatOverviewMemoryRow(l, Math.max(0, cols - 4), theme))
-        : [theme.fg("text.secondary") + "sin memorias recientes" + theme.reset];
+        : [theme.fg("text.secondary") + "no recent memories" + theme.reset];
     out.push(
       ...panel(
-        { title: "ultimas memorias", width: cols, height: memoriesPanelHeight, body: memoriesBody },
+        { title: "latest memories", width: cols, height: memoriesPanelHeight, body: memoriesBody },
         theme,
       ),
     );
@@ -1056,12 +1056,12 @@ export function buildSessionsView(s: SessionsSlice, rect: Rect, theme: Theme): s
   if (s.rows.length === 0) {
     const msg =
       s.status === "no-tmux"
-        ? "tmux no esta instalado en este entorno"
+        ? "tmux is not installed in this environment"
         : s.status === "loading" || s.status === "idle"
-          ? "cargando sesiones…"
+          ? "loading sessions…"
           : s.status === "error"
-            ? `error: ${s.error ?? "consultando tmux"}`
-            : "sin sesiones activas · pulsa l para lanzar una";
+            ? `error: ${s.error ?? "querying tmux"}`
+            : "no active sessions · press l to launch one";
     return buildCenteredMessagePanel("sessions", msg, rect, theme);
   }
 
@@ -1087,7 +1087,7 @@ export function buildSessionsView(s: SessionsSlice, rect: Rect, theme: Theme): s
     },
     theme,
   );
-  const noun = s.rows.length === 1 ? "sesion" : "sesiones";
+  const noun = s.rows.length === 1 ? "session" : "sessions";
   const leftPanel = panel(
     {
       title: `fleet · ${s.rows.length} ${noun}`,
@@ -1104,7 +1104,7 @@ export function buildSessionsView(s: SessionsSlice, rect: Rect, theme: Theme): s
   const peekBody =
     s.peek && s.peek.name === selRow.name
       ? tailLines(s.peek.text, Math.max(1, height - 2))
-      : ["  (capturando salida…)"];
+      : ["  (capturing output…)"];
   const rightPanel = terminalPeek(
     { title: `peek · ${selRow.name}`, live: true, width: rightRect.width, height, body: peekBody },
     theme,
@@ -1166,13 +1166,13 @@ function buildLaunchView(sel: number, rect: Rect, theme: Theme): string[] {
 
   const selAgent = LAUNCHABLE[selected]!.agent;
   const foot =
-    theme.fg("text.muted") + "enter → nueva sesion " + reset +
+    theme.fg("text.muted") + "enter → new session " + reset +
     theme.fg("text.primary") + selAgent + reset +
-    theme.fg("text.muted") + " en el cwd actual · el gobernador RAM revisa antes de lanzar" + reset;
+    theme.fg("text.muted") + " in the current cwd · the RAM governor checks before launching" + reset;
 
   const body = [...grid, "", foot];
   return panel(
-    { title: "lanzar agente", focus: true, width: rect.width, height: rect.height, body },
+    { title: "launch agent", focus: true, width: rect.width, height: rect.height, body },
     theme,
   );
 }
@@ -1221,7 +1221,7 @@ export function buildMemoryView(m: MemorySlice, rect: Rect, theme: Theme): strin
 
   if (!m.data) {
     const msg =
-      m.status === "error" ? `error: ${m.error ?? "consultando memoria"}` : "cargando memoria…";
+      m.status === "error" ? `error: ${m.error ?? "querying memory"}` : "loading memory…";
     return buildCenteredMessagePanel("memory", msg, rect, theme);
   }
 
@@ -1235,7 +1235,7 @@ export function buildMemoryView(m: MemorySlice, rect: Rect, theme: Theme): strin
   out.push(
     padTo(
       promptBox(
-        { value: "", focus: false, placeholder: "busqueda semantica — `ebrain q` en terminal", hint: "", width: cols },
+        { value: "", focus: false, placeholder: "semantic search — `ebrain q` in terminal", hint: "", width: cols },
         theme,
       ),
       cols,
@@ -1264,7 +1264,7 @@ export function buildMemoryView(m: MemorySlice, rect: Rect, theme: Theme): strin
         )
       : [theme.fg("text.secondary") + "sin learnings recientes" + theme.reset];
   const leftPanel = panel(
-    { title: `resultados · ${learnings.length} · violeta = memoria`, focus: true, width: leftRect.width, height: midRect.height, body: resultsBody },
+    { title: `results · ${learnings.length} · violet = memory`, focus: true, width: leftRect.width, height: midRect.height, body: resultsBody },
     theme,
   );
 
@@ -1272,7 +1272,7 @@ export function buildMemoryView(m: MemorySlice, rect: Rect, theme: Theme): strin
   const logsBody =
     sessions.length > 0
       ? sessions.slice(0, Math.max(0, midRect.height - 2)).map((s) => renderLogRow(s, logW, theme))
-      : [theme.fg("text.secondary") + "sin sesiones" + theme.reset];
+      : [theme.fg("text.secondary") + "no sessions" + theme.reset];
   const rightPanel = panel(
     { title: "session-logs", width: rightRect.width, height: midRect.height, body: logsBody },
     theme,
@@ -1284,7 +1284,7 @@ export function buildMemoryView(m: MemorySlice, rect: Rect, theme: Theme): strin
   // Footer hint (the composer opens as an overlay on `r`).
   if (footRect.height > 0) {
     const foot =
-      theme.fg("text.muted") + "r → recordar (memoria agentica permanente) · ↑↓ resultados" + theme.reset;
+      theme.fg("text.muted") + "r → remember (permanent agentic memory) · ↑↓ results" + theme.reset;
     out.push(padTo(truncate(foot, cols), cols));
   }
 
@@ -1307,7 +1307,7 @@ export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): str
   if (height <= 0) return [];
 
   if (!r.data) {
-    const msg = r.status === "error" ? `error: ${r.error ?? "consultando spend"}` : "cargando gasto…";
+    const msg = r.status === "error" ? `error: ${r.error ?? "querying spend"}` : "loading spend…";
     return buildCenteredMessagePanel("routing", msg, rect, theme);
   }
 
@@ -1325,8 +1325,8 @@ export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): str
   const tableRows = table(
     {
       columns: [
-        { key: "cap", label: "capacidad", width: 15 },
-        { key: "routes", label: "rutas", width: 6, align: "right" },
+        { key: "cap", label: "capability", width: 15 },
+        { key: "routes", label: "routes", width: 6, align: "right" },
         { key: "mtd", label: "mtd", width: 9, align: "right" },
       ],
       rows,
@@ -1335,12 +1335,12 @@ export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): str
     theme,
   );
   const totalLine =
-    theme.fg("text.muted") + "total hoy  " + theme.reset +
+    theme.fg("text.muted") + "total today  " + theme.reset +
     spendTone(d.mtd, d.cap, theme) + "$" + d.mtd.toFixed(3) + theme.reset +
     theme.fg("text.muted") + " / $" + d.cap.toFixed(2) + theme.reset;
   const leftBody = [...tableRows, "", totalLine];
   const leftPanel = panel(
-    { title: "caps · gasto por carril", focus: true, width: leftRect.width, height, body: leftBody },
+    { title: "caps · spend by lane", focus: true, width: leftRect.width, height, body: leftBody },
     theme,
   );
 
@@ -1348,20 +1348,20 @@ export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): str
   const budgetBody: string[] = [];
   budgetBody.push(gauge({ value: d.mtd, max: d.cap, width: Math.max(8, rightRect.width - 6), suffix: "", tone: "auto" }, theme));
   budgetBody.push("");
-  budgetBody.push(theme.fg("text.secondary") + "restante  " + theme.fg("text.primary") + "$" + d.remaining.toFixed(2) + theme.reset);
+  budgetBody.push(theme.fg("text.secondary") + "remaining  " + theme.fg("text.primary") + "$" + d.remaining.toFixed(2) + theme.reset);
   budgetBody.push(
     theme.fg("text.secondary") + "hard-stop " +
-      (d.hardStop ? theme.fg("semantic.ok") + "si" : theme.fg("semantic.warn") + "no") + theme.reset,
+      (d.hardStop ? theme.fg("semantic.ok") + "yes" : theme.fg("semantic.warn") + "no") + theme.reset,
   );
   if (d.gbrainUntracked) {
     budgetBody.push("");
-    budgetBody.push(theme.fg("semantic.warn") + theme.glyph("badgeDot") + " gbrain: gasto sin trackear" + theme.reset);
+    budgetBody.push(theme.fg("semantic.warn") + theme.glyph("badgeDot") + " gbrain: untracked spend" + theme.reset);
   }
   budgetBody.push("");
-  budgetBody.push(theme.fg("text.muted") + "cadenas + ledger por evento:" + theme.reset);
-  budgetBody.push(theme.fg("text.muted") + "pendiente contrato routing --json" + theme.reset);
+  budgetBody.push(theme.fg("text.muted") + "chains + per-event ledger:" + theme.reset);
+  budgetBody.push(theme.fg("text.muted") + "pending routing --json contract" + theme.reset);
   const rightPanel = panel(
-    { title: `presupuesto · ${d.month}`, width: rightRect.width, height, body: budgetBody },
+    { title: `budget · ${d.month}`, width: rightRect.width, height, body: budgetBody },
     theme,
   );
 
@@ -1413,10 +1413,10 @@ export function buildDoctorView(d: DoctorSlice, rect: Rect, theme: Theme): strin
   if (!d.doctor && !d.fleet) {
     const msg =
       d.status === "error"
-        ? `error: ${d.error ?? "consultando doctor"}`
+        ? `error: ${d.error ?? "querying doctor"}`
         : d.running
-          ? "ejecutando diagnostico…"
-          : "cargando diagnostico…";
+          ? "running diagnostics…"
+          : "loading diagnostics…";
     return buildCenteredMessagePanel("doctor", msg, rect, theme);
   }
 
@@ -1428,7 +1428,7 @@ export function buildDoctorView(d: DoctorSlice, rect: Rect, theme: Theme): strin
   const selected = clampIndex(d.selected, Math.max(1, checks.length));
   const leftBody: string[] = [];
   if (d.running) {
-    leftBody.push(spinner({ label: "re-ejecutando checks…", frame: d.spinnerFrame }, theme));
+    leftBody.push(spinner({ label: "re-running checks…", frame: d.spinnerFrame }, theme));
     leftBody.push("");
   }
   const listRoom = Math.max(1, height - 2 - leftBody.length);
@@ -1438,7 +1438,7 @@ export function buildDoctorView(d: DoctorSlice, rect: Rect, theme: Theme): strin
   for (let i = 0; i < windowed.length; i++) {
     leftBody.push(renderCheckRow(windowed[i]!, rowW, offset + i === selected, theme));
   }
-  const title = d.running ? "diagnostico" : d.atLabel ? `diagnostico · ultimo ${d.atLabel}` : "diagnostico";
+  const title = d.running ? "diagnostics" : d.atLabel ? `diagnostics · last ${d.atLabel}` : "diagnostics";
   const leftPanel = panel(
     { title, focus: true, width: leftRect.width, height, body: leftBody },
     theme,
@@ -1482,7 +1482,7 @@ function buildMinSizeFrame(size: FrameSize, theme: Theme): string[] {
   const total = Math.max(0, rows);
   if (cols <= 0) return Array.from({ length: total }, () => "");
 
-  const message = `ebrain ui requiere ≥80×24 — actual ${cols}×${rows}`;
+  const message = `ebrain ui requires ≥80×24 — current ${cols}×${rows}`;
   const colored = theme.fg("semantic.warn") + message + theme.reset;
   const blank = " ".repeat(cols);
   const midRow = Math.floor(total / 2);
@@ -1665,6 +1665,12 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
         peekTimer = null;
       }
       screen.exit();
+      // Discoverability: attaching hands the terminal FULLY to tmux — the way back to
+      // ebrain is the tmux detach binding, not anything ebrain owns. Print it before the
+      // handoff (tmux may redraw over it, but the sessions hint bar shows it persistently).
+      if (target.verb === "attach-session") {
+        output.write(`\r\n  attached to ${name} — press Ctrl-b then d to detach back to ebrain\r\n\r\n`);
+      }
       try {
         const proc = Bun.spawn(["tmux", ...target.args], {
           stdin: "inherit",
@@ -1722,8 +1728,8 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
     }
 
     function launchSlug(cwd: string): string {
-      const base = cwd.split("/").filter(Boolean).pop() || "sesion";
-      const clean = base.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 16) || "sesion";
+      const base = cwd.split("/").filter(Boolean).pop() || "session";
+      const clean = base.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 16) || "session";
       return `${clean}-${Date.now().toString(36).slice(-4)}`; // short suffix avoids name clashes
     }
 

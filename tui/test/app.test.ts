@@ -85,28 +85,28 @@ describe("buildFrame — home snapshot (120x32)", () => {
     }
   });
 
-  it("the 'ultimas memorias' panel is present", () => {
-    expect(plain.join("\n")).toContain("ultimas memorias");
+  it("the 'latest memories' panel is present", () => {
+    expect(plain.join("\n")).toContain("latest memories");
   });
 
-  it("the 'sistema' and 'sesiones activas' panels are present", () => {
-    expect(plain.join("\n")).toContain("sistema");
-    expect(plain.join("\n")).toContain("sesiones activas");
+  it("the 'system' and 'active sessions' panels are present", () => {
+    expect(plain.join("\n")).toContain("system");
+    expect(plain.join("\n")).toContain("active sessions");
   });
 
   it("the penultimate row is the hint bar, the last row is the footer", () => {
-    expect(plain[30]).toContain("ctrl+c salir");
+    expect(plain[30]).toContain("ctrl+c exit");
     expect(plain[31]).toContain("ebrain");
   });
 });
 
 describe("buildFrame — knowledge tabs are REAL views (F6.5), never stubs", () => {
   // All six tabs now render real views; none say "proximamente". With no slice data yet
-  // they degrade to a bordered "cargando…" panel — never a spinner-forever (6.5.5).
+  // they degrade to a bordered "loading…" panel — never a spinner-forever (6.5.5).
   const cases: Array<[string, string]> = [
-    ["memory", "cargando memoria"],
-    ["routing", "cargando gasto"],
-    ["doctor", "cargando diagnostico"],
+    ["memory", "loading memory"],
+    ["routing", "loading spend"],
+    ["doctor", "loading diagnostics"],
   ];
   for (const [tab, loadingMsg] of cases) {
     it(`${tab} renders its real panel with a loading state (not a stub)`, () => {
@@ -203,24 +203,24 @@ describe("buildFrame — min-size guard", () => {
     for (const row of frame) expect(displayWidth(row)).toBe(60);
 
     const plain = frame.map(stripAnsi).join("\n");
-    expect(plain).toContain("ebrain ui requiere");
+    expect(plain).toContain("ebrain ui requires");
     expect(plain).toContain("60");
     expect(plain).toContain("20");
     // The real shell chrome must be absent — this is the guard, not a shrunk shell.
-    expect(plain).not.toContain("sesiones activas");
-    expect(plain).not.toContain("ultimas memorias");
+    expect(plain).not.toContain("active sessions");
+    expect(plain).not.toContain("latest memories");
   });
 
   it(`right at the threshold (${MIN_COLS}x${MIN_ROWS}) renders the real shell, not the guard`, () => {
     const frame = buildFrame(initialState(), { cols: MIN_COLS, rows: MIN_ROWS }, theme);
     const plain = frame.map(stripAnsi).join("\n");
-    expect(plain).not.toContain("ebrain ui requiere");
+    expect(plain).not.toContain("ebrain ui requires");
   });
 
   it(`one row short of the threshold (${MIN_COLS}x${MIN_ROWS - 1}) triggers the guard`, () => {
     const frame = buildFrame(initialState(), { cols: MIN_COLS, rows: MIN_ROWS - 1 }, theme);
     const plain = frame.map(stripAnsi).join("\n");
-    expect(plain).toContain("ebrain ui requiere");
+    expect(plain).toContain("ebrain ui requires");
   });
 });
 
