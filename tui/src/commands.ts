@@ -89,6 +89,13 @@ const SESSION_HINTS: HintEntry[] = [
   { k: "p", label: "prompt" },
 ];
 
+/** Per-view hints for the Launch panel (F6.4.5) — the básico subset of the mockup's
+ * LaunchScreen hints (the full advisor wizard's `c contexto` lands in F6.6.1). */
+const LAUNCH_HINTS: HintEntry[] = [
+  { k: "↑↓←→", label: "agente" },
+  { k: "enter", label: "lanzar" },
+];
+
 /**
  * The hints shown in the bottom hint bar for the given tab.
  *
@@ -100,6 +107,7 @@ const SESSION_HINTS: HintEntry[] = [
  */
 export function hintsForTab(tab: TabName): HintEntry[] {
   if (tab === "sessions") return SESSION_HINTS;
+  if (tab === "launch") return LAUNCH_HINTS;
   return COMMANDS.filter((c) => c.showInHintBar).map((c) => ({
     k: c.hintKey ?? c.key ?? "",
     label: c.title,

@@ -61,10 +61,18 @@ import {
   peekSession,
   killSession,
   sendToSession,
+  newSession,
   hasServer,
   attachTarget,
 } from "./sessions/tmux.js";
 import { shouldCapture, tailLines, uptimeFromIso } from "./sessions/peek.js";
+import {
+  governLaunch,
+  classOf,
+  countLiveHeavy,
+  readAvailableMb,
+  logOverride,
+} from "./sessions/governor.js";
 import { lineFrom, lineApplyKey, type LineState } from "./kit/lineedit.js";
 
 export { TABS, type TabName } from "./commands.js";
@@ -142,7 +150,8 @@ export type Overlay =
   | { kind: "palette"; palette: PaletteState }
   | { kind: "help" }
   | { kind: "confirmKill"; name: string }
-  | { kind: "prompt"; name: string; line: LineState };
+  | { kind: "prompt"; name: string; line: LineState }
+  | { kind: "confirmLaunch"; agent: string; cwd: string; reason: string };
 
 export interface AppState {
   tab: TabName;
@@ -156,6 +165,8 @@ export interface AppState {
   overlay?: Overlay | null;
   /** Live tmux session data (F6.4). Optional — sessionsOf() defaults an empty slice. */
   sessions?: SessionsSlice;
+  /** Launch-panel selection (F6.4.5). Optional — defaults to index 0. */
+  launch?: { selected: number };
 }
 
 /** Caller's cwd: cli/ebrain exports EBRAIN_CALLER_CWD before cd-ing to run_bun's
@@ -195,6 +206,7 @@ export function initialState(): AppState {
     branch: detectBranch(dir),
     overlay: null,
     sessions: emptySessions(),
+    launch: { selected: 0 },
   };
 }
 
@@ -212,7 +224,11 @@ export type AppEffect =
   | { type: "peek"; name: string }
   | { type: "attach"; name: string }
   | { type: "kill"; name: string }
-  | { type: "send"; name: string; text: string };
+  | { type: "send"; name: string; text: string }
+  /** Launch `agent` — the loop runs the RAM governor, which may open a confirm. */
+  | { type: "launch"; agent: string }
+  /** Launch confirmed through the governor's dialog (an override that gets logged). */
+  | { type: "launchConfirmed"; agent: string; cwd: string; reason: string };
 
 export interface ReduceResult {
   state: AppState;
@@ -309,6 +325,26 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       return settle(state);
     }
 
+    if (ov.kind === "confirmLaunch") {
+      // The RAM governor's override gate: only `y` proceeds (emits launchConfirmed,
+      // which the loop logs as an override). n / esc / q back out.
+      if (key.name === "char" && (key.char === "y" || key.char === "Y")) {
+        return {
+          state: { ...state, overlay: null },
+          quit: false,
+          forceRedraw: false,
+          effect: { type: "launchConfirmed", agent: ov.agent, cwd: ov.cwd, reason: ov.reason },
+        };
+      }
+      if (
+        key.name === "escape" ||
+        (key.name === "char" && (key.char === "n" || key.char === "N" || key.char === "q"))
+      ) {
+        return settle({ ...state, overlay: null });
+      }
+      return settle(state);
+    }
+
     // ov.kind === "prompt": type a line; enter sends (deliberate) · esc cancels.
     if (key.name === "escape") return settle({ ...state, overlay: null });
     if (key.name === "enter") {
@@ -341,6 +377,21 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       { ...state, confirmQuit: false, sessions: { ...s, selected } },
       { type: "peek", name: s.rows[selected]!.name },
     );
+  }
+
+  // Launch panel: arrows move the agent-grid selection; enter launches the selected one.
+  if (state.tab === "launch") {
+    if (key.name === "up" || key.name === "down" || key.name === "left" || key.name === "right") {
+      const cur = state.launch?.selected ?? 0;
+      const delta =
+        key.name === "left" ? -1 : key.name === "right" ? 1 : key.name === "up" ? -LAUNCH_COLS : LAUNCH_COLS;
+      const selected = Math.min(Math.max(0, cur + delta), LAUNCHABLE.length - 1);
+      return settle({ ...state, confirmQuit: false, launch: { selected } });
+    }
+    if (key.name === "enter") {
+      const it = LAUNCHABLE[state.launch?.selected ?? 0];
+      if (it) return settle({ ...state, confirmQuit: false }, { type: "launch", agent: it.agent });
+    }
   }
 
   if (key.name === "char") {
@@ -463,6 +514,26 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
     return { box, top, left };
   }
 
+  if (overlay.kind === "confirmLaunch") {
+    const width = Math.min(80, Math.max(40, cols - 6));
+    const box = confirm(
+      {
+        title: "gobernador RAM",
+        message: overlay.reason,
+        danger: false,
+        confirmKey: "y",
+        confirmLabel: `lanzar ${overlay.agent} igual`,
+        cancelKey: "n",
+        cancelLabel: "cancelar",
+        width,
+      },
+      theme,
+    );
+    const left = Math.max(0, Math.floor((cols - width) / 2));
+    const top = Math.max(0, Math.floor((rows - box.length) / 2));
+    return { box, top, left };
+  }
+
   if (overlay.kind === "prompt") {
     const width = Math.min(64, Math.max(30, cols - 6));
     const box = buildPromptBox(overlay, width, theme);
@@ -540,6 +611,7 @@ function buildMiddle(state: AppState, rect: Rect, theme: Theme): string[] {
   let rows: string[];
   if (state.tab === "home") rows = buildHomeView(rect, theme);
   else if (state.tab === "sessions") rows = buildSessionsView(sessionsOf(state), rect, theme);
+  else if (state.tab === "launch") rows = buildLaunchView(state.launch?.selected ?? 0, rect, theme);
   else rows = buildStubView(state.tab, rect, theme);
   return rows.slice(0, rect.height).map((r) => padTo(truncate(r, rect.width), rect.width));
 }
@@ -770,7 +842,68 @@ export function buildSessionsView(s: SessionsSlice, rect: Rect, theme: Theme): s
 }
 
 // ---------------------------------------------------------------------------
-// Stub views — launch/memory/routing/doctor become real views in F6.5/6.6.
+// Launch view (F6.4.5) — the "agente" grid of screens-a.jsx's LaunchScreen (the
+// básico subset: pick an adapter, enter to launch; the RAM governor gates it). The
+// full advisor wizard — task PromptBox + advisor panel + context preview — is F6.6.1.
+// ---------------------------------------------------------------------------
+
+const LAUNCH_COLS = 2;
+
+/** Launchable adapters with their manifest RAM class (for the badge only; the governor
+ * reads the AUTHORITATIVE class via readClass at launch time). The 6 adapters that have
+ * a `launch:` command — route/free aren't tmux sessions. */
+const LAUNCHABLE: Array<{ agent: AgentName; cls: "heavy" | "light" }> = [
+  { agent: "claude", cls: "heavy" },
+  { agent: "codex", cls: "heavy" },
+  { agent: "gemini", cls: "light" },
+  { agent: "opencode", cls: "heavy" },
+  { agent: "cursor", cls: "heavy" },
+  { agent: "generic", cls: "light" },
+];
+
+function buildLaunchView(sel: number, rect: Rect, theme: Theme): string[] {
+  const reset = theme.reset;
+  const selected = Math.min(Math.max(0, sel), LAUNCHABLE.length - 1);
+  const contentW = Math.max(0, rect.width - 4);
+  const colGap = 2;
+  const cellW = Math.max(10, Math.floor((contentW - colGap) / LAUNCH_COLS));
+  const rowsN = Math.ceil(LAUNCHABLE.length / LAUNCH_COLS);
+
+  const grid: string[] = [];
+  for (let r = 0; r < rowsN; r++) {
+    let line = "";
+    for (let c = 0; c < LAUNCH_COLS; c++) {
+      const idx = r * LAUNCH_COLS + c;
+      if (c > 0) line += " ".repeat(colGap);
+      if (idx >= LAUNCHABLE.length) {
+        line += " ".repeat(cellW);
+        continue;
+      }
+      const it = LAUNCHABLE[idx]!;
+      const on = idx === selected;
+      const marker = on ? theme.fg("accent.teal") + "▸ " + reset : "  ";
+      const b = badge({ agent: it.agent }, theme);
+      const clsColor = it.cls === "heavy" ? theme.fg("semantic.warn") : theme.fg("text.muted");
+      line += padTo(truncate(marker + b + "  " + clsColor + it.cls + reset, cellW), cellW);
+    }
+    grid.push(line);
+  }
+
+  const selAgent = LAUNCHABLE[selected]!.agent;
+  const foot =
+    theme.fg("text.muted") + "enter → nueva sesion " + reset +
+    theme.fg("text.primary") + selAgent + reset +
+    theme.fg("text.muted") + " en el cwd actual · el gobernador RAM revisa antes de lanzar" + reset;
+
+  const body = [...grid, "", foot];
+  return panel(
+    { title: "lanzar agente", focus: true, width: rect.width, height: rect.height, body, bg: "background.surface" },
+    theme,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Stub views — memory/routing/doctor become real views in F6.5.
 // ---------------------------------------------------------------------------
 
 function buildStubView(tab: TabName, rect: Rect, theme: Theme): string[] {
@@ -994,6 +1127,43 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       if (sel) void doPeek(sel.name);
     }
 
+    /** Launch `agent`: run the RAM governor (6.4.6); if it wants confirmation, open the
+     * dialog; otherwise launch straight away. */
+    async function doLaunch(agent: string): Promise<void> {
+      const cwd = callerCwd();
+      const [cls, heavy] = await Promise.all([classOf(agent), countLiveHeavy()]);
+      const g = governLaunch({ launchingClass: cls, liveHeavyCount: heavy, availableMb: readAvailableMb() });
+      if (g.decision === "confirm") {
+        state = { ...state, overlay: { kind: "confirmLaunch", agent, cwd, reason: g.reason } };
+        render();
+        return;
+      }
+      await performLaunch(agent, cwd, null);
+    }
+
+    /** Actually create the session (via the manifest launch cmd + full harness env).
+     * `override` non-null means the user pushed past the governor → log the override. */
+    async function performLaunch(agent: string, cwd: string, override: string | null): Promise<void> {
+      if (override) logOverride({ agent, cwd, reason: override });
+      const r = await newSession(agent, launchSlug(cwd), { cwd });
+      if (!r.ok) {
+        // Surface the refusal (deny-client rc=2, bad-agent, tmux error) in the panel.
+        const s = sessionsOf(state);
+        state = { ...state, tab: "sessions", sessions: { ...s, status: "error", error: r.error.message } };
+        render();
+        return;
+      }
+      state = withTab(state, "sessions"); // jump to Sessions to show the new one
+      render();
+      await refreshSessions();
+    }
+
+    function launchSlug(cwd: string): string {
+      const base = cwd.split("/").filter(Boolean).pop() || "sesion";
+      const clean = base.toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 16) || "sesion";
+      return `${clean}-${Date.now().toString(36).slice(-4)}`; // short suffix avoids name clashes
+    }
+
     async function handleEffect(effect: AppEffect): Promise<void> {
       switch (effect.type) {
         case "refreshSessions":
@@ -1010,6 +1180,12 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
           break;
         case "send":
           await doSend(effect.name, effect.text);
+          break;
+        case "launch":
+          await doLaunch(effect.agent);
+          break;
+        case "launchConfirmed":
+          await performLaunch(effect.agent, effect.cwd, effect.reason);
           break;
       }
     }
