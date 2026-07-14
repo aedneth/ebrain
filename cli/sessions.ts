@@ -22,7 +22,7 @@
  *   ebrain sessions send <name> "<texto>" --yes --json
  *   ebrain sessions kill <name> --yes --json
  */
-import { existsSync } from "fs";
+import { existsSync, realpathSync } from "fs";
 import { join, resolve } from "path";
 import { homedir } from "os";
 
@@ -73,25 +73,36 @@ export function isSafeToken(s: string): boolean {
 // redactar antes de que salga de este proceso. Reusa el mismo vocabulario de guard-secrets.sh
 // (key/token/password/.env-value) pero como patrones de FORMA-DE-VALOR, no de nombre-de-archivo.
 // Nunca se imprime/retorna pane sin pasar por acá — ver peekSession().
-const KEYLIKE_NAME = /((?:[A-Z0-9_]*_)?(?:API[_-]?KEY|ACCESS[_-]?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PWD|CREDENTIAL[S]?|PRIVATE[_-]?KEY))/i;
-// `NOMBRE=valor` o `NOMBRE: valor` o `NOMBRE valor` donde NOMBRE matchea forma de secreto — redacta
-// el VALOR, preserva el nombre (útil para depurar sin filtrar el secreto).
+// Incluye el sufijo `KEY` genérico (SECRET_KEY / ENCRYPTION_KEY / SSH_KEY — nombres de env
+// ultra-comunes de Django/Flask/Rails), no solo API_KEY/ACCESS_KEY/PRIVATE_KEY (gap cazado en el
+// gate F6.4.8). Sobre-redactar (p.ej. un inocente `KEY=`) es aceptable; el sesgo de un scrubber de
+// seguridad es fail-safe hacia redactar de más, nunca de menos.
+const KEYLIKE_NAME = /((?:[A-Z0-9_]*_)?(?:API[_-]?KEY|ACCESS[_-]?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PWD|CREDENTIAL[S]?|PRIVATE[_-]?KEY|KEY))/i;
+// `NOMBRE=valor` o `NOMBRE: valor` (separador `[:=]` únicamente — NO cubre separador por espacio)
+// donde NOMBRE matchea forma de secreto — redacta el VALOR, preserva el nombre (depurar sin filtrar).
 const KV_SECRET = new RegExp(`(${KEYLIKE_NAME.source})\\s*[:=]\\s*(\\S+)`, "gi");
 // Prefijos de proveedor conocidos (Anthropic/OpenAI/OpenRouter/GitHub/AWS/Google/Slack) + Bearer
-// tokens genéricos — redacta el token completo dondequiera que aparezca en el texto.
+// tokens genéricos — redacta el token completo dondequiera que aparezca. sk- admite `_-` internos
+// (cubre `sk-proj-…`/`sk-svcacct-…` de OpenAI, que rompían el `sk-<alnum>{20,}` en el guion — gate F6.4.8).
 const KNOWN_TOKEN_SHAPES = [
   /sk-ant-[A-Za-z0-9_-]{8,}/g,
   /sk-or-v1-[A-Za-z0-9]{8,}/g,
-  /sk-[A-Za-z0-9]{20,}/g,
+  /sk-[A-Za-z0-9][A-Za-z0-9_-]{19,}/g,
   /gh[pousr]_[A-Za-z0-9]{20,}/g,
   /AKIA[0-9A-Z]{16}/g,
   /AIza[0-9A-Za-z_-]{35}/g,
   /xox[baprs]-[0-9A-Za-z-]{10,}/g,
   /Bearer\s+[A-Za-z0-9._-]{15,}/gi,
 ];
+// Bloque PEM de llave privada (RSA/EC/OPENSSH/…) — redacta entero, o el header suelto si el pane
+// cortó el bloque antes del END (gate F6.4.8: un `.pen`/`.key` volcado al pane fugaba sin esto).
+const PEM_BLOCK = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g;
+const PEM_HEADER = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/g;
 
 export function scrubSecrets(text: string): string {
-  let out = text.replace(KV_SECRET, (_m, name: string) => `${name}=[REDACTED]`);
+  let out = text.replace(PEM_BLOCK, "[REDACTED PRIVATE KEY]");
+  out = out.replace(PEM_HEADER, "[REDACTED PRIVATE KEY]"); // header sin END en la ventana capturada
+  out = out.replace(KV_SECRET, (_m, name: string) => `${name}=[REDACTED]`);
   for (const re of KNOWN_TOKEN_SHAPES) out = out.replace(re, "[REDACTED]");
   return out;
 }
@@ -184,7 +195,17 @@ export async function newSession(agent: string, slug: string, opts: NewSessionOp
   const name = sessionName(agent, slug);
   const cwd = resolve(opts.cwd ?? process.cwd());
 
-  if (isClientPath(cwd)) {
+  // Deny repos de cliente ANTES de crear nada. `resolve()` colapsa `..` pero NO sigue symlinks —
+  // un symlink/bind-mount apuntando a brisas/dekko evadía el chequeo textual (gap del gate F6.4.8);
+  // `realpathSync` resuelve el destino real. Chequeamos AMBOS (literal + real) para no depender de
+  // que el path exista (si no existe, realpath tira y cae al existsSync de abajo).
+  let realCwd = cwd;
+  try {
+    realCwd = realpathSync(cwd);
+  } catch {
+    /* no existe todavía → se caza abajo con existsSync */
+  }
+  if (isClientPath(cwd) || isClientPath(realCwd)) {
     return { ok: false, error: { type: "deny-client", message: `cwd resuelve bajo un repo de cliente (${CLIENT_DENYLIST.join(" / ")}) — rechazado (aislamiento duro, ver CLAUDE.md)` } };
   }
   if (!existsSync(cwd)) {
@@ -243,9 +264,15 @@ export async function sendToSession(name: string, text: string, yes: boolean): P
       would: { name, text },
     };
   }
-  const r = await tmuxRaw(["send-keys", "-t", name, text, "Enter"]);
-  if ("spawnError" in r) return { ok: false, error: { type: "tmux-not-installed", message: r.spawnError } };
-  if (r.code !== 0) return { ok: false, error: { type: classifyTmuxError(r.stderr), message: r.stderr.trim() || "tmux send-keys falló" } };
+  // `-l -- <text>`: envía el texto LITERAL, sin que tmux interprete tokens de tecla (Enter/Space/
+  // C-c/Tab) si el prompt casualmente ES uno (gate F6.4.8: sin `-l`, un prompt "C-c" mandaba Ctrl-C
+  // al agente en vez del texto). El Enter que somete el prompt va como pulsación aparte.
+  const rLit = await tmuxRaw(["send-keys", "-t", name, "-l", "--", text]);
+  if ("spawnError" in rLit) return { ok: false, error: { type: "tmux-not-installed", message: rLit.spawnError } };
+  if (rLit.code !== 0) return { ok: false, error: { type: classifyTmuxError(rLit.stderr), message: rLit.stderr.trim() || "tmux send-keys falló" } };
+  const rEnter = await tmuxRaw(["send-keys", "-t", name, "Enter"]);
+  if ("spawnError" in rEnter) return { ok: false, error: { type: "tmux-not-installed", message: rEnter.spawnError } };
+  if (rEnter.code !== 0) return { ok: false, error: { type: classifyTmuxError(rEnter.stderr), message: rEnter.stderr.trim() || "tmux send-keys falló" } };
   return { ok: true, name, sent: true };
 }
 

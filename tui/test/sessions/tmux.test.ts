@@ -111,4 +111,24 @@ describeE2E("tmux E2E (real server + fake-agent 6.4.2)", () => {
     },
     20000,
   );
+
+  test(
+    "send is LITERAL (-l, gate F6.4.8): a prompt that is a tmux key-token arrives as TEXT",
+    async () => {
+      const litSlug = SLUG + "lit";
+      const litName = sessionName("test", litSlug);
+      const created = await newSession("test", litSlug, { launchCmd: `bash ${FAKE}` });
+      expect(created.ok).toBe(true);
+      await Bun.sleep(600);
+      // Without -l, "Space" would inject a space char (fake-agent echoes "recibí:  ");
+      // with -l it is sent literally, so the fake-agent echoes the WORD "Space".
+      await sendToSession(litName, "Space", true);
+      await Bun.sleep(1300);
+      const p = await peekSession(litName);
+      expect(p.ok).toBe(true);
+      if (p.ok) expect(p.text).toContain("recibí: Space");
+      await killSession(litName, true);
+    },
+    15000,
+  );
 });

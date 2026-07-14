@@ -9,9 +9,15 @@ import { test, expect, describe } from "bun:test";
 import { governLaunch, parseAvailableMb, HEAVY_MIN_FREE_MB } from "../../src/sessions/governor.ts";
 
 describe("governLaunch — the launch RAM gate (pure)", () => {
-  test("light / unknown agents are never gated", () => {
+  test("only explicit `light` agents skip the gate", () => {
     expect(governLaunch({ launchingClass: "light", liveHeavyCount: 5, availableMb: 100 }).decision).toBe("allow");
-    expect(governLaunch({ launchingClass: "unknown", liveHeavyCount: 5, availableMb: 100 }).decision).toBe("allow");
+  });
+
+  test("`unknown` class is treated as heavy — FAIL-SAFE (gate F6.4.8)", () => {
+    // a manifest without `class` must NOT silently bypass the RAM gate
+    expect(governLaunch({ launchingClass: "unknown", liveHeavyCount: 1, availableMb: 2000 }).decision).toBe("confirm");
+    // but unknown alone with ample RAM is fine (first-heavy path)
+    expect(governLaunch({ launchingClass: "unknown", liveHeavyCount: 0, availableMb: 2000 }).decision).toBe("allow");
   });
 
   test("first heavy with ample RAM → allow", () => {

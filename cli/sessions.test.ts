@@ -9,7 +9,7 @@
  */
 import { test, expect, describe } from "bun:test";
 import { execSync } from "child_process";
-import { mkdirSync, rmSync, writeFileSync, chmodSync } from "fs";
+import { mkdirSync, rmSync, writeFileSync, chmodSync, mkdtempSync, symlinkSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -85,6 +85,21 @@ describe("scrubSecrets", () => {
     const raw = "fake-agent: listo (AGENT_NAME=test)\n[fake-agent 10:00:00] tick";
     expect(scrubSecrets(raw)).toBe(raw);
   });
+  test("gate F6.4.8: cierra fugas antes no cubiertas (SECRET_KEY=, sk-proj- suelto, bloque PEM)", () => {
+    // sufijo `_KEY` genérico (Django/Flask/Rails) — antes fugaba porque KEY solo no era alternante
+    const sk = scrubSecrets("SECRET_KEY=django-insecure-abc123xyz");
+    expect(sk).toContain("SECRET_KEY=[REDACTED]");
+    expect(sk).not.toContain("django-insecure-abc123xyz");
+    expect(scrubSecrets("ENCRYPTION_KEY: hunter2secretvalue")).toContain("[REDACTED]");
+    // sk-proj- SUELTO (sin name=): lo agarra la forma de token, que antes se rompía en el guion
+    const proj = scrubSecrets("el pane imprime sk-proj-Ab12Cd34Ef56Gh78Ij90Kl al pasar");
+    expect(proj).not.toContain("sk-proj-Ab12Cd34Ef56Gh78Ij90Kl");
+    expect(proj).toContain("[REDACTED]");
+    // bloque PEM de llave privada volcado al pane
+    const pem = scrubSecrets("-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEAbase64blob\n-----END RSA PRIVATE KEY-----");
+    expect(pem).not.toContain("MIIEpAIBAAKCAQEAbase64blob");
+    expect(pem).toContain("[REDACTED PRIVATE KEY]");
+  });
 });
 
 // ── gating --yes (send/kill NUNCA mutan sin --yes — se puede probar sin tmux: el short-circuit
@@ -113,6 +128,23 @@ test("newSession: cwd bajo repo de cliente → deny-client, nunca llega a crear 
   const r = await newSession("test", "cliente-test", { cwd: "/home/eduardo/repos/brisas-del-golfo/sub" });
   expect(r.ok).toBe(false);
   if (!r.ok) expect(r.error.type).toBe("deny-client");
+});
+
+test("gate F6.4.8: symlink a repo de cliente → deny-client (realpath, no solo segmento textual)", async () => {
+  const tmp = mkdtempSync(join(tmpdir(), "ebr-symlink-"));
+  try {
+    const fakeClient = join(tmp, "brisas-del-golfo");
+    mkdirSync(fakeClient);
+    const link = join(tmp, "atajo-bdg"); // el nombre del link NO delata al cliente
+    symlinkSync(fakeClient, link);
+    expect(isClientPath(link)).toBe(false); // el chequeo textual del link solo no alcanza
+    // newSession debe denegar igual: realpathSync resuelve el symlink al repo de cliente real.
+    const r = await newSession("test", "symlinktest", { cwd: link, launchCmd: "bash -c :" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.type).toBe("deny-client");
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 test("newSession: agente/slug con caracteres inseguros → bad-agent, nunca llega a tmux", async () => {

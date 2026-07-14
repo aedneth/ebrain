@@ -46,8 +46,10 @@ export interface GovernResult {
 export function governLaunch(input: GovernInput): GovernResult {
   const { launchingClass, liveHeavyCount, availableMb } = input;
 
-  // Light (or unknown-class) agents never count against "un heavy a la vez".
-  if (launchingClass !== "heavy") return { decision: "allow", reason: "" };
+  // Solo los explícitamente `light` (gemini/generic) saltan el gate. `unknown` (adapter sin campo
+  // `class` en su manifest) se trata como heavy — FAIL-SAFE: mejor pedir confirmación de más que
+  // dejar pasar un agente pesado sin control por un manifest incompleto (gate F6.4.8).
+  if (launchingClass === "light") return { decision: "allow", reason: "" };
 
   if (liveHeavyCount >= 1) {
     return {
