@@ -4,6 +4,18 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-14 — FASE 6.5 CERRADA: paneles de conocimiento (Overview/Memory/Routing/Doctor) + GATE 6.5.7 `[AUDIT_PASS]` (self-audit)
+
+- **Plano de datos de conocimiento** (`tui/src/knowledge/{contracts,run}.ts`): los 4 paneles leen los MISMOS subcomandos contract-tested de F6.1 vía spawn de `ebrain <sub> --json` — `buildFrame` sigue PURO, solo `runUi` (impuro) invoca los fetchers, que delegan a parsers puros. **Cero lógica huérfana (criterio #2 del gate):** ningún panel lee `routing.yaml`/`spend.jsonl`/fs directo. Slices async con estado `loading/ready/error` → **jamás spinner-forever**.
+- **6.5.1 Overview**: `status --json` real (brain/spend/fleet/memoria) + últimas 3 memorias + sesiones; **statusbar global cableada a datos vivos** (antes hardcodeada "fleet 6/6"). **6.5.4 Fleet/Doctor**: `fleet`+`doctor --json` colorizado por nivel (**✓/!/✗** DS-sancionados, fallback ASCII), `r` re-run async con spinner. **6.5.5 lock-awareness**: banner "brain served by MCP (lock)" + timestamp cuando `cached=true` (validado en vivo: cached=true real).
+- **6.5.2 Memory** (alcance honesto): learnings violeta + session-logs + `r`→overlay `remember` (round-trip a memoria permanente). Búsqueda `ebrain q` sin `--json` → PromptBox informativo (passthrough, sin score/source inventado); `think` con costo → **6.6**. **6.5.3 Routing** (alcance honesto): tabla por-cap + gauge de presupuesto + flag gbrain-untracked; **cadenas ganador/fallback/floor y ledger por-evento DIFERIDOS** (sin contrato `routing --json`; leerlos directo reprobaría el criterio #2) → nota "pendiente" en el panel.
+- **GATE 6.5.7 `[AUDIT_PASS]` (SELF-AUDIT Opus, fase read-only, menor riesgo que 6.4):** revisión de imports OK (knowledge no lee yaml/jsonl/fs; solo spawn del dispatcher; 5 subcomandos en la suite de contratos F6.1); buildFrame puro; secret-safety (doctor muestra NOMBRES de env, no valores; `remember` rechaza secretos). **maker≠checker:** 6.5.7 no designa Fable 5 (solo 6.0.8/6.4.8/6.7.6) y es superficie read-only → self-audit defensible; checker Fable 5 disponible si Eduardo lo pide.
+- **Verify:** **TUI 354 + CLI 117 = 471 pass / 0 fail** (offline, fixtures puros); boot headless rc=0, **RSS 46.9 MiB** (ADR-003 ≤100MB); cero-hex limpio; fetchers reales probados contra subcomandos vivos (brain up, fleet 5-6/6, spend real, cached=true). Renders eyeball-verificados contra `screens-b.jsx` (Memory/Routing/Doctor) y `screens-a.jsx` (Home).
+- **Residuales LOW no bloqueantes → 6.7:** (a) fetch en vuelo huérfano si se cierra durante boot; (b) doble-fetch si `r` en doctor mientras ya carga; (c) `ebrain q` search live + `think` con costo → 6.6.
+- **Estado F6:** 6.0 ✅ 6.1 ✅ 6.2 ✅ 6.3 ✅ 6.4 ✅ **6.5 ✅** → sigue 6.6 (orquestación + advisor v1: launch wizard, prompt composer, advisor v1) · 6.7 (hardening + ship). Aparte, fuera de F6: **fase-daemon (ADR-004 = GO)** a planear.
+
+---
+
 ## 2026-07-14 — GATE 6.4.8 `[AUDIT_PASS]`: FASE 6.4 CERRADA (loop maker≠checker completo con Fable 5)
 
 - **El gate funcionó.** El checker independiente **Fable 5** auditó la superficie tmux de F6.4, devolvió `[ISSUES]` con la arquitectura sólida pero **2 gaps de seguridad reales + 3 menores** que el maker (Opus) no había visto solo. Maker aplicó los 5 fixes; checker **re-verificó sobre `3c60beb` con probes directos** (`od -c` de los bytes de send-keys, symlink real a repo de cliente, los inputs exactos del scrubber) → **`[AUDIT_PASS]`**.
