@@ -78,17 +78,28 @@ export interface HintEntry {
   disabled?: boolean;
 }
 
+/** Per-view hints for the Sessions panel (F6.4.3) — EXACTLY the mockup's
+ * SessionsScreen hints in design-system/ui_kits/ebrain/screens-a.jsx line 57
+ * (`↑↓ navegar · a attach · k kill · p prompt`). This module is their single source
+ * of truth, so the hint bar can never drift from the keys reduce() actually handles. */
+const SESSION_HINTS: HintEntry[] = [
+  { k: "↑↓", label: "navegar" },
+  { k: "a", label: "attach" },
+  { k: "k", label: "kill" },
+  { k: "p", label: "prompt" },
+];
+
 /**
  * The hints shown in the bottom hint bar for the given tab.
  *
- * All 6 tabs currently show the SAME global set (nav + palette + help + launch
- * shortcut): only `home` is a real view this chunk (6.3.3) — the other 5 are stub
- * "proximamente" panels with no per-view actions to hint at yet. Per-view hints
- * (like SessionsScreen's `a attach / k kill / p prompt` in screens-a.jsx) land once
- * those views are actually built (F6.4+). Keeping the signature `(tab) => HintEntry[]`
- * now avoids a breaking change to the hint bar's call site later.
+ * `sessions` shows its own view-scoped actions (the mockup's ↑↓/a/k/p, F6.4.3). The
+ * other 5 tabs show the SAME global set (nav + palette + help + launch shortcut):
+ * `home` is a real view and the rest are stubs until their views land (F6.5). Per-view
+ * hints for those arrive with their views. Keeping `(tab) => HintEntry[]` avoids a
+ * breaking change to the hint bar call site.
  */
-export function hintsForTab(_tab: TabName): HintEntry[] {
+export function hintsForTab(tab: TabName): HintEntry[] {
+  if (tab === "sessions") return SESSION_HINTS;
   return COMMANDS.filter((c) => c.showInHintBar).map((c) => ({
     k: c.hintKey ?? c.key ?? "",
     label: c.title,
