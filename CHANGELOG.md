@@ -4,6 +4,17 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-14 — F6.6 arranca: focus model (Tab) + cursor de selección + contornos visibles (review-2 de Eduardo)
+
+- **Cursor de selección (matiz del contour-only):** el relleno interior SÍ se usa — pero como **cursor de la opción seleccionada**, no como fondo estático de panel. `selectedBg` en toda lista navegable (ScrollList: memory results + sessions; Doctor checks; Doctor fleet; home active-sessions + latest-memories). El bg se re-asserta tras cada reset interno para cubrir toda la fila (`highlightRow`).
+- **Contornos visibles:** `blurBorder` era `#232B3D` (invisible sobre el fondo nativo). Subido a `text.muted #565F73` → toda caja queda claramente delineada (foco=teal, blur=muted). El modal de help ahora usa borde teal (foco) para leerse como capa distinta.
+- **Focus model (Tab) — base de F6.6:** Tab ya NO cambia de vista (eso es 1-6). **Tab/Shift+Tab mueven el anillo de foco entre las cajas** de la vista (caja enfocada = borde teal); **↑↓** navegan ítems de la caja enfocada; **Enter** hace drill-in (home sesión→attach · home memories→vista memory · home system→routing · memory result→modal detail · doctor check→detail). `regionsFor()`/`focusedRegion()` manejan render + reduce; estado por-vista (`focusRegion`, `memSelected`, `logSelected`, `fleetSelected`). Nuevo overlay read-only `detail`. Hint bars por-vista actualizadas.
+- **Attach:** el hint de handoff ahora es **consciente del entorno** — `attach-session` (fuera de tmux) → `Ctrl-b d` detach; `switch-client` (dentro de tmux) → `Ctrl-b L` (Ctrl-b d ahí saca del cliente tmux entero = el bug que Eduardo pegó). Fix de raíz pendiente de confirmar su entorno tmux.
+- **Verify:** TUI 360 + CLI 117 = **477 pass / 0 fail**; cero-hex limpio. Renders verificados: el foco teal sigue a la caja enfocada, bordes muted visibles, cursor de selección explícito. Commit `b974db4`.
+- **Sigue F6.6:** launch wizard (6.6.1) · prompt composer (6.6.3) · advisor v1 (6.6.2). Al cerrar 6.6/6.7 → **auditoría profunda Fable 5** de todo (6.5→) como pidió Eduardo.
+
+---
+
 ## 2026-07-14 — F6 UX hardening (review de daily-driver de Eduardo): theming contour-only + UI 100% inglés + hint de detach
 
 - **Fondos internos = bug visual.** El fondo de la terminal es del USUARIO y no se puede matchear; rellenar interiores de cajas cerradas con `background.surface/raised` bandea contra el fondo nativo y se ve buggy. **Quitados TODOS los rellenos interiores** (14 paneles + statusbar + campo del promptbox + palette + confirm + help). El design system ahora vive en los **CONTORNOS** (borde teal foco / dim blur) + tono de texto. Se mantienen los **cursores** de selección pequeños (tab activo, fila seleccionada) — son acentos intencionales, no rellenos de caja. Adaptación deliberada de los mockups de navegador al medio terminal (documentada en los widgets).
