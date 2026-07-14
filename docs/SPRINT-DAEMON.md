@@ -116,11 +116,13 @@ memoria viva. **Decisión: rename SOLO de la superficie ebrain-owned, el engine 
 - [ ] D.4.4 **Rename de launchers (surface, ver §Rename policy):** `~/.config/ebrain/gbrain-run`→`ebrain-run` y `gbrain-mcp`→`ebrain-mcp` con **symlink de compat** del nombre viejo→nuevo (para no romper configs/registros vivos), y actualizar refs en repo (doctor.sh/status.sh/remember.sh/mcp-wire.sh/manifests + check-id `launcher:gbrain-run`). Se hace ACÁ (no antes) porque toca el MCP vivo y su hogar natural es el rewire. **Verify:** ambos nombres resuelven; suite verde.
 - [ ] D.4.3 Actualizar doctor/harness para reportar el modo MCP activo (stdio-local vs http-daemon) por agente. **Verify:** `ebrain harness status` lo muestra.
 
-## FASE D.5 — ISOLATION GATE (criterio 4, obligatorio)  `[ ]`
+## FASE D.5 — ISOLATION GATE (criterio 4, obligatorio)  `[x]`
 
-- [ ] D.5.1 Test: el canal HTTP compartido **preserva el default-deny de federación** (ADR-001) — un agente no ve sources no autorizados vía el host. **Verify:** test rojo si un source deny aparece en resultados.
-- [ ] D.5.2 Test: **aislamiento de repos de cliente** — brisas/dekko NUNCA son sources del brain, así que no hay contenido que filtrar por el canal; asertar (a) query no devuelve su contenido, (b) el host no ingiere desde su path. **Verify:** test verde; brisas/dekko ausentes del brain.
-- [ ] D.5.3 GATE criterio 4: los tests de D.5.1/2 en la suite CI. **Verify:** `bun test` los corre y pasan.
+Entregado: `cli/isolation.ts` (módulo puro, SoT de los invariantes) + `cli/isolation.test.ts` (6 tests / 25 asserts, verde).
+
+- [x] D.5.1 **Default-deny de federación (ADR-001):** `federatedSources(raw)` (fn pura que espeja el filtro `federated · !default · !cliente` de ebrain-q) + `assertNoClientSources(list)` (aserción que TIRA si un source de cliente se cuela). **Verify:** test rojo si un source deny aparece; verde con el set limpio.
+- [x] D.5.2 **Aislamiento de repos de cliente (dos planos):** (a) plano-sesión — `isClientPath` bloquea literal/subpath/case + **cierra el gap F6.4.8**: un symlink de nombre inocente que RESUELVE a brisas/dekko se deniega (test con symlink real en tmp). (b) plano-source — `isClientSource` deniega nombres de source de cliente incl. `code-graph/brisas-del-golfo` (el vector del Dev Brain, ADR-001 §Frontera). **Verify:** brisas/dekko ausentes de todo set federado.
+- [x] D.5.3 **GATE criterio 4:** los tests corren en la suite CI (`bun test ./cli/isolation.test.ts` = 6/6). **Enforce (no solo doc):** el host compartido (D.4/D.6) corre `assertNoClientSources()` sobre su config de sources ANTES de exponer MCP — el invariante queda enforced en código.
 
 ## FASE D.6 — CUTOVER en vivo (`[HUMANO]` + Opus, juntos — runbook abajo)  `[ ]`
 
