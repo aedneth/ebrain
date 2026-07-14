@@ -2,8 +2,11 @@
 type: adr
 id: ADR-004
 title: Daemon compartido HTTP-MCP (dueño único del lock PGLite)
-status: proposed
+status: accepted
 recommendation: DEFER
+decision: GO
+decided_by: Eduardo
+decided: 2026-07-14
 created: 2026-07-14
 program: F6 — TUI
 sprint_task: 6.4.7
@@ -12,8 +15,9 @@ related: [ADR-001-brain-topology.md, ADR-002-unified-harness.md, ADR-003-tui-sta
 
 # ADR-004 — Daemon compartido HTTP-MCP (dueño único del lock PGLite)
 
-> Spike de F6.4.7. **Recomendación: DEFER.** No se implementa en F6 salvo GO explícito de Eduardo.
-> ADR-003 §Corolario delegó acá la pregunta del lock; esto la responde con una decisión argumentada.
+> Spike de F6.4.7. Recomendación del maker: DEFER. **Decisión ratificada por Eduardo (2026-07-14): GO.**
+> ADR-003 §Corolario delegó acá la pregunta del lock; esto la responde. **NO se implementa dentro de F6:**
+> el GO abre una **fase dedicada aparte** (ver §Ratificación), con los 4 criterios de GO como sus gates.
 
 ## Contexto
 
@@ -97,7 +101,16 @@ se cuelga si el lock está tomado (F6.5.5 lo hace explícito con banner + caché
 
 ## Ratificación
 
-- **Estado:** PROPUESTO — recomendación **DEFER**. Pendiente de ratificación de Eduardo (fork
-  DEFER-vs-GO, **no auto-aprobado**, consistente con el patrón de ADR-003).
-- Si Eduardo ratifica DEFER: se anota en el checklist humano F6 (6.4.7) y ebrain sigue con Opción A.
-  Si Eduardo elige GO: se abre una fase dedicada (fuera de F6) con los 4 criterios de GO como gates.
+- **Estado:** ACEPTADO. Recomendación del maker (Opus): DEFER. **Decisión de Eduardo (2026-07-14): GO.**
+  Fork DEFER-vs-GO elevado y **no auto-aprobado** (patrón ADR-003); Eduardo eligió **GO** sobre la
+  recomendación — es su llamada estratégica (probablemente anticipa el uso concurrente ≥2-agentes que el
+  propio ADR marcó como disparador de GO).
+- **Consecuencia — se abre una FASE DEDICADA, FUERA de F6** (no se toca el sustrato F6 actual, que sigue
+  con Opción A lock-aware hasta que el daemon esté listo). Esa fase construye el daemon HTTP-MCP compartido
+  con los **4 criterios de GO como sus gates** (no como precondiciones ya cumplidas, sino como el checklist
+  que la fase debe satisfacer): (1) evidencia/caso de ≥2 agentes concurrentes, (2) `serve` HTTP con
+  allow-list+auth battle-tested o shim propio auditado, (3) presupuesto de RAM para el residente,
+  (4) migración que **preserve** el default-deny de federación (ADR-001) y el aislamiento de repos de
+  cliente a través del canal compartido, con test que lo verifique.
+- **Pendiente de planeación:** un ULTRAPLAN/SPRINT propio para esa fase (a agendar cuando Eduardo lo priorice;
+  no bloquea el cierre de F6). Se registra en el checklist humano F6 (6.4.7) como "ADR-004 = GO → fase daemon a planear".
