@@ -187,10 +187,12 @@ export interface OverviewSlice {
   atLabel: string | null;
 }
 
-/** Memory panel (memory recent --json): learnings + session-logs, navigable (6.5.2). */
+/** Memory panel (memory recent --json): learnings + session-logs, navigable (6.5.2).
+ * `selected` = focused learning; `logSelected` = focused session-log (F6.6 focus model). */
 export interface MemorySlice {
   data: MemoryData | null;
   selected: number;
+  logSelected: number;
   status: LoadStatus;
   error?: string;
 }
@@ -420,6 +422,14 @@ function settle(state: AppState, effect?: AppEffect): ReduceResult {
 /** Clamp `i` into [0, count-1] (count>0 assumed by callers). */
 function clampIndex(i: number, count: number): number {
   return Math.min(Math.max(0, i), count - 1);
+}
+
+/** Wrap a full-width, ANSI-colored row in the selection-cursor background — the bg is
+ * re-asserted after every internal reset so it spans the whole row (matches the Table /
+ * ScrollList selected-row contrast). Callers pass content already padded to row width. */
+function highlightRow(content: string, theme: Theme): string {
+  const bg = theme.selectedBg;
+  return bg + content.split(theme.reset).join(theme.reset + bg) + theme.reset;
 }
 
 /**
@@ -1402,7 +1412,9 @@ function renderCheckRow(c: DoctorCheck, width: number, sel: boolean, theme: Them
   const idColor = sel ? theme.fg("text.primary") + BOLD : theme.fg("text.primary");
   const idCell = idColor + padTo(truncate(c.id, idW), idW) + reset;
   const msgCell = " " + theme.fg("text.muted") + truncate(c.msg, msgW) + reset;
-  return glyphCell + idCell + msgCell;
+  const row = glyphCell + idCell + msgCell;
+  // Doctor renders checks manually (not via ScrollList), so apply the selection cursor here.
+  return sel ? highlightRow(padTo(row, width), theme) : row;
 }
 
 export function buildDoctorView(d: DoctorSlice, rect: Rect, theme: Theme): string[] {

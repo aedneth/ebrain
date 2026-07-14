@@ -96,7 +96,10 @@ export const spacing = {
 
 const STATE_HEX = {
   focusBorder: "#2DD4BF",
-  blurBorder: "#232B3D",
+  // Blur (non-focused) panel border. The mockup's --border (#232B3D) is invisible on a
+  // terminal's dark native background, so unfocused boxes had no discernible contour;
+  // bumped to text.muted so every box is clearly outlined (focused = teal, blur = muted).
+  blurBorder: "#565F73",
   selectedBg: "#1A2030",
   disabledText: "#565F73",
 } as const;

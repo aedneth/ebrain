@@ -58,9 +58,14 @@ export function scrolllist<T>(props: ScrollListProps<T>, theme: Theme): string[]
     const sel = has && idx === selected;
     const marker = sel ? accent + arrow + reset + " " : "  ";
     const itemStr = has ? padTo(truncate(rendered[i], itemW), itemW) : " ".repeat(itemW);
+    // Selected row gets a filled background CURSOR (contrast makes the selection
+    // explicit) — bg is re-asserted after every internal reset so it spans the whole
+    // row despite the item's own fg color changes.
+    const core = marker + itemStr;
+    const styled = sel ? theme.selectedBg + core.split(reset).join(reset + theme.selectedBg) + reset : core;
     const isThumb = overflow && i >= thumbStart && i < thumbStart + thumbLen;
     const sb = (isThumb ? thumbColor + thumbCh : trackColor + trackCh) + reset;
-    out.push(marker + itemStr + sb);
+    out.push(styled + sb);
   }
   return out;
 }

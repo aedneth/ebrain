@@ -40,6 +40,7 @@ export function renderHelp(theme: Theme, commands: Command[] = COMMANDS, width =
   body.push(theme.fg("text.muted") + "esc close" + theme.reset);
 
   const height = body.length + 2;
-  // contour-only modal: the dialog border delineates it, no interior fill.
-  return panel({ title: "help · keybindings", dialog: true, width, height, body }, theme);
+  // contour-only modal: a teal (focus) dialog border delineates it clearly against the
+  // native terminal bg — no interior fill.
+  return panel({ title: "help · keybindings", dialog: true, focus: true, width, height, body }, theme);
 }
