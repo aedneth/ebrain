@@ -651,7 +651,7 @@ export function buildFrame(state: AppState, size: FrameSize, theme: Theme): stri
   frame.push(padTo(tabBar({ tabs: [...TABS], active: TABS.indexOf(state.tab) }, theme), cols));
   frame.push(buildHairlineRow(theme, cols));
   frame.push(...buildMiddle(state, middleRect, theme));
-  frame.push(hintBar({ hints: hintsForTab(state.tab), right: "ctrl+c salir" }, theme, cols));
+  frame.push(hintBar({ hints: hintsForTab(state.tab), right: "ctrl+c exit" }, theme, cols));
   frame.push(footer({ cwd: state.cwd, branch: state.branch, right: `ebrain ${EBRAIN_UI_VERSION}` }, theme, cols));
 
   // Defensive: guarantee exactly `rows` rows of exactly `cols` width regardless of
@@ -687,13 +687,13 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
     const width = Math.min(52, Math.max(30, cols - 8));
     const box = confirm(
       {
-        title: "matar sesion",
-        message: `kill ${overlay.name}? no se puede deshacer.`,
+        title: "kill session",
+        message: `kill ${overlay.name}? this cannot be undone.`,
         danger: true,
         confirmKey: "y",
-        confirmLabel: "matar",
+        confirmLabel: "kill",
         cancelKey: "n",
-        cancelLabel: "cancelar",
+        cancelLabel: "cancel",
         width,
       },
       theme,
@@ -707,13 +707,13 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
     const width = Math.min(80, Math.max(40, cols - 6));
     const box = confirm(
       {
-        title: "gobernador RAM",
+        title: "RAM governor",
         message: overlay.reason,
         danger: false,
         confirmKey: "y",
-        confirmLabel: `lanzar ${overlay.agent} igual`,
+        confirmLabel: `launch ${overlay.agent} anyway`,
         cancelKey: "n",
-        cancelLabel: "cancelar",
+        cancelLabel: "cancel",
         width,
       },
       theme,
@@ -751,12 +751,12 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
  * caret is F6.6.3's composer; here the caret trails (single-line append is the case). */
 function buildPromptBox(overlay: Extract<Overlay, { kind: "prompt" }>, width: number, theme: Theme): string[] {
   const field = promptBox(
-    { value: overlay.line.text, focus: true, hint: "enter enviar · esc cancelar", width: width - 4 },
+    { value: overlay.line.text, focus: true, hint: "enter send · esc cancel", width: width - 4 },
     theme,
   );
   const target = overlay.name.startsWith("ebr-") ? overlay.name.slice(4) : overlay.name;
   return panel(
-    { title: `prompt → ${target}`, dialog: true, width, height: 3, body: [field], bg: "background.raised" },
+    { title: `prompt → ${target}`, dialog: true, width, height: 3, body: [field] },
     theme,
   );
 }
@@ -766,11 +766,11 @@ function buildPromptBox(overlay: Extract<Overlay, { kind: "prompt" }>, width: nu
  * RememberForm of the mockup is the composer work in F6.6.3). */
 function buildRememberBox(overlay: Extract<Overlay, { kind: "remember" }>, width: number, theme: Theme): string[] {
   const field = promptBox(
-    { value: overlay.line.text, focus: true, placeholder: "un aprendizaje durable, auto-contenido", hint: "enter guardar · esc cancelar", width: width - 4 },
+    { value: overlay.line.text, focus: true, placeholder: "a durable, self-contained learning", hint: "enter save · esc cancel", width: width - 4 },
     theme,
   );
   return panel(
-    { title: "recordar → memoria agentica permanente", dialog: true, width, height: 3, body: [field], bg: "background.raised" },
+    { title: "remember → permanent agentic memory", dialog: true, width, height: 3, body: [field] },
     theme,
   );
 }
@@ -858,7 +858,7 @@ function overviewBanner(o: OverviewSlice, cols: number, theme: Theme): string[] 
   const dim = theme.fg("text.secondary");
   const reset = theme.reset;
   const served = o.data.brain.servedBy || "mcp";
-  const stamp = o.atLabel ? dim + " · datos cacheados " + o.atLabel + reset : "";
+  const stamp = o.atLabel ? dim + " · cached " + o.atLabel + reset : "";
   const glyph = theme.glyph("badgeDot");
   const text = `${glyph} brain served by ${served} (lock)`;
   return [warn + text + reset + stamp];
@@ -885,9 +885,9 @@ function buildSistemaBody(d: OverviewData, theme: Theme): string[] {
     labelCell("fleet", theme) + primary + `${d.fleet.online}/${d.fleet.total} ` + reset + online + "online" + reset;
 
   const memLine =
-    labelCell("memoria", theme) +
+    labelCell("memory", theme) +
     theme.fg("memory.violet") + `${d.memory.learnings} ` + reset + dim + "learnings · " + reset +
-    primary + `${d.memory.sessions} ` + reset + dim + "sesiones" + reset;
+    primary + `${d.memory.sessions} ` + reset + dim + "sessions" + reset;
 
   return [brainLine, "", spendLine, "", fleetLine, memLine];
 }
@@ -935,8 +935,8 @@ function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, rect: Rect
     for (const b of banner) out.push(centerLine(b, cols));
     const msg =
       o.status === "error"
-        ? theme.fg("semantic.error") + `error: ${o.error ?? "consultando ebrain status"}` + theme.reset
-        : theme.fg("text.secondary") + "cargando estado del sistema…" + theme.reset;
+        ? theme.fg("semantic.error") + `error: ${o.error ?? "querying ebrain status"}` + theme.reset
+        : theme.fg("text.secondary") + "loading system status…" + theme.reset;
     while (out.length < Math.floor(rect.height / 2)) out.push(" ".repeat(cols));
     out.push(centerLine(msg, cols));
     while (out.length < rect.height) out.push(" ".repeat(cols));
@@ -965,7 +965,7 @@ function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, rect: Rect
       2,
     );
     const sistemaPanel = panel(
-      { title: "sistema", width: sistemaRect.width, height: panelsRect.height, body: buildSistemaBody(o.data, theme), bg: "background.surface" },
+      { title: "system", width: sistemaRect.width, height: panelsRect.height, body: buildSistemaBody(o.data, theme) },
       theme,
     );
 
@@ -973,15 +973,14 @@ function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, rect: Rect
     const sessionBody =
       sessions.rows.length > 0
         ? sessions.rows.slice(0, Math.max(0, panelsRect.height - 2)).map((r, i) => renderFleetRow(r, rowW, i === 0, theme))
-        : [theme.fg("text.secondary") + "sin sesiones activas · pulsa 2" + theme.reset];
+        : [theme.fg("text.secondary") + "no active sessions · press 2" + theme.reset];
     const sesionesPanel = panel(
       {
-        title: `sesiones activas · ${sessions.rows.length}`,
+        title: `active sessions · ${sessions.rows.length}`,
         focus: true,
         width: sesionesRect.width,
         height: panelsRect.height,
         body: sessionBody,
-        bg: "background.surface",
       },
       theme,
     );
@@ -1000,7 +999,7 @@ function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, rect: Rect
         : [theme.fg("text.secondary") + "sin memorias recientes" + theme.reset];
     out.push(
       ...panel(
-        { title: "ultimas memorias", width: cols, height: memoriesPanelHeight, body: memoriesBody, bg: "background.surface" },
+        { title: "ultimas memorias", width: cols, height: memoriesPanelHeight, body: memoriesBody },
         theme,
       ),
     );
@@ -1045,7 +1044,7 @@ function buildCenteredMessagePanel(title: string, message: string, rect: Rect, t
   const colored = theme.fg("text.secondary") + message + theme.reset;
   const body: string[] = [];
   for (let i = 0; i < bodyRows; i++) body.push(i === mid ? centerLine(colored, contentW) : "");
-  return panel({ title, width: rect.width, height: rect.height, body, bg: "background.surface" }, theme);
+  return panel({ title, width: rect.width, height: rect.height, body }, theme);
 }
 
 export function buildSessionsView(s: SessionsSlice, rect: Rect, theme: Theme): string[] {
@@ -1096,7 +1095,6 @@ export function buildSessionsView(s: SessionsSlice, rect: Rect, theme: Theme): s
       width: leftRect.width,
       height,
       body: listBody,
-      bg: "background.surface",
     },
     theme,
   );
@@ -1174,7 +1172,7 @@ function buildLaunchView(sel: number, rect: Rect, theme: Theme): string[] {
 
   const body = [...grid, "", foot];
   return panel(
-    { title: "lanzar agente", focus: true, width: rect.width, height: rect.height, body, bg: "background.surface" },
+    { title: "lanzar agente", focus: true, width: rect.width, height: rect.height, body },
     theme,
   );
 }
@@ -1266,7 +1264,7 @@ export function buildMemoryView(m: MemorySlice, rect: Rect, theme: Theme): strin
         )
       : [theme.fg("text.secondary") + "sin learnings recientes" + theme.reset];
   const leftPanel = panel(
-    { title: `resultados · ${learnings.length} · violeta = memoria`, focus: true, width: leftRect.width, height: midRect.height, body: resultsBody, bg: "background.surface" },
+    { title: `resultados · ${learnings.length} · violeta = memoria`, focus: true, width: leftRect.width, height: midRect.height, body: resultsBody },
     theme,
   );
 
@@ -1276,7 +1274,7 @@ export function buildMemoryView(m: MemorySlice, rect: Rect, theme: Theme): strin
       ? sessions.slice(0, Math.max(0, midRect.height - 2)).map((s) => renderLogRow(s, logW, theme))
       : [theme.fg("text.secondary") + "sin sesiones" + theme.reset];
   const rightPanel = panel(
-    { title: "session-logs", width: rightRect.width, height: midRect.height, body: logsBody, bg: "background.surface" },
+    { title: "session-logs", width: rightRect.width, height: midRect.height, body: logsBody },
     theme,
   );
 
@@ -1342,7 +1340,7 @@ export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): str
     theme.fg("text.muted") + " / $" + d.cap.toFixed(2) + theme.reset;
   const leftBody = [...tableRows, "", totalLine];
   const leftPanel = panel(
-    { title: "caps · gasto por carril", focus: true, width: leftRect.width, height, body: leftBody, bg: "background.surface" },
+    { title: "caps · gasto por carril", focus: true, width: leftRect.width, height, body: leftBody },
     theme,
   );
 
@@ -1363,7 +1361,7 @@ export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): str
   budgetBody.push(theme.fg("text.muted") + "cadenas + ledger por evento:" + theme.reset);
   budgetBody.push(theme.fg("text.muted") + "pendiente contrato routing --json" + theme.reset);
   const rightPanel = panel(
-    { title: `presupuesto · ${d.month}`, width: rightRect.width, height, body: budgetBody, bg: "background.surface" },
+    { title: `presupuesto · ${d.month}`, width: rightRect.width, height, body: budgetBody },
     theme,
   );
 
@@ -1442,7 +1440,7 @@ export function buildDoctorView(d: DoctorSlice, rect: Rect, theme: Theme): strin
   }
   const title = d.running ? "diagnostico" : d.atLabel ? `diagnostico · ultimo ${d.atLabel}` : "diagnostico";
   const leftPanel = panel(
-    { title, focus: true, width: leftRect.width, height, body: leftBody, bg: "background.surface" },
+    { title, focus: true, width: leftRect.width, height, body: leftBody },
     theme,
   );
 
@@ -1465,7 +1463,7 @@ export function buildDoctorView(d: DoctorSlice, rect: Rect, theme: Theme): strin
     );
   }
   const rightPanel = panel(
-    { title: `fleet ${online}/${total}`, width: rightRect.width, height, body: fleetBody, bg: "background.surface" },
+    { title: `fleet ${online}/${total}`, width: rightRect.width, height, body: fleetBody },
     theme,
   );
 

@@ -2,10 +2,14 @@
  * tui/src/widgets/chrome/statusbar.ts — StatusBar + StatusSep, ported 1:1 from
  * design-system/components/chrome/StatusBar.{d.ts,jsx,prompt.md} (SPRINT-TUI 6.3.2).
  *
- * Top bar on background.surface: identity (`left`) left-justified, telemetry
- * (`right`) right-justified. Both are PRE-COMPOSED strings (contract), so this
- * widget only positions + backgrounds them — exactly like the jsx, where the bar
- * owns the surface bg and children own only their fg colors.
+ * Top bar: identity (`left`) left-justified, telemetry (`right`) right-justified.
+ * Both are PRE-COMPOSED strings (contract), so this widget only positions them.
+ *
+ * TERMINAL ADAPTATION (diverges from the .jsx on purpose): the mockup fills the bar
+ * with background.surface, but a terminal's background is the USER'S and cannot be
+ * matched — any interior fill bands against it and reads as a rendering bug. So the
+ * design system is carried by CONTOURS + text tone only; the bar stays on the native
+ * terminal background. Same rule applied to every panel interior (see app.ts).
  *
  * `width` is the terminal column count (a render dimension), passed as the third
  * argument so `props` stays 1:1 with StatusBarProps (left, right) per the .d.ts.
@@ -53,5 +57,5 @@ export function statusBar(props: StatusBarProps, theme: Theme, width: number): s
     body = padTo(truncate(left, leftRoom), leftRoom) + right;
   }
 
-  return theme.bg("background.surface") + " " + body + " " + reset;
+  return " " + body + " " + reset;
 }

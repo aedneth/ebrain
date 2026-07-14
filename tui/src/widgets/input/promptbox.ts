@@ -27,7 +27,7 @@ const BAR = "┃";
 const CARET = "▌";
 
 export function promptBox(props: PromptBoxProps, theme: Theme): string {
-  const { value = "", placeholder = "describe la tarea…", focus = true, hint, width } = props;
+  const { value = "", placeholder = "describe the task…", focus = true, hint, width } = props;
   const reset = theme.reset;
 
   const barColor = focus ? theme.fg("accent.teal") : theme.fg("background.border");
@@ -35,7 +35,10 @@ export function promptBox(props: PromptBoxProps, theme: Theme): string {
   const textColor = empty ? theme.fg("text.muted") : theme.fg("text.primary");
   const caret = focus ? theme.fg("accent.teal") + CARET + reset : "";
 
-  // Layout: `┃ ` (bar + 1 pad) then the field, on a surface bg, then a right-floated hint.
+  // Layout: `┃ ` (bar + 1 pad) then the field, then a right-floated hint. The field is
+  // delineated by the `┃` bar + caret alone — NO surface fill (a terminal's background
+  // is the user's and cannot be matched; an interior fill bands against it). Same
+  // contour-only rule as every panel (see app.ts / statusbar.ts).
   const barSeg = barColor + BAR + reset;
   const fieldW = Math.max(0, width - 2); // bar(1) + one pad(1)
 
@@ -48,7 +51,7 @@ export function promptBox(props: PromptBoxProps, theme: Theme): string {
   const textRoom = Math.max(0, fieldW - caretW - hintW);
   const valueCell = padTo(truncate(shown, textRoom), textRoom);
 
-  const bg = theme.bg("background.surface");
+  const bg = ""; // contour-only: no interior fill (breaks native terminal bg)
   let field = bg + textColor + valueCell + reset;
   if (focus) field = bg + textColor + valueCell + reset + caret;
   if (hintW > 0) {

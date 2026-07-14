@@ -27,19 +27,19 @@ const NOBOLD = "\x1b[22m";
 
 export function confirm(props: ConfirmProps, theme: Theme): string[] {
   const {
-    title = "confirmar",
+    title = "confirm",
     message = "",
     danger = false,
     confirmKey = "y",
-    confirmLabel = "confirmar",
+    confirmLabel = "confirm",
     cancelKey = "n",
-    cancelLabel = "cancelar",
+    cancelLabel = "cancel",
     width = 52,
   } = props;
   const reset = theme.reset;
   const [tl, h, tr, v, bl, br] = theme.glyph("dialogBorder").split(" "); // ┌ ─ ┐ │ └ ┘
   const border = danger ? theme.fg("semantic.error") : theme.fg("text.muted");
-  const bg = theme.bg("background.raised");
+  const bg = ""; // contour-only: the dialog border delineates it, no interior fill
   const fgPrimary = theme.fg("text.primary");
   const fgMuted = theme.fg("text.muted");
   const keyColor = danger ? theme.fg("semantic.error") : theme.fg("accent.teal");
@@ -56,7 +56,7 @@ export function confirm(props: ConfirmProps, theme: Theme): string[] {
 
   const bottom = border + bl + h.repeat(innerW) + br + reset;
 
-  // Body row: bg raised persists across the interior (fg-only changes inside).
+  // Body row: contour-only, no interior fill (fg-only changes inside).
   const bodyRow = (interior: string): string =>
     border + v + reset + padTo(bg + interior, innerW) + reset + border + v + reset;
 

@@ -97,8 +97,10 @@ export function commandPalette(props: CommandPaletteProps, theme: Theme): string
   }
 
   // Footer hint line (dim). ↑↓ are U+2191/U+2193 (arrows) — DS-sanctioned, not emoji.
-  body.push(padTo(" " + theme.fg("text.muted") + "↑↓ navegar · enter ejecutar · esc cerrar" + reset, innerW));
+  body.push(padTo(" " + theme.fg("text.muted") + "↑↓ navigate · enter run · esc close" + reset, innerW));
 
   const height = body.length + 2; // + top/bottom border
-  return panel({ focus: true, width, height, body, bg: "background.surface", pad: 0 }, theme);
+  // contour-only: the teal focus border delineates the palette; the selected row keeps
+  // its raised cursor, but the modal interior is NOT filled (breaks native terminal bg).
+  return panel({ focus: true, width, height, body, pad: 0 }, theme);
 }
