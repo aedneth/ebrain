@@ -42,9 +42,9 @@ describe("palette logic", () => {
     expect(ids).not.toContain("nav.cycleNext");
   });
 
-  it("filterCommands('ss') fuzzy-narrows to sessions", () => {
+  it("filterCommands('ss') ranks sessions first (tight fuzzy match)", () => {
     const f = filterCommands("ss");
-    expect(f.map((c) => c.id)).toEqual(["nav.sessions"]);
+    expect(f[0]!.id).toBe("nav.sessions"); // "seSSions" is the tightest subsequence match
   });
 
   it("applyKey: char appends to query and resets selection", () => {

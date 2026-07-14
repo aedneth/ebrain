@@ -58,8 +58,9 @@ export const COMMANDS: Command[] = [
     showInHintBar: true,
   },
 
-  { id: "nav.cycleNext", title: "next view", summary: "cycle to the next tab", key: "tab", group: "nav" },
-  { id: "nav.cyclePrev", title: "previous view", summary: "cycle to the previous tab", key: "shift+tab", group: "nav" },
+  { id: "focus.next", title: "focus next box", summary: "move the focus ring to the next box in this view", key: "tab", group: "nav" },
+  { id: "focus.prev", title: "focus previous box", summary: "move the focus ring to the previous box in this view", key: "shift+tab", group: "nav" },
+  { id: "focus.drill", title: "open / attach", summary: "act on the focused box (attach a session, open a memory, …)", key: "enter", group: "nav" },
 
   // ── global. Order matches screens-a.jsx HomeScreen hints exactly: 1-6 views ·
   // / palette · l launch · ? help — hintsForTab() preserves COMMANDS array order below.
@@ -83,12 +84,21 @@ export interface HintEntry {
  * of truth, so the hint bar can never drift from the keys reduce() actually handles. */
 const SESSION_HINTS: HintEntry[] = [
   { k: "↑↓", label: "navigate" },
-  { k: "a", label: "attach" },
+  { k: "enter/a", label: "attach" },
   { k: "k", label: "kill" },
   { k: "p", label: "prompt" },
-  // `a` hands the terminal fully to tmux; this is the tmux detach binding that
+  // `a`/enter hand the terminal fully to tmux; this is the tmux detach binding that
   // returns you to ebrain (discoverability — see doAttach's on-handoff hint).
   { k: "ctrl+b d", label: "detach" },
+];
+
+/** Home is multi-box: Tab moves focus between active-sessions / memories / system. */
+const HOME_HINTS: HintEntry[] = [
+  { k: "1-6", label: "views" },
+  { k: "tab", label: "focus box" },
+  { k: "↑↓", label: "select" },
+  { k: "enter", label: "open" },
+  { k: "?", label: "help" },
 ];
 
 /** Per-view hints for the Launch panel (F6.4.5) — the básico subset of the mockup's
@@ -101,13 +111,16 @@ const LAUNCH_HINTS: HintEntry[] = [
 /** Per-view hints for the F6.5 knowledge panels — each matches the keys reduce()
  * actually handles for that tab (screens-b.jsx MemoryScreen / DoctorScreen). */
 const MEMORY_HINTS: HintEntry[] = [
-  { k: "↑↓", label: "results" },
+  { k: "tab", label: "focus box" },
+  { k: "↑↓", label: "navigate" },
+  { k: "enter", label: "open" },
   { k: "r", label: "remember" },
 ];
 const ROUTING_HINTS: HintEntry[] = [{ k: "↑↓", label: "caps" }];
 const DOCTOR_HINTS: HintEntry[] = [
   { k: "r", label: "re-run" },
-  { k: "↑↓", label: "checks" },
+  { k: "tab", label: "focus box" },
+  { k: "↑↓", label: "navigate" },
 ];
 
 /**
@@ -120,6 +133,7 @@ const DOCTOR_HINTS: HintEntry[] = [
  * breaking change to the hint bar call site.
  */
 export function hintsForTab(tab: TabName): HintEntry[] {
+  if (tab === "home") return HOME_HINTS;
   if (tab === "sessions") return SESSION_HINTS;
   if (tab === "launch") return LAUNCH_HINTS;
   if (tab === "memory") return MEMORY_HINTS;

@@ -180,6 +180,8 @@ export type LoadStatus = "idle" | "loading" | "ready" | "error";
 export interface OverviewSlice {
   data: OverviewData | null;
   memory: MemoryData | null;
+  /** Focused row in the home "latest memories" box (F6.6 focus model). */
+  memSelected: number;
   status: LoadStatus;
   error?: string;
   /** HH:MM of the last successful fetch, precomputed by the loop so buildFrame stays
@@ -209,7 +211,9 @@ export interface RoutingSlice {
 export interface DoctorSlice {
   fleet: FleetData | null;
   doctor: DoctorData | null;
+  /** `selected` = focused check; `fleetSelected` = focused fleet agent (F6.6 focus model). */
   selected: number;
+  fleetSelected: number;
   status: LoadStatus;
   error?: string;
   /** A doctor re-run is in flight — drives the spinner (advanced by the loop). */
@@ -219,16 +223,16 @@ export interface DoctorSlice {
 }
 
 export function emptyOverview(): OverviewSlice {
-  return { data: null, memory: null, status: "idle", atLabel: null };
+  return { data: null, memory: null, memSelected: 0, status: "idle", atLabel: null };
 }
 export function emptyMemory(): MemorySlice {
-  return { data: null, selected: 0, status: "idle" };
+  return { data: null, selected: 0, logSelected: 0, status: "idle" };
 }
 export function emptyRouting(): RoutingSlice {
   return { data: null, selected: 0, status: "idle" };
 }
 export function emptyDoctor(): DoctorSlice {
-  return { fleet: null, doctor: null, selected: 0, status: "idle", running: false, spinnerFrame: 0, atLabel: null };
+  return { fleet: null, doctor: null, selected: 0, fleetSelected: 0, status: "idle", running: false, spinnerFrame: 0, atLabel: null };
 }
 
 function overviewOf(state: AppState): OverviewSlice {
@@ -253,7 +257,9 @@ export type Overlay =
   | { kind: "confirmKill"; name: string }
   | { kind: "prompt"; name: string; line: LineState }
   | { kind: "confirmLaunch"; agent: string; cwd: string; reason: string }
-  | { kind: "remember"; line: LineState };
+  | { kind: "remember"; line: LineState }
+  /** Read-only drill-in detail (Enter on a memory/check) — a titled, word-wrapped modal. */
+  | { kind: "detail"; title: string; body: string };
 
 export interface AppState {
   tab: TabName;
@@ -274,6 +280,9 @@ export interface AppState {
   memory?: MemorySlice;
   routing?: RoutingSlice;
   doctor?: DoctorSlice;
+  /** Which focusable box within the current view holds the focus ring (F6.6 focus model).
+   * Index into regionsFor(tab); Tab/Shift+Tab cycle it, reset to 0 on view change. */
+  focusRegion?: number;
 }
 
 /** Caller's cwd: cli/ebrain exports EBRAIN_CALLER_CWD before cd-ing to run_bun's
@@ -318,7 +327,33 @@ export function initialState(): AppState {
     memory: emptyMemory(),
     routing: emptyRouting(),
     doctor: emptyDoctor(),
+    focusRegion: 0,
   };
+}
+
+// ── Focus model (F6.6): a two-level model over the single-key view jump (1-6) ──
+// `1-6` jumps views; Tab/Shift+Tab move the focus RING between the boxes of the current
+// view; ↑↓ navigate items in the focused box; Enter drills into the focused box. Each
+// view lists its focusable regions in view order (left→right, top→bottom).
+
+const REGIONS: Record<TabName, readonly string[]> = {
+  home: ["sessions", "memories", "system"],
+  sessions: ["list"],
+  launch: ["grid"],
+  memory: ["results", "logs"],
+  routing: ["caps"],
+  doctor: ["checks", "fleet"],
+};
+
+function regionsFor(tab: TabName): readonly string[] {
+  return REGIONS[tab] ?? ["main"];
+}
+
+/** The id of the box that currently holds focus in `state`'s view. */
+function focusedRegion(state: AppState): string {
+  const regions = regionsFor(state.tab);
+  const i = clampIndex(state.focusRegion ?? 0, regions.length);
+  return regions[i] ?? regions[0]!;
 }
 
 // ---------------------------------------------------------------------------
@@ -361,7 +396,7 @@ export interface ReduceResult {
 }
 
 function withTab(state: AppState, tab: TabName): AppState {
-  return { ...state, tab, confirmQuit: false, overlay: null };
+  return { ...state, tab, confirmQuit: false, overlay: null, focusRegion: 0 };
 }
 
 /** Navigate to `tab`, requesting the matching data refresh when landing on a live view
@@ -432,6 +467,94 @@ function highlightRow(content: string, theme: Theme): string {
   return bg + content.split(theme.reset).join(theme.reset + bg) + theme.reset;
 }
 
+/** ↑↓ within the FOCUSED box: move that box's selection by `delta` (routes by view +
+ * focused region). A session move also emits a peek so the right pane tracks it. */
+function moveSelection(state: AppState, delta: number): ReduceResult {
+  const region = focusedRegion(state);
+  const clear = { ...state, confirmQuit: false };
+
+  if (state.tab === "sessions" || (state.tab === "home" && region === "sessions")) {
+    const s = sessionsOf(state);
+    if (s.rows.length === 0) return settle(clear);
+    const selected = clampIndex(s.selected + delta, s.rows.length);
+    if (selected === s.selected) return settle(clear);
+    const next = settle({ ...clear, sessions: { ...s, selected } });
+    // Only the Sessions view has a live peek pane to keep in sync.
+    return state.tab === "sessions" ? settle(next.state, { type: "peek", name: s.rows[selected]!.name }) : next;
+  }
+
+  if (state.tab === "home" && region === "memories") {
+    const o = overviewOf(state);
+    const n = o.memory?.learnings.length ?? 0;
+    if (n === 0) return settle(clear);
+    return settle({ ...clear, overview: { ...o, memSelected: clampIndex(o.memSelected + delta, n) } });
+  }
+
+  if (state.tab === "memory") {
+    const m = memoryOf(state);
+    if (region === "logs") {
+      const n = m.data?.sessions.length ?? 0;
+      if (n === 0) return settle(clear);
+      return settle({ ...clear, memory: { ...m, logSelected: clampIndex(m.logSelected + delta, n) } });
+    }
+    const n = m.data?.learnings.length ?? 0;
+    if (n === 0) return settle(clear);
+    return settle({ ...clear, memory: { ...m, selected: clampIndex(m.selected + delta, n) } });
+  }
+
+  if (state.tab === "routing") {
+    const r = routingOf(state);
+    const n = r.data?.byCap.length ?? 0;
+    if (n === 0) return settle(clear);
+    return settle({ ...clear, routing: { ...r, selected: clampIndex(r.selected + delta, n) } });
+  }
+
+  if (state.tab === "doctor") {
+    const d = doctorOf(state);
+    if (region === "fleet") {
+      const n = d.fleet?.agents.length ?? 0;
+      if (n === 0) return settle(clear);
+      return settle({ ...clear, doctor: { ...d, fleetSelected: clampIndex(d.fleetSelected + delta, n) } });
+    }
+    const n = d.doctor?.checks.length ?? 0;
+    if (n === 0) return settle(clear);
+    return settle({ ...clear, doctor: { ...d, selected: clampIndex(d.selected + delta, n) } });
+  }
+
+  return settle(clear);
+}
+
+/** Enter drills into the FOCUSED box: attach a selected session, open a read-only detail
+ * modal, or jump to the box's dedicated view (home summary boxes). */
+function drillIn(state: AppState): ReduceResult {
+  const region = focusedRegion(state);
+  const clear = { ...state, confirmQuit: false };
+
+  // Attach the selected session — from the Sessions list OR home's active-sessions box.
+  if ((state.tab === "sessions" && region === "list") || (state.tab === "home" && region === "sessions")) {
+    const sel = sessionsOf(state).rows[sessionsOf(state).selected];
+    if (sel) return settle(clear, { type: "attach", name: sel.name });
+    return settle(clear);
+  }
+  // Home summary boxes jump to their dedicated view.
+  if (state.tab === "home" && region === "memories") return goTab(state, "memory");
+  if (state.tab === "home" && region === "system") return goTab(state, "routing");
+
+  // Memory result → read-only detail of the full learning.
+  if (state.tab === "memory" && region === "results") {
+    const l = memoryOf(state).data?.learnings[memoryOf(state).selected];
+    if (l) return settle({ ...clear, overlay: { kind: "detail", title: `memory · ${l.project}`, body: l.text } });
+    return settle(clear);
+  }
+  // Doctor check → read-only detail of the check's message.
+  if (state.tab === "doctor" && region === "checks") {
+    const c = doctorOf(state).doctor?.checks[doctorOf(state).selected];
+    if (c) return settle({ ...clear, overlay: { kind: "detail", title: `check · ${c.id}`, body: `[${c.level}] ${c.msg}` } });
+  }
+
+  return settle(clear);
+}
+
 /**
  * Apply one key to the current state. Pure — no I/O, no rendering. Mirrors the
  * key-handling switch in FlowClock's runDashboardApp, but as a standalone function
@@ -456,6 +579,14 @@ export function reduce(state: AppState, key: Key): ReduceResult {
         key.name === "enter" ||
         (key.name === "char" && (key.char === "?" || key.char === "q"))
       ) {
+        return settle({ ...state, overlay: null });
+      }
+      return settle(state);
+    }
+
+    if (ov.kind === "detail") {
+      // Read-only drill-in — esc / enter / q dismiss it.
+      if (key.name === "escape" || key.name === "enter" || (key.name === "char" && key.char === "q")) {
         return settle({ ...state, overlay: null });
       }
       return settle(state);
@@ -521,29 +652,17 @@ export function reduce(state: AppState, key: Key): ReduceResult {
     return settle(state);
   }
 
-  if (key.name === "tab") {
-    const idx = TABS.indexOf(state.tab);
-    return goTab(state, TABS[(idx + 1) % TABS.length]!);
-  }
-  if (key.name === "shifttab") {
-    const idx = TABS.indexOf(state.tab);
-    return goTab(state, TABS[(idx - 1 + TABS.length) % TABS.length]!);
-  }
-
-  // Sessions panel: ↑↓ move the fleet selection; the peek follows (throttled by the loop).
-  if (state.tab === "sessions" && (key.name === "up" || key.name === "down")) {
-    const s = sessionsOf(state);
-    if (s.rows.length === 0) return settle({ ...state, confirmQuit: false });
-    const delta = key.name === "down" ? 1 : -1;
-    const selected = Math.min(Math.max(0, s.selected + delta), s.rows.length - 1);
-    if (selected === s.selected) return settle({ ...state, confirmQuit: false });
-    return settle(
-      { ...state, confirmQuit: false, sessions: { ...s, selected } },
-      { type: "peek", name: s.rows[selected]!.name },
-    );
+  // Tab / Shift+Tab move the focus RING between the boxes of the current view — they no
+  // longer switch views (1-6 does that). Single-region views: a harmless no-op.
+  if (key.name === "tab" || key.name === "shifttab") {
+    const regions = regionsFor(state.tab);
+    if (regions.length <= 1) return settle({ ...state, confirmQuit: false });
+    const delta = key.name === "tab" ? 1 : -1;
+    const cur = clampIndex(state.focusRegion ?? 0, regions.length);
+    return settle({ ...state, confirmQuit: false, focusRegion: (cur + delta + regions.length) % regions.length });
   }
 
-  // Launch panel: arrows move the agent-grid selection; enter launches the selected one.
+  // Launch grid keeps its own 2-D selection model (arrows + enter to launch).
   if (state.tab === "launch") {
     if (key.name === "up" || key.name === "down" || key.name === "left" || key.name === "right") {
       const cur = state.launch?.selected ?? 0;
@@ -558,31 +677,9 @@ export function reduce(state: AppState, key: Key): ReduceResult {
     }
   }
 
-  // Knowledge panels (6.5): ↑↓ move the row selection within the focused list.
-  if (key.name === "up" || key.name === "down") {
-    const delta = key.name === "down" ? 1 : -1;
-    if (state.tab === "memory") {
-      const m = memoryOf(state);
-      const n = m.data?.learnings.length ?? 0;
-      if (n === 0) return settle({ ...state, confirmQuit: false });
-      const selected = clampIndex(m.selected + delta, n);
-      return settle({ ...state, confirmQuit: false, memory: { ...m, selected } });
-    }
-    if (state.tab === "routing") {
-      const r = routingOf(state);
-      const n = r.data?.byCap.length ?? 0;
-      if (n === 0) return settle({ ...state, confirmQuit: false });
-      const selected = clampIndex(r.selected + delta, n);
-      return settle({ ...state, confirmQuit: false, routing: { ...r, selected } });
-    }
-    if (state.tab === "doctor") {
-      const d = doctorOf(state);
-      const n = d.doctor?.checks.length ?? 0;
-      if (n === 0) return settle({ ...state, confirmQuit: false });
-      const selected = clampIndex(d.selected + delta, n);
-      return settle({ ...state, confirmQuit: false, doctor: { ...d, selected } });
-    }
-  }
+  // ↑↓ navigate items within the FOCUSED box; Enter drills into it (attach / open / nav).
+  if (key.name === "up" || key.name === "down") return moveSelection(state, key.name === "down" ? 1 : -1);
+  if (key.name === "enter") return drillIn(state);
 
   if (key.name === "char") {
     const ch = key.char;
@@ -749,6 +846,14 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
     return { box, top, left };
   }
 
+  if (overlay.kind === "detail") {
+    const width = Math.min(76, Math.max(36, cols - 8));
+    const box = buildDetailBox(overlay, width, theme);
+    const left = Math.max(0, Math.floor((cols - width) / 2));
+    const top = Math.max(0, Math.floor((rows - box.length) / 2));
+    return { box, top, left };
+  }
+
   // help (fallthrough)
   const width = Math.min(66, Math.max(20, cols - 4));
   const box = renderHelp(theme, COMMANDS, width);
@@ -769,6 +874,37 @@ function buildPromptBox(overlay: Extract<Overlay, { kind: "prompt" }>, width: nu
     { title: `prompt → ${target}`, dialog: true, width, height: 3, body: [field] },
     theme,
   );
+}
+
+/** Word-wrap `text` into lines of at most `width` display cells (plain text — the
+ * detail modal body carries no ANSI). */
+function wrapText(text: string, width: number): string[] {
+  const words = text.replace(/\s+/g, " ").trim().split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const w of words) {
+    if (line.length === 0) line = w;
+    else if (displayWidth(line) + 1 + displayWidth(w) <= width) line += " " + w;
+    else {
+      lines.push(line);
+      line = w;
+    }
+  }
+  if (line.length > 0) lines.push(line);
+  return lines.length > 0 ? lines : [""];
+}
+
+/** Read-only detail modal (Enter drill-in): a teal-bordered dialog with the title and a
+ * word-wrapped body, capped in height so it never overflows the screen. */
+function buildDetailBox(overlay: Extract<Overlay, { kind: "detail" }>, width: number, theme: Theme): string[] {
+  const inner = Math.max(0, width - 4);
+  const wrapped = wrapText(overlay.body, inner).slice(0, 12);
+  const body = [
+    ...wrapped.map((l) => theme.fg("text.primary") + l + theme.reset),
+    "",
+    theme.fg("text.muted") + "esc close" + theme.reset,
+  ];
+  return panel({ title: overlay.title, dialog: true, focus: true, width, height: body.length + 2, body }, theme);
 }
 
 /** Remember overlay box: a PromptBox wrapped in a titled dialog panel. Writes to
@@ -837,13 +973,14 @@ function centerLine(line: string, width: number): string {
 
 function buildMiddle(state: AppState, rect: Rect, theme: Theme): string[] {
   if (rect.height <= 0) return [];
+  const focused = focusedRegion(state);
   let rows: string[];
-  if (state.tab === "home") rows = buildOverviewView(overviewOf(state), sessionsOf(state), rect, theme);
+  if (state.tab === "home") rows = buildOverviewView(overviewOf(state), sessionsOf(state), focused, rect, theme);
   else if (state.tab === "sessions") rows = buildSessionsView(sessionsOf(state), rect, theme);
   else if (state.tab === "launch") rows = buildLaunchView(state.launch?.selected ?? 0, rect, theme);
-  else if (state.tab === "memory") rows = buildMemoryView(memoryOf(state), rect, theme);
+  else if (state.tab === "memory") rows = buildMemoryView(memoryOf(state), focused, rect, theme);
   else if (state.tab === "routing") rows = buildRoutingView(routingOf(state), rect, theme);
-  else rows = buildDoctorView(doctorOf(state), rect, theme);
+  else rows = buildDoctorView(doctorOf(state), focused, rect, theme);
   return rows.slice(0, rect.height).map((r) => padTo(truncate(r, rect.width), rect.width));
 }
 
@@ -927,7 +1064,7 @@ function oneLine(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
-function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, rect: Rect, theme: Theme): string[] {
+function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, focused: string, rect: Rect, theme: Theme): string[] {
   const cols = rect.width;
   const wm = wordmark({ variant: "block" }, theme);
   const out: string[] = [];
@@ -975,19 +1112,23 @@ function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, rect: Rect
       2,
     );
     const sistemaPanel = panel(
-      { title: "system", width: sistemaRect.width, height: panelsRect.height, body: buildSistemaBody(o.data, theme) },
+      { title: "system", focus: focused === "system", width: sistemaRect.width, height: panelsRect.height, body: buildSistemaBody(o.data, theme) },
       theme,
     );
 
     const rowW = Math.max(8, sesionesRect.width - 4);
+    const sSel = clampIndex(sessions.selected, Math.max(1, sessions.rows.length));
     const sessionBody =
       sessions.rows.length > 0
-        ? sessions.rows.slice(0, Math.max(0, panelsRect.height - 2)).map((r, i) => renderFleetRow(r, rowW, i === 0, theme))
+        ? sessions.rows.slice(0, Math.max(0, panelsRect.height - 2)).map((r, i) => {
+            const row = renderFleetRow(r, rowW, i === sSel, theme);
+            return focused === "sessions" && i === sSel ? highlightRow(padTo(row, rowW), theme) : row;
+          })
         : [theme.fg("text.secondary") + "no active sessions · press 2" + theme.reset];
     const sesionesPanel = panel(
       {
         title: `active sessions · ${sessions.rows.length}`,
-        focus: true,
+        focus: focused === "sessions",
         width: sesionesRect.width,
         height: panelsRect.height,
         body: sessionBody,
@@ -1003,13 +1144,18 @@ function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, rect: Rect
   if (memRect.height > 0) {
     out.push(" ".repeat(cols));
     const learnings = o.memory?.learnings ?? [];
+    const mSel = clampIndex(o.memSelected, Math.max(1, learnings.length));
+    const memW = Math.max(0, cols - 4);
     const memoriesBody =
       learnings.length > 0
-        ? learnings.slice(0, 3).map((l) => formatOverviewMemoryRow(l, Math.max(0, cols - 4), theme))
+        ? learnings.slice(0, 3).map((l, i) => {
+            const row = formatOverviewMemoryRow(l, memW, theme);
+            return focused === "memories" && i === mSel ? highlightRow(padTo(row, memW), theme) : row;
+          })
         : [theme.fg("text.secondary") + "no recent memories" + theme.reset];
     out.push(
       ...panel(
-        { title: "latest memories", width: cols, height: memoriesPanelHeight, body: memoriesBody },
+        { title: "latest memories", focus: focused === "memories", width: cols, height: memoriesPanelHeight, body: memoriesBody },
         theme,
       ),
     );
@@ -1224,7 +1370,7 @@ function renderLogRow(s: MemorySession, width: number, theme: Theme): string {
   return truncate(ts + " " + b, width);
 }
 
-export function buildMemoryView(m: MemorySlice, rect: Rect, theme: Theme): string[] {
+export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, theme: Theme): string[] {
   const cols = rect.width;
   const height = rect.height;
   if (height <= 0) return [];
@@ -1272,19 +1418,25 @@ export function buildMemoryView(m: MemorySlice, rect: Rect, theme: Theme): strin
           },
           theme,
         )
-      : [theme.fg("text.secondary") + "sin learnings recientes" + theme.reset];
+      : [theme.fg("text.secondary") + "no recent learnings" + theme.reset];
   const leftPanel = panel(
-    { title: `results · ${learnings.length} · violet = memory`, focus: true, width: leftRect.width, height: midRect.height, body: resultsBody },
+    { title: `results · ${learnings.length} · violet = memory`, focus: focused === "results", width: leftRect.width, height: midRect.height, body: resultsBody },
     theme,
   );
 
   const logW = Math.max(8, rightRect.width - 4);
+  const logSel = clampIndex(m.logSelected, Math.max(1, sessions.length));
+  const logRoom = Math.max(1, midRect.height - 2);
+  const logOff = scrollOffset(logSel, logRoom, sessions.length);
   const logsBody =
     sessions.length > 0
-      ? sessions.slice(0, Math.max(0, midRect.height - 2)).map((s) => renderLogRow(s, logW, theme))
+      ? sessions.slice(logOff, logOff + logRoom).map((s, i) => {
+          const row = renderLogRow(s, logW, theme);
+          return focused === "logs" && logOff + i === logSel ? highlightRow(padTo(row, logW), theme) : row;
+        })
       : [theme.fg("text.secondary") + "no sessions" + theme.reset];
   const rightPanel = panel(
-    { title: "session-logs", width: rightRect.width, height: midRect.height, body: logsBody },
+    { title: "session-logs", focus: focused === "logs", width: rightRect.width, height: midRect.height, body: logsBody },
     theme,
   );
 
@@ -1417,7 +1569,7 @@ function renderCheckRow(c: DoctorCheck, width: number, sel: boolean, theme: Them
   return sel ? highlightRow(padTo(row, width), theme) : row;
 }
 
-export function buildDoctorView(d: DoctorSlice, rect: Rect, theme: Theme): string[] {
+export function buildDoctorView(d: DoctorSlice, focused: string, rect: Rect, theme: Theme): string[] {
   const cols = rect.width;
   const height = rect.height;
   if (height <= 0) return [];
@@ -1452,7 +1604,7 @@ export function buildDoctorView(d: DoctorSlice, rect: Rect, theme: Theme): strin
   }
   const title = d.running ? "diagnostics" : d.atLabel ? `diagnostics · last ${d.atLabel}` : "diagnostics";
   const leftPanel = panel(
-    { title, focus: true, width: leftRect.width, height, body: leftBody },
+    { title, focus: focused === "checks", width: leftRect.width, height, body: leftBody },
     theme,
   );
 
@@ -1460,13 +1612,17 @@ export function buildDoctorView(d: DoctorSlice, rect: Rect, theme: Theme): strin
   const agents = d.fleet?.agents ?? [];
   const online = d.fleet?.online ?? 0;
   const total = d.fleet?.total ?? 0;
+  const fleetSel = clampIndex(d.fleetSelected, Math.max(1, agents.length));
+  const fleetW = Math.max(0, rightRect.width - 4);
   const fleetBody: string[] = [];
-  for (const a of agents) {
+  for (let ai = 0; ai < agents.length; ai++) {
+    const a = agents[ai]!;
     const b = badge({ agent: a.name as AgentName, label: a.name }, theme);
     const state = a.ok ? theme.fg("semantic.ok") + "online" : theme.fg("semantic.error") + "offline";
     const cls = theme.fg("text.muted") + " " + a.cls + theme.reset;
     const bw = Math.max(0, rightRect.width - 4 - 7 - displayWidth(a.cls) - 1);
-    fleetBody.push(padTo(b, bw) + state + theme.reset + cls);
+    const row = padTo(b, bw) + state + theme.reset + cls;
+    fleetBody.push(focused === "fleet" && ai === fleetSel ? highlightRow(padTo(row, fleetW), theme) : row);
   }
   if (d.doctor) {
     fleetBody.push("");
@@ -1475,7 +1631,7 @@ export function buildDoctorView(d: DoctorSlice, rect: Rect, theme: Theme): strin
     );
   }
   const rightPanel = panel(
-    { title: `fleet ${online}/${total}`, width: rightRect.width, height, body: fleetBody },
+    { title: `fleet ${online}/${total}`, focus: focused === "fleet", width: rightRect.width, height, body: fleetBody },
     theme,
   );
 

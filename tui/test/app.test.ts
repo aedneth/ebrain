@@ -129,14 +129,16 @@ describe("reduce — pure key-driven navigation", () => {
     expect(r.quit).toBe(false);
   });
 
-  it('"tab" cycles forward (home -> sessions)', () => {
+  it('"tab" moves the focus ring between boxes, NOT the view (F6.6)', () => {
     const r = reduce(initialState(), { name: "tab" });
-    expect(r.state.tab).toBe("sessions");
+    expect(r.state.tab).toBe("home"); // view is unchanged
+    expect(r.state.focusRegion).toBe(1); // home boxes: sessions -> memories
   });
 
-  it('"shift+tab" cycles backward and wraps (home -> doctor)', () => {
+  it('"shift+tab" wraps the focus ring backward within the view', () => {
     const r = reduce(initialState(), { name: "shifttab" });
-    expect(r.state.tab).toBe("doctor");
+    expect(r.state.tab).toBe("home");
+    expect(r.state.focusRegion).toBe(2); // home has 3 boxes; -1 wraps to the last
   });
 
   it('"6" jumps directly to doctor', () => {
@@ -228,12 +230,18 @@ describe("buildFrame — min-size guard", () => {
 // Registry: hint bar text must come from COMMANDS, not hardcoded strings
 // ---------------------------------------------------------------------------
 
-describe("hint bar is generated from the COMMANDS registry", () => {
-  it("hintsForTab draws only from commands marked showInHintBar", () => {
-    const hints = hintsForTab("home");
-    const expected = COMMANDS.filter((c) => c.showInHintBar);
-    expect(hints.length).toBe(expected.length);
-    expect(hints.length).toBeGreaterThan(0);
+describe("hint bar is view-specific and rendered from hintsForTab", () => {
+  it("every view returns a non-empty hint set (each key/label pair defined)", () => {
+    for (const tab of ["home", "sessions", "launch", "memory", "routing", "doctor"] as const) {
+      const hints = hintsForTab(tab);
+      expect(hints.length).toBeGreaterThan(0);
+      for (const h of hints) {
+        expect(h.k.length).toBeGreaterThan(0);
+        expect(h.label.length).toBeGreaterThan(0);
+      }
+    }
+    // The global command registry still exists and includes the hint-bar-flagged commands.
+    expect(COMMANDS.filter((c) => c.showInHintBar).length).toBeGreaterThan(0);
   });
 
   it("every hintsForTab() entry shows up in buildFrame's hint bar row", () => {
