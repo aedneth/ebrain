@@ -24,4 +24,4 @@ mcp:
 env:
   AGENT_NAME: codex
 doctor: "codex doctor"
-launch: codex   # SPRINT-TUI 6.1.6 — comando que `ebrain sessions new codex <slug>` corre en tmux
+launch: codex --dangerously-bypass-approvals-and-sandbox   # F6.6 — arranca en danger-full-access por diseño: aislamiento por dir + normas + guard de secretos gobiernan, no gates de aprobación

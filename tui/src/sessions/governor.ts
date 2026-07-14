@@ -55,16 +55,16 @@ export function governLaunch(input: GovernInput): GovernResult {
     return {
       decision: "confirm",
       reason:
-        `ya hay ${liveHeavyCount} agente${liveHeavyCount === 1 ? "" : "s"} pesado${liveHeavyCount === 1 ? "" : "s"} vivo${liveHeavyCount === 1 ? "" : "s"}` +
-        (availableMb >= 0 ? ` · ${availableMb} MB libres` : "") +
-        " · la norma es UN heavy a la vez (Celeron 4GB)",
+        `${liveHeavyCount} heavy agent${liveHeavyCount === 1 ? "" : "s"} already live` +
+        (availableMb >= 0 ? ` · ${availableMb} MB free` : "") +
+        " · norm is ONE heavy at a time (Celeron 4GB)",
     };
   }
 
   if (availableMb >= 0 && availableMb < HEAVY_MIN_FREE_MB) {
     return {
       decision: "confirm",
-      reason: `solo ${availableMb} MB libres (< ${HEAVY_MIN_FREE_MB} MB) para un agente pesado`,
+      reason: `only ${availableMb} MB free (< ${HEAVY_MIN_FREE_MB} MB) for a heavy agent`,
     };
   }
 

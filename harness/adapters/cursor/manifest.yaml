@@ -21,4 +21,4 @@ env:
   AGENT_NAME: cursor
 doctor: "agent --version"
 guard: advisory
-launch: agent   # SPRINT-TUI 6.1.6 — binario real es `agent` (alias cursor-agent); coincide con doctor
+launch: agent --force   # F6.6 — binario real es `agent` (alias cursor-agent); `--force` (YOLO) arranca en full-access por diseño: aislamiento por dir + normas gobiernan, no gates

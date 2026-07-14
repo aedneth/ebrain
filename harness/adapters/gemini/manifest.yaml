@@ -25,4 +25,4 @@ mcp:
 env:
   AGENT_NAME: gemini
 doctor: "gemini --version"
-launch: gemini   # SPRINT-TUI 6.1.6 — comando que `ebrain sessions new gemini <slug>` corre en tmux
+launch: gemini --yolo   # F6.6 — arranca en YOLO (auto-approve) por diseño: aislamiento por dir + normas + guard de secretos gobiernan, no gates de aprobación

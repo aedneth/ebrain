@@ -86,7 +86,7 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
   test("confirmLaunch dialog renders the governor reason + agent", () => {
     const st: AppState = {
       ...launchState(0),
-      overlay: { kind: "confirmLaunch", agent: "codex", cwd: "/home/x/proj", reason: "ya hay 1 heavy vivo · 800 MB libres" },
+      overlay: { kind: "confirmLaunch", agent: "codex", cwd: "/home/x/proj", reason: "1 heavy already live · 800 MB free" },
     };
     const frame = buildFrame(st, size, t).map(strip).join("\n");
     expect(frame).toContain("RAM governor");

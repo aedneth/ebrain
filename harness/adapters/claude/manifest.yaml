@@ -23,4 +23,4 @@ mcp:
 env:
   AGENT_NAME: claude
 doctor: null
-launch: claude   # SPRINT-TUI 6.1.6 — comando que `ebrain sessions new claude <slug>` corre en tmux
+launch: claude --dangerously-skip-permissions   # F6.6 — arranca en full-access (⏵⏵ bypass permissions on) por diseño: aislamiento por dir + normas + guard de secretos gobiernan, no gates de aprobación
