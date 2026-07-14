@@ -35,7 +35,6 @@ import { wordmark } from "./widgets/brand/wordmark.js";
 import { statusBar, statusSep, tabBar, hintBar, footer } from "./widgets/chrome/index.js";
 import { panel } from "./widgets/layout/panel.js";
 import { gauge } from "./widgets/core/gauge.js";
-import { sessioncard, type SessionState } from "./widgets/data/sessioncard.js";
 
 import { TABS, type TabName, hintsForTab, COMMANDS, type Command } from "./commands.js";
 import {
@@ -53,6 +52,31 @@ import { terminalPeek } from "./widgets/layout/terminalpeek.js";
 import { badge } from "./widgets/core/badge.js";
 import { confirm } from "./widgets/dialog/confirm.js";
 import { promptBox } from "./widgets/input/promptbox.js";
+import { table } from "./widgets/data/table.js";
+import { spinner } from "./widgets/core/spinner.js";
+
+// Knowledge data plane (F6.5) — the panels read the SAME contract-tested `--json`
+// subcommands the CLI phase shipped (zero orphan logic). Pure parsers + view-models in
+// knowledge/contracts.ts; only runUi (impure) calls the fetchers in knowledge/run.ts.
+import type {
+  OverviewData,
+  MemoryData,
+  MemoryLearning,
+  MemorySession,
+  SpendData,
+  FleetData,
+  DoctorData,
+  DoctorCheck,
+  DoctorLevel,
+} from "./knowledge/contracts.js";
+import {
+  fetchStatus,
+  fetchMemory,
+  fetchSpend,
+  fetchFleet,
+  fetchDoctor,
+  runRemember,
+} from "./knowledge/run.js";
 
 // Sessions data plane (F6.4) — REUSED from cli/sessions.ts via the control-plane
 // wrapper (zero orphan logic). Only runUi (impure) calls these; buildFrame stays pure.
@@ -144,14 +168,90 @@ function sessionsOf(state: AppState): SessionsSlice {
   return state.sessions ?? emptySessions();
 }
 
+// ── Knowledge-panel slices (F6.5) ───────────────────────────────────────────
+// Each panel owns an async slice the impure loop refreshes. `status` drives a
+// three-state render (loading / ready / error) so a panel NEVER spins forever
+// (spec 6.5.5). `at` stamps the last successful fetch — the lock-awareness banner
+// shows it when the brain read came back cached.
+
+export type LoadStatus = "idle" | "loading" | "ready" | "error";
+
+/** Overview/home (status --json) + last-3 memory + a bare session list (6.5.1). */
+export interface OverviewSlice {
+  data: OverviewData | null;
+  memory: MemoryData | null;
+  status: LoadStatus;
+  error?: string;
+  /** HH:MM of the last successful fetch, precomputed by the loop so buildFrame stays
+   * pure/deterministic (like sessions' uptime). Feeds the lock-awareness banner (6.5.5). */
+  atLabel: string | null;
+}
+
+/** Memory panel (memory recent --json): learnings + session-logs, navigable (6.5.2). */
+export interface MemorySlice {
+  data: MemoryData | null;
+  selected: number;
+  status: LoadStatus;
+  error?: string;
+}
+
+/** Routing panel (spend --json): by-capability spend + budget + gbrain flag (6.5.3). */
+export interface RoutingSlice {
+  data: SpendData | null;
+  selected: number;
+  status: LoadStatus;
+  error?: string;
+}
+
+/** Fleet+Doctor panel (fleet --json + doctor --json), `r` re-runs doctor (6.5.4). */
+export interface DoctorSlice {
+  fleet: FleetData | null;
+  doctor: DoctorData | null;
+  selected: number;
+  status: LoadStatus;
+  error?: string;
+  /** A doctor re-run is in flight — drives the spinner (advanced by the loop). */
+  running: boolean;
+  spinnerFrame: number;
+  atLabel: string | null;
+}
+
+export function emptyOverview(): OverviewSlice {
+  return { data: null, memory: null, status: "idle", atLabel: null };
+}
+export function emptyMemory(): MemorySlice {
+  return { data: null, selected: 0, status: "idle" };
+}
+export function emptyRouting(): RoutingSlice {
+  return { data: null, selected: 0, status: "idle" };
+}
+export function emptyDoctor(): DoctorSlice {
+  return { fleet: null, doctor: null, selected: 0, status: "idle", running: false, spinnerFrame: 0, atLabel: null };
+}
+
+function overviewOf(state: AppState): OverviewSlice {
+  return state.overview ?? emptyOverview();
+}
+function memoryOf(state: AppState): MemorySlice {
+  return state.memory ?? emptyMemory();
+}
+function routingOf(state: AppState): RoutingSlice {
+  return state.routing ?? emptyRouting();
+}
+function doctorOf(state: AppState): DoctorSlice {
+  return state.doctor ?? emptyDoctor();
+}
+
 /** A transient modal overlay composited over the base view. palette/help (6.3.4/6.3.5);
- * confirmKill/prompt are the Sessions panel's `k`/`p` actions (6.4.3). */
+ * confirmKill/prompt are the Sessions panel's `k`/`p` actions (6.4.3); remember is the
+ * Memory panel's `r` action (6.5.2). */
 export type Overlay =
   | { kind: "palette"; palette: PaletteState }
   | { kind: "help" }
   | { kind: "confirmKill"; name: string }
   | { kind: "prompt"; name: string; line: LineState }
-  | { kind: "confirmLaunch"; agent: string; cwd: string; reason: string };
+  | { kind: "confirmLaunch"; agent: string; cwd: string; reason: string }
+  | { kind: "remember"; line: LineState };
 
 export interface AppState {
   tab: TabName;
@@ -167,6 +267,11 @@ export interface AppState {
   sessions?: SessionsSlice;
   /** Launch-panel selection (F6.4.5). Optional — defaults to index 0. */
   launch?: { selected: number };
+  /** Knowledge-panel slices (F6.5). Optional — the *Of() helpers default empties. */
+  overview?: OverviewSlice;
+  memory?: MemorySlice;
+  routing?: RoutingSlice;
+  doctor?: DoctorSlice;
 }
 
 /** Caller's cwd: cli/ebrain exports EBRAIN_CALLER_CWD before cd-ing to run_bun's
@@ -207,6 +312,10 @@ export function initialState(): AppState {
     overlay: null,
     sessions: emptySessions(),
     launch: { selected: 0 },
+    overview: emptyOverview(),
+    memory: emptyMemory(),
+    routing: emptyRouting(),
+    doctor: emptyDoctor(),
   };
 }
 
@@ -228,7 +337,16 @@ export type AppEffect =
   /** Launch `agent` — the loop runs the RAM governor, which may open a confirm. */
   | { type: "launch"; agent: string }
   /** Launch confirmed through the governor's dialog (an override that gets logged). */
-  | { type: "launchConfirmed"; agent: string; cwd: string; reason: string };
+  | { type: "launchConfirmed"; agent: string; cwd: string; reason: string }
+  // Knowledge panels (F6.5): each landing refreshes its slice from its subcommand.
+  | { type: "refreshStatus" }
+  | { type: "refreshMemory" }
+  | { type: "refreshRouting" }
+  | { type: "refreshFleetDoctor" }
+  /** Doctor `r`: re-run `doctor --json` (async, spinner) without leaving the view. */
+  | { type: "rerunDoctor" }
+  /** Write `text` to permanent agentic memory via `ebrain remember`, then refresh. */
+  | { type: "remember"; text: string };
 
 export interface ReduceResult {
   state: AppState;
@@ -244,10 +362,28 @@ function withTab(state: AppState, tab: TabName): AppState {
   return { ...state, tab, confirmQuit: false, overlay: null };
 }
 
-/** Navigate to `tab`, requesting a session refresh when landing on the Sessions view
- * so its live data is current the moment you arrive (the loop performs the refresh). */
+/** Navigate to `tab`, requesting the matching data refresh when landing on a live view
+ * so its data is current the moment you arrive (the loop performs the refresh). Each
+ * knowledge panel (6.5) refreshes from its own contract-tested subcommand. */
 function goTab(state: AppState, tab: TabName): ReduceResult {
-  return settle(withTab(state, tab), tab === "sessions" ? { type: "refreshSessions" } : undefined);
+  return settle(withTab(state, tab), refreshEffectFor(tab));
+}
+
+function refreshEffectFor(tab: TabName): AppEffect | undefined {
+  switch (tab) {
+    case "sessions":
+      return { type: "refreshSessions" };
+    case "home":
+      return { type: "refreshStatus" };
+    case "memory":
+      return { type: "refreshMemory" };
+    case "routing":
+      return { type: "refreshRouting" };
+    case "doctor":
+      return { type: "refreshFleetDoctor" };
+    default:
+      return undefined;
+  }
 }
 
 function openPalette(state: AppState): ReduceResult {
@@ -279,6 +415,11 @@ function runCommand(state: AppState, command: Command): ReduceResult {
 
 function settle(state: AppState, effect?: AppEffect): ReduceResult {
   return { state, quit: false, forceRedraw: false, effect };
+}
+
+/** Clamp `i` into [0, count-1] (count>0 assumed by callers). */
+function clampIndex(i: number, count: number): number {
+  return Math.min(Math.max(0, i), count - 1);
 }
 
 /**
@@ -345,6 +486,19 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       return settle(state);
     }
 
+    if (ov.kind === "remember") {
+      // Write to permanent agentic memory (6.5.2): enter submits · esc cancels.
+      if (key.name === "escape") return settle({ ...state, overlay: null });
+      if (key.name === "enter") {
+        const text = ov.line.text.trim();
+        if (text.length === 0) return settle({ ...state, overlay: null }); // empty → just close
+        return { state: { ...state, overlay: null }, quit: false, forceRedraw: false, effect: { type: "remember", text } };
+      }
+      const ed = lineApplyKey(ov.line, key);
+      if (ed.handled) return settle({ ...state, overlay: { kind: "remember", line: ed.state } });
+      return settle(state);
+    }
+
     // ov.kind === "prompt": type a line; enter sends (deliberate) · esc cancels.
     if (key.name === "escape") return settle({ ...state, overlay: null });
     if (key.name === "enter") {
@@ -394,6 +548,32 @@ export function reduce(state: AppState, key: Key): ReduceResult {
     }
   }
 
+  // Knowledge panels (6.5): ↑↓ move the row selection within the focused list.
+  if (key.name === "up" || key.name === "down") {
+    const delta = key.name === "down" ? 1 : -1;
+    if (state.tab === "memory") {
+      const m = memoryOf(state);
+      const n = m.data?.learnings.length ?? 0;
+      if (n === 0) return settle({ ...state, confirmQuit: false });
+      const selected = clampIndex(m.selected + delta, n);
+      return settle({ ...state, confirmQuit: false, memory: { ...m, selected } });
+    }
+    if (state.tab === "routing") {
+      const r = routingOf(state);
+      const n = r.data?.byCap.length ?? 0;
+      if (n === 0) return settle({ ...state, confirmQuit: false });
+      const selected = clampIndex(r.selected + delta, n);
+      return settle({ ...state, confirmQuit: false, routing: { ...r, selected } });
+    }
+    if (state.tab === "doctor") {
+      const d = doctorOf(state);
+      const n = d.doctor?.checks.length ?? 0;
+      if (n === 0) return settle({ ...state, confirmQuit: false });
+      const selected = clampIndex(d.selected + delta, n);
+      return settle({ ...state, confirmQuit: false, doctor: { ...d, selected } });
+    }
+  }
+
   if (key.name === "char") {
     const ch = key.char;
 
@@ -425,6 +605,15 @@ export function reduce(state: AppState, key: Key): ReduceResult {
         if (ch === "k") return settle({ ...state, confirmQuit: false, overlay: { kind: "confirmKill", name: sel.name } });
         if (ch === "p") return settle({ ...state, confirmQuit: false, overlay: { kind: "prompt", name: sel.name, line: lineFrom("") } });
       }
+    }
+
+    // Memory panel: r opens the remember composer (writes to permanent agentic memory).
+    if (state.tab === "memory" && ch === "r") {
+      return settle({ ...state, confirmQuit: false, overlay: { kind: "remember", line: lineFrom("") } });
+    }
+    // Doctor panel: r re-runs the diagnostics in place (async spinner, never blocks).
+    if (state.tab === "doctor" && ch === "r") {
+      return settle({ ...state, confirmQuit: false }, { type: "rerunDoctor" });
     }
 
     // Any other printable char: no-op beyond clearing the quit-confirm arm.
@@ -609,83 +798,134 @@ function centerLine(line: string, width: number): string {
 function buildMiddle(state: AppState, rect: Rect, theme: Theme): string[] {
   if (rect.height <= 0) return [];
   let rows: string[];
-  if (state.tab === "home") rows = buildHomeView(rect, theme);
+  if (state.tab === "home") rows = buildOverviewView(overviewOf(state), sessionsOf(state), rect, theme);
   else if (state.tab === "sessions") rows = buildSessionsView(sessionsOf(state), rect, theme);
   else if (state.tab === "launch") rows = buildLaunchView(state.launch?.selected ?? 0, rect, theme);
-  else rows = buildStubView(state.tab, rect, theme);
+  else if (state.tab === "memory") rows = buildMemoryView(memoryOf(state), rect, theme);
+  else if (state.tab === "routing") rows = buildRoutingView(routingOf(state), rect, theme);
+  else rows = buildDoctorView(doctorOf(state), rect, theme);
   return rows.slice(0, rect.height).map((r) => padTo(truncate(r, rect.width), rect.width));
 }
 
 // ---------------------------------------------------------------------------
-// Home view — reproduces screens-a.jsx's HomeScreen with static fixture data.
-// Real data wiring (brain/fleet/spend/sessions/memory) is F6.5 — out of scope here.
+// Overview view (F6.5.1) — screens-a.jsx's HomeScreen wired to LIVE data: the
+// `status --json` summary (brain/spend/fleet/memory), the active tmux sessions (a
+// bare list from the same refresh), and the last 3 learnings from `memory recent`.
+// Renders PURELY from the overview + sessions slices; the loop fetches them. NEVER a
+// spinner-forever: null data degrades to a "cargando…"/error message, and a cached
+// brain read raises the lock banner (6.5.5) instead of blocking.
 // ---------------------------------------------------------------------------
-
-const SESSIONS_FIXTURE: Array<{ agent: AgentName; name: string; uptime: string; state: SessionState }> = [
-  { agent: "claude", name: "ebr-claude-korvex", uptime: "02:41", state: "running" },
-  { agent: "gemini", name: "ebr-gem-web", uptime: "00:12", state: "waiting" },
-  { agent: "codex", name: "ebr-codex-tests", uptime: "01:03", state: "running" },
-  { agent: "opencode", name: "ebr-oc-docs", uptime: "00:48", state: "idle" },
-];
-
-const MEMORY_FIXTURE: Array<[text: string, score: string, source: string]> = [
-  ["deepseek v3 falla con tool-use paralelo; enrutar a claude", "0.94", "routing"],
-  ["korvex usa pnpm, no npm — nunca sugerir npm install", "0.91", "korvex"],
-  ["frontier siempre requiere confirmacion manual del usuario", "0.88", "policy"],
-];
 
 function labelCell(text: string, theme: Theme): string {
   return theme.fg("text.secondary") + padTo(text, 12) + theme.reset;
 }
 
-function buildSistemaBody(theme: Theme): string[] {
+/** Lock-awareness banner (6.5.5): one row when the brain read came back cached (the
+ * PGLite lock was held by an MCP server). Empty array otherwise. */
+function overviewBanner(o: OverviewSlice, cols: number, theme: Theme): string[] {
+  if (!o.data?.brain.cached) return [];
+  const warn = theme.fg("semantic.warn");
+  const dim = theme.fg("text.secondary");
+  const reset = theme.reset;
+  const served = o.data.brain.servedBy || "mcp";
+  const stamp = o.atLabel ? dim + " · datos cacheados " + o.atLabel + reset : "";
+  const glyph = theme.glyph("badgeDot");
+  const text = `${glyph} brain served by ${served} (lock)`;
+  return [warn + text + reset + stamp];
+}
+
+function buildSistemaBody(d: OverviewData, theme: Theme): string[] {
   const ok = theme.fg("semantic.ok");
+  const warnC = theme.fg("semantic.warn");
   const dim = theme.fg("text.secondary");
   const primary = theme.fg("text.primary");
   const reset = theme.reset;
 
-  const brainLine = labelCell("brain", theme) + BOLD + ok + "UP" + reset + dim + "  CKIS · 128 learnings" + reset;
-  const spendLine = labelCell("spend hoy", theme) + gauge({ value: 2.14, max: 10, width: 16, suffix: "$2.14/$10" }, theme);
-  const ramLine = labelCell("ram", theme) + gauge({ value: 3.1, max: 4, width: 16, suffix: "3.1/4G", tone: "auto" }, theme);
-  const fleetLine = labelCell("fleet", theme) + primary + "6/6 " + reset + ok + "online" + reset;
-  const routingLine = labelCell("routing", theme) + primary + "6 caps " + reset + dim + "· 0 fallbacks" + reset;
+  const up = d.brain.state === "up";
+  const brainState = (up ? BOLD + ok : warnC) + d.brain.state.toUpperCase() + reset;
+  const served = d.brain.servedBy ? dim + "  " + d.brain.servedBy + reset : "";
+  const brainLine = labelCell("brain", theme) + brainState + served;
 
-  return [brainLine, "", spendLine, ramLine, "", fleetLine, routingLine];
+  const spendLine =
+    labelCell("spend", theme) +
+    gauge({ value: d.spend.mtd, max: d.spend.cap, width: 16, suffix: `$${d.spend.mtd.toFixed(2)}/$${d.spend.cap}` }, theme);
+
+  const online = d.fleet.online === d.fleet.total ? ok : warnC;
+  const fleetLine =
+    labelCell("fleet", theme) + primary + `${d.fleet.online}/${d.fleet.total} ` + reset + online + "online" + reset;
+
+  const memLine =
+    labelCell("memoria", theme) +
+    theme.fg("memory.violet") + `${d.memory.learnings} ` + reset + dim + "learnings · " + reset +
+    primary + `${d.memory.sessions} ` + reset + dim + "sesiones" + reset;
+
+  return [brainLine, "", spendLine, "", fleetLine, memLine];
 }
 
-function formatMemoryRow([text, score, source]: [string, string, string], contentW: number, theme: Theme): string {
+/** One home "ultimas memorias" row from a real learning: violet bullet + text + dim
+ * source (project). No fabricated score — `memory recent` carries none. */
+function formatOverviewMemoryRow(l: MemoryLearning, contentW: number, theme: Theme): string {
   const violet = theme.fg("memory.violet");
   const primary = theme.fg("text.primary");
   const dim = theme.fg("text.secondary");
   const reset = theme.reset;
 
-  const sourceW = 10; // matches screens-a.jsx: width:'10ch', textAlign:'right'
-  const gapW = 2; // matches paddingLeft:'2ch'
-  const bulletW = 2; // '● '
-  const scoreW = displayWidth(score);
-  const textW = Math.max(0, contentW - bulletW - gapW - scoreW - gapW - sourceW);
+  const glyph = theme.glyph("badgeDot");
+  const sourceW = 12;
+  const gapW = 2;
+  const bulletW = 2;
+  const textW = Math.max(0, contentW - bulletW - gapW - sourceW);
+  const src = l.project || l.date || "";
 
-  const textCell = padTo(truncate(text, textW), textW);
-  const scoreCell = " ".repeat(gapW) + score;
-  const sourceCell = " ".repeat(gapW) + padTo(source, sourceW, "right");
-
-  return violet + "● " + reset + primary + textCell + reset + violet + scoreCell + reset + dim + sourceCell + reset;
+  const textCell = padTo(truncate(oneLine(l.text), textW), textW);
+  const sourceCell = " ".repeat(gapW) + padTo(truncate(src, sourceW), sourceW, "right");
+  return violet + glyph + " " + reset + primary + textCell + reset + dim + sourceCell + reset;
 }
 
-function buildHomeView(rect: Rect, theme: Theme): string[] {
+/** Collapse a possibly multi-line learning into a single display line. */
+function oneLine(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
+
+function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, rect: Rect, theme: Theme): string[] {
   const cols = rect.width;
   const wm = wordmark({ variant: "block" }, theme);
-  const wmBlockHeight = wm.length + 1; // + 1 gap row (paddingBottom var(--row-h))
-  const memoriesPanelHeight = 5; // 2 borders + 3 data rows
-  const memBlockHeight = memoriesPanelHeight + 1; // + 1 gap row (paddingTop var(--row-h))
-
-  const [wmRect, panelsRect, memRect] = splitV(rect, [wmBlockHeight, { flex: 1 }, memBlockHeight]);
-
   const out: string[] = [];
 
+  const wmBlock: string[] = [];
+  for (const line of wm) wmBlock.push(centerLine(line, cols));
+  wmBlock.push(" ".repeat(cols));
+
+  // Wordmark always shows; the banner (if any) sits just under it.
+  const banner = overviewBanner(o, cols, theme);
+
+  // No data yet → a single status line where the panels would be (never a spinner-forever).
+  if (!o.data) {
+    for (const l of wmBlock) out.push(l);
+    for (const b of banner) out.push(centerLine(b, cols));
+    const msg =
+      o.status === "error"
+        ? theme.fg("semantic.error") + `error: ${o.error ?? "consultando ebrain status"}` + theme.reset
+        : theme.fg("text.secondary") + "cargando estado del sistema…" + theme.reset;
+    while (out.length < Math.floor(rect.height / 2)) out.push(" ".repeat(cols));
+    out.push(centerLine(msg, cols));
+    while (out.length < rect.height) out.push(" ".repeat(cols));
+    return out.slice(0, rect.height);
+  }
+
+  const memoriesPanelHeight = 5; // 2 borders + 3 data rows
+  const memBlockHeight = memoriesPanelHeight + 1;
+  const bannerH = banner.length;
+  const wmH = wmBlock.length;
+  const [wmRect, panelsRect, memRect] = splitV(rect, [
+    wmH + bannerH,
+    { flex: 1 },
+    memBlockHeight,
+  ]);
+
   if (wmRect.height > 0) {
-    for (const line of wm) out.push(centerLine(line, cols));
-    out.push(" ".repeat(cols));
+    for (const l of wmBlock) out.push(l);
+    for (const b of banner) out.push(centerLine(b, cols));
   }
 
   if (panelsRect.height > 0) {
@@ -695,15 +935,18 @@ function buildHomeView(rect: Rect, theme: Theme): string[] {
       2,
     );
     const sistemaPanel = panel(
-      { title: "sistema", width: sistemaRect.width, height: panelsRect.height, body: buildSistemaBody(theme), bg: "background.surface" },
+      { title: "sistema", width: sistemaRect.width, height: panelsRect.height, body: buildSistemaBody(o.data, theme), bg: "background.surface" },
       theme,
     );
-    const sessionBody = SESSIONS_FIXTURE.slice(0, 4).map((s, i) =>
-      sessioncard({ agent: s.agent, name: s.name, uptime: s.uptime, state: s.state, selected: i === 0 }, theme),
-    );
+
+    const rowW = Math.max(8, sesionesRect.width - 4);
+    const sessionBody =
+      sessions.rows.length > 0
+        ? sessions.rows.slice(0, Math.max(0, panelsRect.height - 2)).map((r, i) => renderFleetRow(r, rowW, i === 0, theme))
+        : [theme.fg("text.secondary") + "sin sesiones activas · pulsa 2" + theme.reset];
     const sesionesPanel = panel(
       {
-        title: "sesiones activas",
+        title: `sesiones activas · ${sessions.rows.length}`,
         focus: true,
         width: sesionesRect.width,
         height: panelsRect.height,
@@ -720,7 +963,11 @@ function buildHomeView(rect: Rect, theme: Theme): string[] {
 
   if (memRect.height > 0) {
     out.push(" ".repeat(cols));
-    const memoriesBody = MEMORY_FIXTURE.map((m) => formatMemoryRow(m, Math.max(0, cols - 4), theme));
+    const learnings = o.memory?.learnings ?? [];
+    const memoriesBody =
+      learnings.length > 0
+        ? learnings.slice(0, 3).map((l) => formatOverviewMemoryRow(l, Math.max(0, cols - 4), theme))
+        : [theme.fg("text.secondary") + "sin memorias recientes" + theme.reset];
     out.push(
       ...panel(
         { title: "ultimas memorias", width: cols, height: memoriesPanelHeight, body: memoriesBody, bg: "background.surface" },
@@ -730,7 +977,7 @@ function buildHomeView(rect: Rect, theme: Theme): string[] {
   }
 
   while (out.length < rect.height) out.push(" ".repeat(cols));
-  return out;
+  return out.slice(0, rect.height);
 }
 
 // ---------------------------------------------------------------------------
@@ -903,22 +1150,299 @@ function buildLaunchView(sel: number, rect: Rect, theme: Theme): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Stub views — memory/routing/doctor become real views in F6.5.
+// Memory view (F6.5.2) — screens-b.jsx's MemoryScreen wired to `memory recent --json`:
+// a semantic-search PromptBox (informational — `ebrain q` has no --json contract, so no
+// fabricated score/source parsing), a navigable "resultados" ScrollList of recent
+// learnings (violet = memoria), a "session-logs" side panel, and `r` to open the
+// remember composer (writes to permanent agentic memory). Round-trip remember→recent is
+// the F6.5 criterion #6.
 // ---------------------------------------------------------------------------
 
-function buildStubView(tab: TabName, rect: Rect, theme: Theme): string[] {
-  const cols = rect.width;
-  const contentW = Math.max(0, cols - 4); // panel width - 2 borders - 2*pad(1)
-  const bodyRows = Math.max(0, rect.height - 2);
-  const message = theme.fg("text.secondary") + `${tab} — proximamente` + theme.reset;
-  const midRow = Math.floor(bodyRows / 2);
+/** MM-DD HH:MM from an ISO ts, by pure slicing (no Date — buildFrame stays pure). */
+function fmtLogTs(ts: string): string {
+  const date = ts.length >= 10 ? ts.slice(5, 10) : ts; // "07-14"
+  const time = ts.length >= 16 ? ts.slice(11, 16) : ""; // "12:45"
+  return (date + " " + time).trim();
+}
 
-  const body: string[] = [];
-  for (let i = 0; i < bodyRows; i++) {
-    body.push(i === midRow ? centerLine(message, contentW) : "");
+function renderLearningRow(l: MemoryLearning, width: number, sel: boolean, theme: Theme): string {
+  const reset = theme.reset;
+  const violet = theme.fg("memory.violet");
+  const dot = theme.glyph("badgeDot");
+  const srcW = 12;
+  const gap = 2;
+  const textW = Math.max(0, width - 2 - gap - srcW);
+  const textColor = sel ? theme.fg("text.primary") + BOLD : theme.fg("text.secondary");
+  const src = l.project || l.date || "";
+  const textCell = textColor + padTo(truncate(oneLine(l.text), textW), textW) + reset;
+  const srcCell = " ".repeat(gap) + theme.fg("text.muted") + padTo(truncate(src, srcW), srcW, "right") + reset;
+  return violet + dot + " " + reset + textCell + srcCell;
+}
+
+function renderLogRow(s: MemorySession, width: number, theme: Theme): string {
+  const reset = theme.reset;
+  const ts = theme.fg("text.muted") + padTo(fmtLogTs(s.ts), 11) + reset;
+  const b = badge({ agent: s.agent as AgentName, label: oneLine(s.summary) }, theme);
+  return truncate(ts + " " + b, width);
+}
+
+export function buildMemoryView(m: MemorySlice, rect: Rect, theme: Theme): string[] {
+  const cols = rect.width;
+  const height = rect.height;
+  if (height <= 0) return [];
+
+  if (!m.data) {
+    const msg =
+      m.status === "error" ? `error: ${m.error ?? "consultando memoria"}` : "cargando memoria…";
+    return buildCenteredMessagePanel("memory", msg, rect, theme);
   }
 
-  return panel({ title: tab, width: cols, height: rect.height, body, bg: "background.surface" }, theme);
+  const learnings = m.data.learnings;
+  const sessions = m.data.sessions;
+  const [searchRect, midRect, footRect] = splitV(rect, [1, { flex: 1 }, 1]);
+
+  const out: string[] = [];
+
+  // Search row (informational — live search lives in `ebrain q` at the terminal).
+  out.push(
+    padTo(
+      promptBox(
+        { value: "", focus: false, placeholder: "busqueda semantica — `ebrain q` en terminal", hint: "", width: cols },
+        theme,
+      ),
+      cols,
+    ),
+  );
+
+  // Mid: results (flex) + session-logs (fixed).
+  const rightW = Math.min(40, Math.max(24, Math.floor(cols * 0.34)));
+  const [leftRect, rightRect] = splitH({ top: 0, left: 0, width: cols, height: midRect.height }, [{ flex: 1 }, rightW], 2);
+
+  const selected = clampIndex(m.selected, Math.max(1, learnings.length));
+  const listHeight = Math.max(1, midRect.height - 2);
+  const offset = scrollOffset(selected, listHeight, learnings.length);
+  const rowW = Math.max(8, leftRect.width - 4 - 3);
+  const resultsBody =
+    learnings.length > 0
+      ? scrolllist(
+          {
+            items: learnings,
+            selected,
+            height: listHeight,
+            offset,
+            renderItem: (l, idx) => renderLearningRow(l, rowW, idx === selected, theme),
+          },
+          theme,
+        )
+      : [theme.fg("text.secondary") + "sin learnings recientes" + theme.reset];
+  const leftPanel = panel(
+    { title: `resultados · ${learnings.length} · violeta = memoria`, focus: true, width: leftRect.width, height: midRect.height, body: resultsBody, bg: "background.surface" },
+    theme,
+  );
+
+  const logW = Math.max(8, rightRect.width - 4);
+  const logsBody =
+    sessions.length > 0
+      ? sessions.slice(0, Math.max(0, midRect.height - 2)).map((s) => renderLogRow(s, logW, theme))
+      : [theme.fg("text.secondary") + "sin sesiones" + theme.reset];
+  const rightPanel = panel(
+    { title: "session-logs", width: rightRect.width, height: midRect.height, body: logsBody, bg: "background.surface" },
+    theme,
+  );
+
+  const gap = " ".repeat(Math.max(0, cols - leftRect.width - rightRect.width));
+  for (let i = 0; i < midRect.height; i++) out.push((leftPanel[i] ?? "") + gap + (rightPanel[i] ?? ""));
+
+  // Footer hint (the composer opens as an overlay on `r`).
+  if (footRect.height > 0) {
+    const foot =
+      theme.fg("text.muted") + "r → recordar (memoria agentica permanente) · ↑↓ resultados" + theme.reset;
+    out.push(padTo(truncate(foot, cols), cols));
+  }
+
+  while (out.length < height) out.push(" ".repeat(cols));
+  return out.slice(0, height);
+}
+
+// ---------------------------------------------------------------------------
+// Routing view (F6.5.3) — screens-b.jsx's RoutingScreen, honestly scoped to the
+// `spend --json` contract: a per-capability MTD Table (navigable), the total-vs-cap
+// budget gauge, and the gbrain-untracked flag. The winner/fallback/floor CHAINS and the
+// per-event LEDGER from the mockup have NO --json contract yet (reading routing.yaml /
+// spend.jsonl directly would be orphan logic that fails gate criterion #2) — surfaced as
+// a documented "pendiente" note, same discipline that deferred the launch wizard to 6.6.
+// ---------------------------------------------------------------------------
+
+export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): string[] {
+  const cols = rect.width;
+  const height = rect.height;
+  if (height <= 0) return [];
+
+  if (!r.data) {
+    const msg = r.status === "error" ? `error: ${r.error ?? "consultando spend"}` : "cargando gasto…";
+    return buildCenteredMessagePanel("routing", msg, rect, theme);
+  }
+
+  const d = r.data;
+  const rightW = Math.min(42, Math.max(28, Math.floor(cols * 0.36)));
+  const [leftRect, rightRect] = splitH({ top: 0, left: 0, width: cols, height }, [{ flex: 1 }, rightW], 2);
+
+  // Left: per-capability spend table + total line.
+  const selected = clampIndex(r.selected, Math.max(1, d.byCap.length));
+  const rows = d.byCap.map((c) => ({
+    cap: c.capability,
+    routes: String(c.routes),
+    mtd: "$" + c.mtd.toFixed(3),
+  }));
+  const tableRows = table(
+    {
+      columns: [
+        { key: "cap", label: "capacidad", width: 15 },
+        { key: "routes", label: "rutas", width: 6, align: "right" },
+        { key: "mtd", label: "mtd", width: 9, align: "right" },
+      ],
+      rows,
+      selected,
+    },
+    theme,
+  );
+  const totalLine =
+    theme.fg("text.muted") + "total hoy  " + theme.reset +
+    spendTone(d.mtd, d.cap, theme) + "$" + d.mtd.toFixed(3) + theme.reset +
+    theme.fg("text.muted") + " / $" + d.cap.toFixed(2) + theme.reset;
+  const leftBody = [...tableRows, "", totalLine];
+  const leftPanel = panel(
+    { title: "caps · gasto por carril", focus: true, width: leftRect.width, height, body: leftBody, bg: "background.surface" },
+    theme,
+  );
+
+  // Right: budget gauge + remaining + hard-stop + gbrain flag + deferred note.
+  const budgetBody: string[] = [];
+  budgetBody.push(gauge({ value: d.mtd, max: d.cap, width: Math.max(8, rightRect.width - 6), suffix: "", tone: "auto" }, theme));
+  budgetBody.push("");
+  budgetBody.push(theme.fg("text.secondary") + "restante  " + theme.fg("text.primary") + "$" + d.remaining.toFixed(2) + theme.reset);
+  budgetBody.push(
+    theme.fg("text.secondary") + "hard-stop " +
+      (d.hardStop ? theme.fg("semantic.ok") + "si" : theme.fg("semantic.warn") + "no") + theme.reset,
+  );
+  if (d.gbrainUntracked) {
+    budgetBody.push("");
+    budgetBody.push(theme.fg("semantic.warn") + theme.glyph("badgeDot") + " gbrain: gasto sin trackear" + theme.reset);
+  }
+  budgetBody.push("");
+  budgetBody.push(theme.fg("text.muted") + "cadenas + ledger por evento:" + theme.reset);
+  budgetBody.push(theme.fg("text.muted") + "pendiente contrato routing --json" + theme.reset);
+  const rightPanel = panel(
+    { title: `presupuesto · ${d.month}`, width: rightRect.width, height, body: budgetBody, bg: "background.surface" },
+    theme,
+  );
+
+  const gap = " ".repeat(Math.max(0, cols - leftRect.width - rightRect.width));
+  const out: string[] = [];
+  for (let i = 0; i < height; i++) out.push((leftPanel[i] ?? "") + gap + (rightPanel[i] ?? ""));
+  return out;
+}
+
+/** Spend color by fraction of cap (mirrors gauge auto thresholds: 75% warn, 90% error). */
+function spendTone(mtd: number, cap: number, theme: Theme): string {
+  const frac = cap > 0 ? mtd / cap : 0;
+  if (frac >= 0.9) return theme.fg("semantic.error");
+  if (frac >= 0.75) return theme.fg("semantic.warn");
+  return theme.fg("text.primary");
+}
+
+// ---------------------------------------------------------------------------
+// Doctor view (F6.5.4) — screens-b.jsx's DoctorScreen wired to `doctor --json` +
+// `fleet --json`: checks colorized by level (✓/!/✗, DS-sanctioned, ASCII fallback), a
+// fleet side panel with each adapter's online state + RAM class, and `r` to re-run the
+// diagnostics in place (async spinner — NEVER a spinner-forever: a real result or an
+// error always replaces it).
+// ---------------------------------------------------------------------------
+
+function doctorTone(level: DoctorLevel, theme: Theme): { glyph: string; color: string } {
+  if (level === "ok") return { glyph: theme.ascii ? "v" : "✓", color: theme.fg("semantic.ok") };
+  if (level === "fail") return { glyph: theme.ascii ? "x" : "✗", color: theme.fg("semantic.error") };
+  return { glyph: "!", color: theme.fg("semantic.warn") };
+}
+
+function renderCheckRow(c: DoctorCheck, width: number, sel: boolean, theme: Theme): string {
+  const reset = theme.reset;
+  const tone = doctorTone(c.level, theme);
+  const glyphCell = tone.color + BOLD + padTo(tone.glyph, 2) + reset;
+  const idW = 24;
+  const msgW = Math.max(0, width - 2 - idW - 1);
+  const idColor = sel ? theme.fg("text.primary") + BOLD : theme.fg("text.primary");
+  const idCell = idColor + padTo(truncate(c.id, idW), idW) + reset;
+  const msgCell = " " + theme.fg("text.muted") + truncate(c.msg, msgW) + reset;
+  return glyphCell + idCell + msgCell;
+}
+
+export function buildDoctorView(d: DoctorSlice, rect: Rect, theme: Theme): string[] {
+  const cols = rect.width;
+  const height = rect.height;
+  if (height <= 0) return [];
+
+  if (!d.doctor && !d.fleet) {
+    const msg =
+      d.status === "error"
+        ? `error: ${d.error ?? "consultando doctor"}`
+        : d.running
+          ? "ejecutando diagnostico…"
+          : "cargando diagnostico…";
+    return buildCenteredMessagePanel("doctor", msg, rect, theme);
+  }
+
+  const rightW = Math.min(38, Math.max(24, Math.floor(cols * 0.32)));
+  const [leftRect, rightRect] = splitH({ top: 0, left: 0, width: cols, height }, [{ flex: 1 }, rightW], 2);
+
+  // Left: diagnostics list (spinner row while re-running).
+  const checks = d.doctor?.checks ?? [];
+  const selected = clampIndex(d.selected, Math.max(1, checks.length));
+  const leftBody: string[] = [];
+  if (d.running) {
+    leftBody.push(spinner({ label: "re-ejecutando checks…", frame: d.spinnerFrame }, theme));
+    leftBody.push("");
+  }
+  const listRoom = Math.max(1, height - 2 - leftBody.length);
+  const rowW = Math.max(8, leftRect.width - 4);
+  const offset = scrollOffset(selected, listRoom, checks.length);
+  const windowed = checks.slice(offset, offset + listRoom);
+  for (let i = 0; i < windowed.length; i++) {
+    leftBody.push(renderCheckRow(windowed[i]!, rowW, offset + i === selected, theme));
+  }
+  const title = d.running ? "diagnostico" : d.atLabel ? `diagnostico · ultimo ${d.atLabel}` : "diagnostico";
+  const leftPanel = panel(
+    { title, focus: true, width: leftRect.width, height, body: leftBody, bg: "background.surface" },
+    theme,
+  );
+
+  // Right: fleet online state + RAM class, plus a warn/fail summary.
+  const agents = d.fleet?.agents ?? [];
+  const online = d.fleet?.online ?? 0;
+  const total = d.fleet?.total ?? 0;
+  const fleetBody: string[] = [];
+  for (const a of agents) {
+    const b = badge({ agent: a.name as AgentName, label: a.name }, theme);
+    const state = a.ok ? theme.fg("semantic.ok") + "online" : theme.fg("semantic.error") + "offline";
+    const cls = theme.fg("text.muted") + " " + a.cls + theme.reset;
+    const bw = Math.max(0, rightRect.width - 4 - 7 - displayWidth(a.cls) - 1);
+    fleetBody.push(padTo(b, bw) + state + theme.reset + cls);
+  }
+  if (d.doctor) {
+    fleetBody.push("");
+    fleetBody.push(
+      theme.fg("text.muted") + `${d.doctor.warn} warn · ${d.doctor.fail} fail` + theme.reset,
+    );
+  }
+  const rightPanel = panel(
+    { title: `fleet ${online}/${total}`, width: rightRect.width, height, body: fleetBody, bg: "background.surface" },
+    theme,
+  );
+
+  const gap = " ".repeat(Math.max(0, cols - leftRect.width - rightRect.width));
+  const out: string[] = [];
+  for (let i = 0; i < height; i++) out.push((leftPanel[i] ?? "") + gap + (rightPanel[i] ?? ""));
+  return out;
 }
 
 // ---------------------------------------------------------------------------
