@@ -4,6 +4,19 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-14 — F6.4.1–6.4.7: sustrato tmux + panel Sessions vivo + launch + gobernador RAM + ADR-004 (maker Opus)
+
+- **6.4.1 `tui/src/sessions/tmux.ts`** — wrapper de control-plane que REUSA el backend de `cli/sessions.ts` (list/new/peek/send/kill + scrubber; cero lógica huérfana, crit#2) y agrega solo `insideTmux()`/`hasServer()`/`attachTarget()`. **6.4.2 `scripts/fake-agent.sh`** completo (trap TERM/INT/HUP, ticks, eco `recibí:` estable). E2E real contra tmux 3.2a: introspección + supervivencia + scrubber.
+- **6.4.3 panel Sessions** (contra `screens-a.jsx SessionsScreen`): Panel focus `fleet · N` + ScrollList (Badge/nombre/uptime) | `TerminalPeek` live del seleccionado. **Peek con throttle ≤1Hz** (`sessions/peek.ts shouldCapture`, puro+testeado), SIEMPRE scrubbeado. Acciones ↑↓/a/k/p (`p`=PromptBox nuevo DS-bound; `k`=ConfirmDialog danger, SOLO `y`). **Arquitectura:** `buildFrame` PURO (uptime precomputado, sin Date.now()); data async en slice `sessions`; mutaciones por canal de **EFECTOS** en `ReduceResult` → `reduce` puro y 100% testeable.
+- **6.4.4 attach handoff (core)**: efecto `attach` + `doAttach()` suspende alt-screen/reader/timer (`attaching` suprime repaints), cede stdio a tmux, restaura al volver; guard `disposed` evita re-entrar tras quit/señal (bug cazado en self-review). Attach interactivo real = manual (checklist humano).
+- **6.4.5 launch básico**: vista `launch` = grid "agente" del mockup (subset; wizard advisor=6.6.1). enter → efecto `launch` → gobernador → `newSession` (env del manifest; deny-client rc=2 se surface-a en el panel).
+- **6.4.6 gobernador RAM** `tui/src/sessions/governor.ts`: `governLaunch()` PURO (light nunca gatea · 2º heavy → confirm · 1er heavy con RAM crítica → confirm) reusa `readClass` de fleet.ts; `parseAvailableMb` (/proc/meminfo); `countLiveHeavy`; `logOverride` → `~/.config/ebrain/governor-overrides.jsonl`. Override SOLO con `y`.
+- **6.4.7 ADR-004** (`docs/adr/ADR-004-shared-brain-daemon.md`): daemon HTTP-MCP compartido — **recomendación DEFER** (mismo listón que difirió Hermes; aislamiento federación/cliente gratis por proceso hoy) + 4 condiciones de GO. **Fork DEFER-vs-GO pendiente de ratificación de Eduardo.**
+- **Verify:** suite completa **445 pass / 0 fail** (38 archivos); boot→quit exit 0, alt-screen enter/exit balanceado (el setInterval del peek no cuelga la salida); RSS 45.5 MiB (ADR-003 ≤100MB); cero-hex (solo theme.ts). Vistas y overlays renderizados y verificados contra los mockups (Sessions, kill-confirm, prompt, launch grid, governor-override).
+- **Estado F6:** 6.0 ✅ 6.1 ✅ 6.2 ✅ 6.3 ✅ · **6.4 maker-completo (6.4.1–6.4.7)** → **GATE 6.4.8 PENDIENTE (auditoría Fable 5, checker independiente — maker≠checker, NO auto-aprobado).** Hallazgo menor para el gate: `sendToSession` usa `send-keys` sin `-l` (texto normal llega íntegro, probado; solo un prompt que sea exactamente un token de tecla tmux se interpretaría). Sigue: cerrar gate 6.4.8 · 6.5 paneles · 6.6 orquestación · 6.7 ship.
+
+---
+
 ## 2026-07-13 — F6.3 CERRADA: command palette + help overlay + GATE 6.3.7 `[AUDIT_PASS]`
 
 - **6.3.4 command palette** (`/` · `ctrl+p`): `tui/src/widgets/input/commandpalette.ts` (contra `CommandPalette.jsx` — `›` prompt bold, query, caret `▌`, **borde teal focus = el momento de acento**, fuzzy subsequence con matches en teal bold, selected en `background.raised`, footer `↑↓ navegar · enter · esc`) + `tui/src/palette.ts` (state + `filterCommands` fuzzy + `paletteApplyKey`, portado de FlowClock, sobre el registry `COMMANDS`) + wiring en `app.ts` (overlay state, `runCommand` mapea `Command.id`→transición, compositing band-clear centrado ~30% desde arriba). Verificado: `/`→abre, "ss"→sessions, enter→ejecuta+cierra, esc→cierra.

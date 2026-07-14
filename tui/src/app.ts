@@ -973,6 +973,9 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
     let peekTimer: ReturnType<typeof setInterval> | null = null;
     let lastPeekAt: number | null = null;
     let attaching = false;
+    // Set once the loop is torn down (quit / signal / crash) so an in-flight attach
+    // handoff never re-enters the alt-screen after cleanup already ran.
+    let disposed = false;
 
     function getSize(): FrameSize {
       return { cols: output.columns ?? 0, rows: output.rows ?? 0 };
@@ -984,6 +987,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
     }
 
     function restoreTerminal(): void {
+      disposed = true;
       if (stopReader) {
         stopReader();
         stopReader = null;
@@ -1113,6 +1117,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       } catch {
         // tmux missing/failed — fall through and restore our UI regardless.
       }
+      if (disposed) return; // quit/signal happened during the attach — do NOT re-enter
       attaching = false;
       screen.enter();
       stopReader = startNavReader(input, onKey, output);
