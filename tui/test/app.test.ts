@@ -22,9 +22,36 @@ const theme = makeTheme({ trueColor: true, ascii: false });
 // buildFrame — home snapshot (120x32, matches shell.jsx's COLS/ROWS)
 // ---------------------------------------------------------------------------
 
+// Home renders LIVE data (F6.5.1) — a populated overview + sessions slice stands in for
+// what the loop fetches, so the snapshot is deterministic (no ebrain/tmux).
+const homeState = {
+  ...initialState(),
+  overview: {
+    data: {
+      brain: { state: "up", servedBy: "mcp:8541", cached: false },
+      spend: { mtd: 2.14, cap: 10, remaining: 7.86 },
+      fleet: { total: 6, online: 6 },
+      memory: { learnings: 128, sessions: 39 },
+    },
+    memory: {
+      learnings: [
+        { project: "routing", agent: "unknown", date: "2026-07-14", tags: [], text: "deepseek v3 falla con tool-use paralelo" },
+      ],
+      sessions: [],
+    },
+    status: "ready" as const,
+    atLabel: "14:31",
+  },
+  sessions: {
+    rows: [{ name: "ebr-claude-korvex", agent: "claude", uptime: "02:41", attached: false }],
+    selected: 0,
+    peek: null,
+    status: "ready" as const,
+  },
+};
+
 describe("buildFrame — home snapshot (120x32)", () => {
-  const state = initialState();
-  const frame = buildFrame(state, { cols: 120, rows: 32 }, theme);
+  const frame = buildFrame(homeState, { cols: 120, rows: 32 }, theme);
   const plain = frame.map(stripAnsi);
 
   it("returns exactly 32 rows, each of exact display width 120", () => {
@@ -73,14 +100,20 @@ describe("buildFrame — home snapshot (120x32)", () => {
   });
 });
 
-describe("buildFrame — stub tabs render '<tab> — proximamente'", () => {
-  // `sessions` (6.4.3) and `launch` (6.4.5) are REAL views now; the remaining three
-  // are still stubs until F6.5.
-  for (const tab of ["memory", "routing", "doctor"] as const) {
-    it(`${tab} renders a stub panel`, () => {
-      const frame = buildFrame({ tab, confirmQuit: false, cwd: "~" }, { cols: 120, rows: 32 }, theme);
+describe("buildFrame — knowledge tabs are REAL views (F6.5), never stubs", () => {
+  // All six tabs now render real views; none say "proximamente". With no slice data yet
+  // they degrade to a bordered "cargando…" panel — never a spinner-forever (6.5.5).
+  const cases: Array<[string, string]> = [
+    ["memory", "cargando memoria"],
+    ["routing", "cargando gasto"],
+    ["doctor", "cargando diagnostico"],
+  ];
+  for (const [tab, loadingMsg] of cases) {
+    it(`${tab} renders its real panel with a loading state (not a stub)`, () => {
+      const frame = buildFrame({ tab: tab as never, confirmQuit: false, cwd: "~" }, { cols: 120, rows: 32 }, theme);
       const plain = frame.map(stripAnsi).join("\n");
-      expect(plain).toContain(`${tab} — proximamente`);
+      expect(plain).not.toContain("proximamente");
+      expect(plain).toContain(loadingMsg);
     });
   }
 });

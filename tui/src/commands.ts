@@ -96,6 +96,18 @@ const LAUNCH_HINTS: HintEntry[] = [
   { k: "enter", label: "lanzar" },
 ];
 
+/** Per-view hints for the F6.5 knowledge panels — each matches the keys reduce()
+ * actually handles for that tab (screens-b.jsx MemoryScreen / DoctorScreen). */
+const MEMORY_HINTS: HintEntry[] = [
+  { k: "↑↓", label: "resultados" },
+  { k: "r", label: "remember" },
+];
+const ROUTING_HINTS: HintEntry[] = [{ k: "↑↓", label: "caps" }];
+const DOCTOR_HINTS: HintEntry[] = [
+  { k: "r", label: "re-run" },
+  { k: "↑↓", label: "checks" },
+];
+
 /**
  * The hints shown in the bottom hint bar for the given tab.
  *
@@ -108,6 +120,9 @@ const LAUNCH_HINTS: HintEntry[] = [
 export function hintsForTab(tab: TabName): HintEntry[] {
   if (tab === "sessions") return SESSION_HINTS;
   if (tab === "launch") return LAUNCH_HINTS;
+  if (tab === "memory") return MEMORY_HINTS;
+  if (tab === "routing") return ROUTING_HINTS;
+  if (tab === "doctor") return DOCTOR_HINTS;
   return COMMANDS.filter((c) => c.showInHintBar).map((c) => ({
     k: c.hintKey ?? c.key ?? "",
     label: c.title,

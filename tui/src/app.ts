@@ -647,7 +647,7 @@ export function buildFrame(state: AppState, size: FrameSize, theme: Theme): stri
   const [, , , middleRect] = splitV(full, [1, 1, 1, { flex: 1 }, 1, 1]);
 
   const frame: string[] = [];
-  frame.push(buildStatusRow(theme, cols));
+  frame.push(buildStatusRow(overviewOf(state), theme, cols));
   frame.push(padTo(tabBar({ tabs: [...TABS], active: TABS.indexOf(state.tab) }, theme), cols));
   frame.push(buildHairlineRow(theme, cols));
   frame.push(...buildMiddle(state, middleRect, theme));
@@ -731,6 +731,14 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
     return { box, top, left };
   }
 
+  if (overlay.kind === "remember") {
+    const width = Math.min(72, Math.max(30, cols - 6));
+    const box = buildRememberBox(overlay, width, theme);
+    const left = Math.max(0, Math.floor((cols - width) / 2));
+    const top = Math.max(0, Math.min(Math.floor(rows * 0.4), rows - box.length));
+    return { box, top, left };
+  }
+
   // help (fallthrough)
   const width = Math.min(66, Math.max(20, cols - 4));
   const box = renderHelp(theme, COMMANDS, width);
@@ -753,6 +761,20 @@ function buildPromptBox(overlay: Extract<Overlay, { kind: "prompt" }>, width: nu
   );
 }
 
+/** Remember overlay box: a PromptBox wrapped in a titled dialog panel. Writes to
+ * permanent agentic memory on enter — the composer is single-line here (the multiline
+ * RememberForm of the mockup is the composer work in F6.6.3). */
+function buildRememberBox(overlay: Extract<Overlay, { kind: "remember" }>, width: number, theme: Theme): string[] {
+  const field = promptBox(
+    { value: overlay.line.text, focus: true, placeholder: "un aprendizaje durable, auto-contenido", hint: "enter guardar · esc cancelar", width: width - 4 },
+    theme,
+  );
+  return panel(
+    { title: "recordar → memoria agentica permanente", dialog: true, width, height: 3, body: [field], bg: "background.raised" },
+    theme,
+  );
+}
+
 function compositeOverlay(base: string[], overlay: Overlay, size: FrameSize, theme: Theme): string[] {
   const { cols, rows } = size;
   const { box, top, left } = overlayBox(overlay, cols, rows, theme);
@@ -769,18 +791,26 @@ function compositeOverlay(base: string[], overlay: Overlay, size: FrameSize, the
   return out;
 }
 
-function buildStatusRow(theme: Theme, cols: number): string {
+/** Global status bar (chrome on every tab). Wired to the LIVE `status --json` summary
+ * (6.5.1) — brain state, fleet online/total, spend MTD/cap — with a neutral placeholder
+ * before the first fetch lands (never a stale hardcoded number). */
+function buildStatusRow(o: OverviewSlice, theme: Theme, cols: number): string {
   const left = wordmark({ variant: "compact" }, theme)[0] ?? "";
-  const right =
-    "brain " +
-    theme.fg("semantic.ok") +
-    BOLD +
-    "UP" +
-    theme.reset +
-    statusSep(theme) +
-    "fleet 6/6" +
-    statusSep(theme) +
-    "$2.14/$10";
+  const d = o.data;
+  let right: string;
+  if (d) {
+    const brainColor = d.brain.state === "up" ? theme.fg("semantic.ok") : theme.fg("semantic.warn");
+    const fleetColor = d.fleet.online === d.fleet.total ? theme.reset : theme.fg("semantic.warn");
+    right =
+      "brain " + brainColor + BOLD + d.brain.state.toUpperCase() + theme.reset +
+      statusSep(theme) +
+      fleetColor + `fleet ${d.fleet.online}/${d.fleet.total}` + theme.reset +
+      statusSep(theme) +
+      `$${d.spend.mtd.toFixed(2)}/$${d.spend.cap}`;
+  } else {
+    const dim = theme.fg("text.muted");
+    right = "brain " + dim + "…" + theme.reset + statusSep(theme) + dim + "fleet —" + theme.reset + statusSep(theme) + dim + "$—" + theme.reset;
+  }
   return statusBar({ left, right }, theme, cols);
 }
 
@@ -1496,6 +1526,8 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
     // `attaching` flag that suppresses our repaints while tmux owns the terminal.
     let peekTimer: ReturnType<typeof setInterval> | null = null;
     let lastPeekAt: number | null = null;
+    // Advances the doctor spinner (~8fps) only while a re-run is in flight (6.5.4).
+    let spinnerTimer: ReturnType<typeof setInterval> | null = null;
     let attaching = false;
     // Set once the loop is torn down (quit / signal / crash) so an in-flight attach
     // handoff never re-enters the alt-screen after cleanup already ran.
@@ -1519,6 +1551,10 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       if (peekTimer) {
         clearInterval(peekTimer);
         peekTimer = null;
+      }
+      if (spinnerTimer) {
+        clearInterval(spinnerTimer);
+        spinnerTimer = null;
       }
       output.removeListener("resize", onResize);
       process.removeListener("SIGINT", onSignal);
@@ -1693,10 +1729,162 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       return `${clean}-${Date.now().toString(36).slice(-4)}`; // short suffix avoids name clashes
     }
 
+    // ── Knowledge data plane (impure): fetch each panel from its subcommand (6.5) ──
+
+    /** HH:MM now, for the lock-awareness / last-run timestamps (impure by design —
+     * buildFrame never calls this; the loop stamps the string onto the slice). */
+    function nowClock(): string {
+      const dt = new Date();
+      return `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}`;
+    }
+
+    /** Overview/home (6.5.1): status + last-3 memory, then a bare session list. */
+    async function refreshStatus(): Promise<void> {
+      const cur = overviewOf(state);
+      state = { ...state, overview: { ...cur, status: cur.data ? cur.status : "loading" } };
+      if (state.tab === "home") render();
+
+      const [st, mem] = await Promise.all([fetchStatus(), fetchMemory(3)]);
+      const o = overviewOf(state);
+      if (st.ok) {
+        state = {
+          ...state,
+          overview: { ...o, data: st.data, memory: mem.ok ? mem.data : o.memory, status: "ready", error: undefined, atLabel: nowClock() },
+        };
+      } else {
+        state = { ...state, overview: { ...o, status: "error", error: st.error } };
+      }
+      if (state.tab === "home") render();
+      await refreshSessionsBare();
+    }
+
+    /** Bare tmux session list (no peek) for the home "sesiones activas" panel. */
+    async function refreshSessionsBare(): Promise<void> {
+      if ((await hasServer()) !== "up") return; // no server -> leave slice empty (shows "sin sesiones")
+      const list = await listSessions();
+      if (!list.ok) return;
+      const now = Date.now();
+      const rows: SessionListItem[] = list.sessions.map((r) => ({
+        name: r.name,
+        agent: r.agent,
+        uptime: uptimeFromIso(r.created, now),
+        attached: r.attached,
+      }));
+      const prev = sessionsOf(state);
+      state = {
+        ...state,
+        sessions: {
+          ...prev,
+          rows,
+          selected: rows.length ? Math.min(prev.selected, rows.length - 1) : 0,
+          status: rows.length ? "ready" : prev.status,
+        },
+      };
+      if (state.tab === "home" || state.tab === "sessions") render();
+    }
+
+    async function refreshMemory(): Promise<void> {
+      const cur = memoryOf(state);
+      state = { ...state, memory: { ...cur, status: cur.data ? cur.status : "loading" } };
+      if (state.tab === "memory") render();
+      const r = await fetchMemory(8);
+      const m = memoryOf(state);
+      if (r.ok) {
+        state = { ...state, memory: { ...m, data: r.data, selected: Math.min(m.selected, Math.max(0, r.data.learnings.length - 1)), status: "ready", error: undefined } };
+      } else {
+        state = { ...state, memory: { ...m, status: "error", error: r.error } };
+      }
+      if (state.tab === "memory") render();
+    }
+
+    async function refreshRouting(): Promise<void> {
+      const cur = routingOf(state);
+      state = { ...state, routing: { ...cur, status: cur.data ? cur.status : "loading" } };
+      if (state.tab === "routing") render();
+      const r = await fetchSpend();
+      const rt = routingOf(state);
+      if (r.ok) {
+        state = { ...state, routing: { ...rt, data: r.data, selected: Math.min(rt.selected, Math.max(0, r.data.byCap.length - 1)), status: "ready", error: undefined } };
+      } else {
+        state = { ...state, routing: { ...rt, status: "error", error: r.error } };
+      }
+      if (state.tab === "routing") render();
+    }
+
+    /** Fleet + Doctor (6.5.4). `force` (the `r` re-run) refetches even when cached and
+     * drives the spinner; a landing skips the fetch if data is already present. */
+    async function refreshFleetDoctor(force = false): Promise<void> {
+      const cur = doctorOf(state);
+      if (!force && cur.doctor && cur.fleet) {
+        if (state.tab === "doctor") render();
+        return;
+      }
+      state = { ...state, doctor: { ...cur, status: cur.doctor ? cur.status : "loading", running: force } };
+      if (state.tab === "doctor") render();
+
+      const [fl, dc] = await Promise.all([fetchFleet(), fetchDoctor()]);
+      const d = doctorOf(state);
+      const fleet = fl.ok ? fl.data : d.fleet;
+      const doctor = dc.ok ? dc.data : d.doctor;
+      const err = !fl.ok ? fl.error : !dc.ok ? dc.error : undefined;
+      const status: LoadStatus = fl.ok || dc.ok ? "ready" : "error";
+      state = { ...state, doctor: { ...d, fleet, doctor, status, error: err, running: false, atLabel: nowClock() } };
+      if (state.tab === "doctor") render();
+    }
+
+    async function rerunDoctor(): Promise<void> {
+      if (!spinnerTimer) spinnerTimer = setInterval(spinnerTick, 120);
+      try {
+        await refreshFleetDoctor(true);
+      } finally {
+        if (spinnerTimer) {
+          clearInterval(spinnerTimer);
+          spinnerTimer = null;
+        }
+      }
+    }
+
+    function spinnerTick(): void {
+      const d = doctorOf(state);
+      if (!d.running) return;
+      state = { ...state, doctor: { ...d, spinnerFrame: d.spinnerFrame + 1 } };
+      if (state.tab === "doctor") render();
+    }
+
+    /** Write a learning to permanent agentic memory, then refresh so it shows in
+     * "resultados" (round-trip = F6.5 criterion #6). */
+    async function doRemember(text: string): Promise<void> {
+      const r = await runRemember(text);
+      await refreshMemory();
+      if (!r.ok) {
+        const m = memoryOf(state);
+        state = { ...state, memory: { ...m, status: "error", error: `remember: ${r.error}` } };
+        if (state.tab === "memory") render();
+      }
+    }
+
     async function handleEffect(effect: AppEffect): Promise<void> {
       switch (effect.type) {
         case "refreshSessions":
           await refreshSessions();
+          break;
+        case "refreshStatus":
+          await refreshStatus();
+          break;
+        case "refreshMemory":
+          await refreshMemory();
+          break;
+        case "refreshRouting":
+          await refreshRouting();
+          break;
+        case "refreshFleetDoctor":
+          await refreshFleetDoctor();
+          break;
+        case "rerunDoctor":
+          await rerunDoctor();
+          break;
+        case "remember":
+          await doRemember(effect.text);
           break;
         case "peek":
           await doPeek(effect.name);
@@ -1729,6 +1917,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       screen.enter();
       render();
       peekTimer = setInterval(peekTick, 1000); // Sessions peek refresh (self-gated ≤1Hz)
+      void refreshStatus(); // home lands first — populate its live summary immediately
     } catch (err) {
       restoreTerminal();
       resolve();
