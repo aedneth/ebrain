@@ -91,7 +91,7 @@ async function main() {
   console.log(`ebrain spend — ${payload.month}`);
   console.log(`  mtd $${payload.mtd.toFixed(4)} / cap $${payload.budget.monthly_usd} (restante $${payload.remaining.toFixed(4)})`);
   for (const c of byCap) console.log(`  ${c.capability.padEnd(14)} $${c.mtd.toFixed(4)}  (${c.routes} rutas)`);
-  console.log("  ⚠ gbrain (think/dream) no entra a este ledger — su cap real es server-side");
+  console.log("  ⚠ el motor (think/dream) no entra a este ledger — su cap real es server-side");
 }
 
 if (import.meta.main) main().catch((e) => die(String(e?.message ?? e)));

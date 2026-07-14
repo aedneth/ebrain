@@ -119,19 +119,19 @@ if [ -f "$spend" ]; then
 else
   c_warn "spend:mtd" "spend.jsonl aún no existe (sin rutas registradas)"
 fi
-c_warn "spend:gbrain-gap" "gap conocido: el spend de gbrain (think/dream) NO entra al ledger local; su cap real es server-side"
+c_warn "spend:gbrain-gap" "gap conocido: el spend del motor (think/dream) NO entra al ledger local; su cap real es server-side"
 
-# ── brain (motor gbrain) ─────────────────────────────────────────────────────
-c_sec "brain (motor gbrain)"
+# ── brain engine ─────────────────────────────────────────────────────────────
+c_sec "brain engine"
 if [ -n "$serve_pid" ]; then
   c_ok "brain:engine" "brain UP (MCP serve, PID $serve_pid); stats vía tools MCP o 'ebrain status' con MCP idle"
 else
   h_tmp="$(mktemp)"
   if (cd /tmp && timeout 60 "$CFG/gbrain-run" doctor >"$h_tmp" 2>&1); then :; fi
   if grep -q 'GBrain Health Check' "$h_tmp"; then
-    c_ok "brain:engine" "gbrain doctor corrió (WARN internos de resolver_health/skills = no-bloqueantes para ebrain)"
+    c_ok "brain:engine" "el motor respondió (WARN internos de resolver_health/skills = no-bloqueantes para ebrain)"
   else
-    c_warn "brain:engine" "gbrain doctor no dio salud legible: $(head -1 "$h_tmp")"
+    c_warn "brain:engine" "el motor no dio salud legible: $(head -1 "$h_tmp")"
   fi
   rm -f "$h_tmp"
 fi

@@ -94,7 +94,7 @@ cap="$(grep -E 'monthly_usd' "$CFG/routing.yaml" 2>/dev/null | grep -oE '[0-9]+(
 if [ -f "$spend" ]; then
   mtd="$(awk -F'"usd":' -v m="$(date +%Y-%m)" '$0 ~ "\"ts\":\""m {split($2,a,"[,}]"); s+=a[1]} END{printf "%.4f", s+0}' "$spend")"
   n="$(grep -c "\"ts\":\"$(date +%Y-%m)" "$spend" 2>/dev/null || echo 0)"
-  printf '  gasto    $%s / $%s cap · %s rutas este mes (ledger route.ts; gbrain server-side aparte)\n' "$mtd" "$cap" "$n"
+  printf '  gasto    $%s / $%s cap · %s rutas este mes (ledger route.ts; motor server-side aparte)\n' "$mtd" "$cap" "$n"
 else
   printf '  gasto    sin rutas registradas · cap $%s\n' "$cap"
 fi

@@ -116,9 +116,9 @@ fi
 # sync a gbrain para que sea buscable de inmediato (una página = costo mínimo). --no-sync lo salta.
 if [ "$SYNC" = "1" ] && [ -x "$HOME/.config/ebrain/gbrain-run" ]; then
   if "$HOME/.config/ebrain/gbrain-run" sync --source agent-memory >/dev/null 2>&1; then
-    echo "  gbrain sync agent-memory ✓ (buscable en ebrain)"
+    echo "  sync agent-memory ✓ (buscable en ebrain)"
   else
-    echo "  (gbrain sync diferido — quedará en el próximo sweep)"
+    echo "  (sync diferido — quedará en el próximo sweep)"
   fi
 fi
 exit 0

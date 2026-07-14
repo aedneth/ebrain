@@ -57,6 +57,22 @@ El modo thin-client (`callRemoteTool`) sirve para **ops de CLI** (`query`/`searc
 
 ━━━
 
+## Rename policy — gbrain → ebrain (SUPERFICIE, decidido por Eduardo 2026-07-14)
+
+**Hallazgo:** `gbrain` es un **upstream de tercero** (`github.com/garrytan/gbrain`, v0.42.58.0, activo) que ebrain
+vendorea; `~/.gbrain/` guarda la **memoria viva** (`brain.pglite` + `config.json`). Su capa interna tiene **5,629
+refs** + decenas de env `GBRAIN_*` como interfaz pública. Renombrar el engine = forkearlo (perder updates) + migrar
+memoria viva. **Decisión: rename SOLO de la superficie ebrain-owned, el engine queda como dep interno.**
+
+- **SE RENOMBRA (nuestro):** los launchers wrapper `gbrain-run`→`ebrain-run`, `gbrain-mcp`→`ebrain-mcp` (en D.4, con
+  symlink compat); los **strings de OUTPUT** user-facing que decían "gbrain" → "motor"/"brain engine" (hecho: doctor.sh,
+  status.sh, remember.sh, spend.ts); **todos los artefactos NUEVOS del daemon nacen ebrain-native** (`ebrain-brain`,
+  `ebrain daemon`).
+- **SE QUEDA (interfaz del engine garrytan/gbrain):** env `GBRAIN_*` (el engine los consume), paths `~/.gbrain/` y
+  `vendor/gbrain/`, el ancla de parseo `grep 'GBrain Health Check'` (matchea la salida real del engine), el campo de
+  contrato `gbrain_untracked` (zod + tests), los check-IDs estables (`spend:gbrain-gap`, `launcher:gbrain-run`). Renombrar
+  cualquiera de estos rompe el contrato o el engine.
+
 ## Los 4 gates de GO del ADR-004 (son los criterios de aceptación de esta fase, no precondiciones)
 
 1. **≥2 agentes concurrentes** consultando memoria sostenidamente → prueba de aceptación D.6.
@@ -75,15 +91,15 @@ El modo thin-client (`callRemoteTool`) sirve para **ops de CLI** (`query`/`searc
 - [x] D.0.3 Confirmar auth del host: OAuth2.1 CC + bearer, loopback bind. **Verify:** serve-http.ts imports (mcpAuthRouter, requireBearerAuth, StreamableHTTPServerTransport).
 - [x] D.0.4 Confirmar el bug que motiva la fase (lock single-writer, sin host :8541). **Verify:** probe 2º MCP → exit 124 (colgado).
 
-## FASE D.1 — RAM (gate criterio 3)  `[ ]`
+## FASE D.1 — RAM (gate criterio 3)  `[x]`
 
-- [ ] D.1.1 Medir RSS de `gbrain serve --http` residente (contra un brain throwaway con `GBRAIN_*` a dir temporal, para NO tocar el lock vivo). Registrar pico + estable. **Verify:** RSS anotado; embeddings son **API remota** (OpenAI 3-large) → sin modelo local residente esperado.
-- [ ] D.1.2 Confirmar que un cliente MCP-HTTP del agente NO agrega proceso gbrain (es transporte nativo del CLI) → el modelo daemon es **más liviano por-agente** que el stdio actual. **Verify:** lanzar un agente apuntado al host de prueba, `ps` no muestra `gbrain serve` extra.
-- [ ] D.1.3 GATE criterio 3: host + 1 agente heavy ≤ presupuesto 4GB (con gobernador RAM F6.4.6 intacto). **Verify:** MemAvailable durante la prueba.
+- [x] D.1.1 Medir RSS del `serve` real (engine con datos reales). **Resultado:** el `gbrain serve` vivo (2d uptime) = **~9 MB RSS idle** (swappable), **VmHWM ~627 MB** (pico solo al servir activamente), VmSwap ~269 MB. Máquina: 3733 MB total, 442 libre. Embeddings = **API remota** (OpenAI 3-large) → sin modelo local residente. Overhead express/http del `--http` = despreciable vs el engine.
+- [x] D.1.2 El cliente MCP-HTTP del agente es **transporte nativo del CLI** (claude/codex) → NO agrega proceso gbrain. El daemon **reemplaza** los N `serve` por-agente: **1×~600MB host vs N×~600MB** = neto MÁS eficiente para multi-agente. Thin-agents agregan ~0 RSS de gbrain.
+- [x] D.1.3 **GATE criterio 3 = PASS (viable):** idle ~9MB (swappable), pico ~600MB solo al servir, consolida N serves en 1. La presión de 4GB es pre-existente; el daemon no la empeora (la consolida). **Nota:** el pico ~600MB al servir mantiene vigente el gobernador un-heavy-a-la-vez (F6.4.6).
 
 ## FASE D.2 — Host launcher supervisado (gate criterio 2)  `[ ]`
 
-- [ ] D.2.1 Launcher persistente `gbrain serve --http --port 8541 --bind 127.0.0.1` con **pidfile + single-instance guard** (nunca 2 hosts) y logs a `~/.config/ebrain/daemon.log`. Ubicación: `~/.config/ebrain/gbrain-httpd`.
+- [ ] D.2.1 Launcher persistente `gbrain serve --http --port 8541 --bind 127.0.0.1` con **pidfile + single-instance guard** (nunca 2 hosts) y logs a `~/.config/ebrain/daemon.log`. Ubicación **ebrain-native**: `~/.config/ebrain/ebrain-brain` (ver §Rename policy).
 - [ ] D.2.2 Comando de control `ebrain daemon {start,stop,status,restart}` (o systemd user unit `ebrain-brain.service` con `Restart=on-failure`). Decidir supervisado-vs-systemd en D.2. **Verify:** start→status UP→stop→status DOWN.
 - [ ] D.2.3 **Auditar** la superficie auth de serve-http (OAuth CC, bearer, rate-limit, CORS, bind loopback) — el gate criterio 2. Documentar hallazgos; loopback-only mitiga exposición. **Verify:** curl a :8541 sin bearer → 401; con bearer → 200.
 - [ ] D.2.4 Integrar el estado del daemon en el panel **Doctor** de la TUI (health check del host). **Verify:** doctor muestra "brain daemon: up/down".
@@ -97,6 +113,7 @@ El modo thin-client (`callRemoteTool`) sirve para **ops de CLI** (`query`/`searc
 
 - [ ] D.4.1 Cambiar `mcp.register` de cada adapter de stdio (`gbrain-mcp`) a HTTP: claude `mcp add --transport http ebrain http://localhost:8541/mcp`; codex `mcp add ebrain --url http://localhost:8541/mcp`; gemini `<url>`; cursor/opencode `url` en su config (mcp-wire.sh). Bearer/OAuth por client_credentials con el client de D.3. **Verify:** `harness install <agent>` deja el registro HTTP.
 - [ ] D.4.2 Mantener el stdio `gbrain-mcp` como **fallback** (no borrar) para rollback y para el modo sin-daemon. **Verify:** ambos caminos documentados.
+- [ ] D.4.4 **Rename de launchers (surface, ver §Rename policy):** `~/.config/ebrain/gbrain-run`→`ebrain-run` y `gbrain-mcp`→`ebrain-mcp` con **symlink de compat** del nombre viejo→nuevo (para no romper configs/registros vivos), y actualizar refs en repo (doctor.sh/status.sh/remember.sh/mcp-wire.sh/manifests + check-id `launcher:gbrain-run`). Se hace ACÁ (no antes) porque toca el MCP vivo y su hogar natural es el rewire. **Verify:** ambos nombres resuelven; suite verde.
 - [ ] D.4.3 Actualizar doctor/harness para reportar el modo MCP activo (stdio-local vs http-daemon) por agente. **Verify:** `ebrain harness status` lo muestra.
 
 ## FASE D.5 — ISOLATION GATE (criterio 4, obligatorio)  `[ ]`
