@@ -4,6 +4,17 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-14 — GATE 6.4.8 `[AUDIT_PASS]`: FASE 6.4 CERRADA (loop maker≠checker completo con Fable 5)
+
+- **El gate funcionó.** El checker independiente **Fable 5** auditó la superficie tmux de F6.4, devolvió `[ISSUES]` con la arquitectura sólida pero **2 gaps de seguridad reales + 3 menores** que el maker (Opus) no había visto solo. Maker aplicó los 5 fixes; checker **re-verificó sobre `3c60beb` con probes directos** (`od -c` de los bytes de send-keys, symlink real a repo de cliente, los inputs exactos del scrubber) → **`[AUDIT_PASS]`**.
+- **Fixes (commit `3c60beb`):** **#1** [MEDIA-ALTA] scrubber de peek fugaba `SECRET_KEY=`/`ENCRYPTION_KEY=`/`SSH_KEY:` (sufijo `KEY` no era alternante), `sk-proj-`/`sk-svcacct-` (el `sk-<alnum>{20,}` se rompía en el guion) y bloques PEM → cerrado (6/6 redactan). **#2** [MEDIA] deny-list de cliente evadible por symlink → `realpathSync` antes del chequeo (un `atajo→brisas-del-golfo` ahora deniega rc=2). **#3** [MEDIA·correctness] `send-keys` sin `-l` → `-l --` + Enter aparte (un prompt `"Space"`/`"C-c"` llega literal, no como pulsación). **#4** comentario falso corregido. **#5** governor fail-open en `unknown` → fail-safe (gatea como heavy).
+- **Limpio confirmado por el checker** (no tocado): target inmutable en kill/send/attach, `y`-explícito (enter no confirma), override logueado, terminal SIEMPRE restaurada (`disposed`+`attaching`), `buildFrame` puro, cero-hex.
+- **Residual LOW no bloqueante** (a 6.7.1): una llave PEM que cruce el borde de la ventana de captura de 200 líneas puede dejar body base64 visible; está detrás de `guard-secrets.sh` y cerrarlo del todo sobre-redactaría output legítimo — tradeoff defendible, documentado.
+- **Verify:** **449 pass / 0 fail** (+4 regresiones que fijan los inputs exactos del gate). **FASE 6.4 CERRADA.**
+- **Estado F6:** 6.0 ✅ 6.1 ✅ 6.2 ✅ 6.3 ✅ **6.4 ✅** → sigue 6.5 (paneles de conocimiento) · 6.6 (orquestación + advisor v1) · 6.7 (hardening + ship). Aparte, fuera de F6: **fase-daemon (ADR-004 = GO)** a planear.
+
+---
+
 ## 2026-07-14 — F6.4.1–6.4.7: sustrato tmux + panel Sessions vivo + launch + gobernador RAM + ADR-004 (maker Opus)
 
 - **6.4.1 `tui/src/sessions/tmux.ts`** — wrapper de control-plane que REUSA el backend de `cli/sessions.ts` (list/new/peek/send/kill + scrubber; cero lógica huérfana, crit#2) y agrega solo `insideTmux()`/`hasServer()`/`attachTarget()`. **6.4.2 `scripts/fake-agent.sh`** completo (trap TERM/INT/HUP, ticks, eco `recibí:` estable). E2E real contra tmux 3.2a: introspección + supervivencia + scrubber.
