@@ -1834,11 +1834,16 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       }
       screen.exit();
       // Discoverability: attaching hands the terminal FULLY to tmux — the way back to
-      // ebrain is the tmux detach binding, not anything ebrain owns. Print it before the
-      // handoff (tmux may redraw over it, but the sessions hint bar shows it persistently).
-      if (target.verb === "attach-session") {
-        output.write(`\r\n  attached to ${name} — press Ctrl-b then d to detach back to ebrain\r\n\r\n`);
-      }
+      // ebrain is a tmux binding, not anything ebrain owns, and it DIFFERS by whether
+      // ebrain runs inside tmux. Outside tmux (attach-session): Ctrl-b d DETACHES this
+      // client → returns to ebrain. Inside tmux (switch-client): Ctrl-b d would detach
+      // the WHOLE client (kicking you out of everything) — the way back is Ctrl-b L
+      // (last session). Print the right one before the handoff.
+      const backHint =
+        target.verb === "attach-session"
+          ? "press Ctrl-b then d to detach back to ebrain"
+          : "press Ctrl-b then L to return to ebrain (NOT Ctrl-b d — that exits tmux)";
+      output.write(`\r\n  attached to ${name} — ${backHint}\r\n\r\n`);
       try {
         const proc = Bun.spawn(["tmux", ...target.args], {
           stdin: "inherit",

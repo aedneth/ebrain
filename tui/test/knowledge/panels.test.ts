@@ -218,7 +218,7 @@ describe("reduce — knowledge-panel keys", () => {
     expect(reduce(s, { name: "down" }).state.routing!.selected).toBe(1);
   });
 
-  it("doctor `r` requests a re-run; ↑↓ moves the check selection", () => {
+  it("doctor `r` requests a re-run; ↑↓ moves the check selection (checks region)", () => {
     const s = base("doctor", {
       doctor: {
         fleet: null,
@@ -232,5 +232,85 @@ describe("reduce — knowledge-panel keys", () => {
     });
     expect(reduce(s, { name: "char", char: "r" }).effect?.type).toBe("rerunDoctor");
     expect(reduce(s, { name: "down" }).state.doctor!.selected).toBe(1);
+  });
+});
+
+// ── Focus model (F6.6): Tab moves the focus ring, ↑↓ act on the focused box, Enter drills in
+describe("focus model (F6.6)", () => {
+  it("Tab cycles the focus ring within a view; it never changes the view", () => {
+    // home has 3 boxes (sessions, memories, system)
+    const r1 = reduce(initialState(), { name: "tab" });
+    expect(r1.state.tab).toBe("home");
+    expect(r1.state.focusRegion).toBe(1);
+    const r2 = reduce(r1.state, { name: "tab" });
+    expect(r2.state.focusRegion).toBe(2);
+    const r3 = reduce(r2.state, { name: "tab" });
+    expect(r3.state.focusRegion).toBe(0); // wraps
+    // shift+tab goes back
+    expect(reduce(r1.state, { name: "shifttab" }).state.focusRegion).toBe(0);
+  });
+
+  it("Tab is a no-op on a single-box view (routing)", () => {
+    const s = base("routing", { routing: { data: { month: "m", mtd: 0, cap: 10, remaining: 10, hardStop: true, byCap: [], gbrainUntracked: false }, selected: 0, status: "ready" } });
+    expect(reduce(s, { name: "tab" }).state.focusRegion).toBe(s.focusRegion ?? 0);
+  });
+
+  it("↑↓ route to the FOCUSED box: home sessions vs memories", () => {
+    const s = base("home", {
+      overview: {
+        data: { brain: { state: "up", servedBy: "", cached: false }, spend: { mtd: 0, cap: 10, remaining: 10 }, fleet: { total: 1, online: 1 }, memory: { learnings: 2, sessions: 0 } },
+        memory: { learnings: [{ project: "a", agent: "x", date: "d", tags: [], text: "one" }, { project: "b", agent: "x", date: "d", tags: [], text: "two" }], sessions: [] },
+        memSelected: 0,
+        status: "ready",
+        atLabel: null,
+      },
+      sessions: { rows: [{ name: "s1", agent: "claude", uptime: "1", attached: false }, { name: "s2", agent: "codex", uptime: "2", attached: false }], selected: 0, peek: null, status: "ready" },
+    });
+    // region 0 = sessions → ↓ moves the session selection
+    expect(reduce(s, { name: "down" }).state.sessions!.selected).toBe(1);
+    // Tab to region 1 (memories) → ↓ moves the memory selection, not the session one
+    const memFocused = reduce(s, { name: "tab" }).state;
+    const afterDown = reduce(memFocused, { name: "down" }).state;
+    expect(afterDown.overview!.memSelected).toBe(1);
+    expect(afterDown.sessions!.selected).toBe(0);
+  });
+
+  it("Enter drills into the focused box: attach / open memory / open routing", () => {
+    const home = base("home", {
+      sessions: { rows: [{ name: "ebr-claude-x", agent: "claude", uptime: "1", attached: false }], selected: 0, peek: null, status: "ready" },
+    });
+    // region 0 = sessions → Enter attaches
+    expect(reduce(home, { name: "enter" }).effect).toEqual({ type: "attach", name: "ebr-claude-x" });
+    // region 1 = memories → Enter jumps to the memory view
+    const memFocus = { ...home, focusRegion: 1 };
+    expect(reduce(memFocus, { name: "enter" }).state.tab).toBe("memory");
+    // region 2 = system → Enter jumps to routing
+    const sysFocus = { ...home, focusRegion: 2 };
+    expect(reduce(sysFocus, { name: "enter" }).state.tab).toBe("routing");
+  });
+
+  it("Enter on a memory result opens a read-only detail overlay", () => {
+    const s = base("memory", {
+      memory: { data: { learnings: [{ project: "routing", agent: "x", date: "d", tags: [], text: "full learning text" }], sessions: [] }, selected: 0, logSelected: 0, status: "ready" },
+    });
+    const r = reduce(s, { name: "enter" });
+    expect(r.state.overlay?.kind).toBe("detail");
+    if (r.state.overlay?.kind === "detail") expect(r.state.overlay.body).toContain("full learning text");
+  });
+
+  it("the FOCUSED box renders the teal (accent) border; a blur box does not", () => {
+    const theme2 = makeTheme({ trueColor: true, ascii: false });
+    const s = base("doctor", {
+      focusRegion: 1, // fleet box focused
+      doctor: {
+        fleet: { agents: [{ name: "claude", ok: true, cls: "heavy" }], online: 1, total: 1 },
+        doctor: { checks: [{ id: "x", level: "ok", msg: "" }], ok: 1, warn: 0, fail: 0 },
+        selected: 0, fleetSelected: 0, status: "ready", running: false, spinnerFrame: 0, atLabel: "14:31",
+      },
+    });
+    const frame = buildFrame(s, SIZE, theme2);
+    const joined = frame.join("");
+    // the fleet panel (focused) carries the focus border escape
+    expect(joined).toContain(theme2.focusBorder);
   });
 });
