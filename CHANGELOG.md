@@ -4,6 +4,16 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-14 — FASE D: daemon HTTP-MCP compartido LIVE + handoff a Codex (D.2/D.5 hechos, cutover en curso)
+
+- **Host daemon LIVE:** `gbrain serve --http --port 8541 --bind 127.0.0.1` (loopback) corriendo como dueño único del lock PGLite, vía `scripts/ebrain-brain` + `ebrain daemon {start|stop|status|restart}`. Verificado en vivo: `/health` 200, `/mcp` sin bearer 401, bearer válido (`gbrain auth create`) → **200**, escuchando solo en loopback, RSS 317MB / 561MB libres. Resuelve de raíz el "MCP nunca carga" (lock single-writer; cada `serve` stdio de agente hacía polling infinito).
+- **D.2** (host launcher + control + auditoría auth crit.2=PASS) y **D.5** (isolation gate crit.4: `cli/isolation.ts` + 6 tests — plano-sesión `isClientPath` con cierre del gap symlink + plano-source `isClientSource`/`federatedSources`/`assertNoClientSources`) cerrados. **D.1** RAM gate=PASS. Falta D.4 (rewire completo)/D.6 (registrar agentes)/D.7 (gate+Fable).
+- **Corrección de arquitectura:** `gbrain serve` es host-only → los agentes conectan por **MCP-HTTP directo** (no thin-client-serve). claude `--transport http --header`, codex `--url --bearer-token-env-var`.
+- **Insight open-source (memoria `project_ebrain_open_source_plug_and_play`):** el cutover manual = la SPEC de un `ebrain up` plug-and-play. La fricción mata la adopción; el usuario nunca debe ver OAuth/tokens/locks.
+- **Handoff a Codex:** `docs/HANDOFF.md` (estado + backlog priorizado + cómo trabajamos + gotchas destilados multi-sesión + docs clave + entregable HANDOFF-BACK) + `docs/KICK-OFF-PROMPT.md` (prompt para arrancar la sesión Codex). Prioridad 1 de Codex = `ebrain up`/`onboard` (plug-and-play). maker(Codex)≠checker(Opus), gate con Fable 5.
+
+---
+
 ## 2026-07-14 — F6.6 fixes de daily-driver (review-3 Eduardo): launch full-access + último español + DIAGNÓSTICO MCP-nunca-carga
 
 - **Launch en full-access por diseño (bug: claude no arrancaba en `⏵⏵ bypass permissions on`).** Los manifests lanzaban el binario pelado (`launch: claude`), así que ninguna sesión arrancaba en su modo full-access. Corregido en los 6 adapters según la norma documentada (agentes en full-access gobernados por aislamiento-por-dir + normas + guard de secretos, NO por gates): claude `--dangerously-skip-permissions` · codex `--dangerously-bypass-approvals-and-sandbox` · gemini `--yolo` · cursor (`agent`) `--force` · opencode `--auto` · generic `bash` (sin flag). Verificado que tmux **argv-splitea** el string multi-palabra (`sleep 300`→`sleep`+`300`) y que `resolveLaunch` devuelve el comando completo para los 6.
