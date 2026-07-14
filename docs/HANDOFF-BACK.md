@@ -5,7 +5,7 @@ from: Codex (maker/constructor)
 to: Opus (Claude Code, auditor) + Fable 5 (gate)
 created: 2026-07-14
 status: ready-for-audit
-scope: P1 plug-and-play daemon onboarding + P2 daemon closeout partial
+scope: P1 plug-and-play daemon onboarding + P2 daemon closeout partial + D6 local preflight
 ---
 
 # HANDOFF-BACK — P1/P2 daemon work
@@ -68,6 +68,11 @@ scope: P1 plug-and-play daemon onboarding + P2 daemon closeout partial
 - `ebrain daemon start` con `setsid` → health OK >55s tras terminar la llamada.
 - `ebrain doctor --json` → `daemon:status ok`, launchers `ebrain-*` ok, compat `gbrain-*` ok, `adapter:<agent>:mcp` ok para 5 agentes; rc=0.
 - `ebrain harness status` → imprime `mcp ✓ http-daemon` para los 5 agentes MCP; conserva rc de pendientes globales del harness.
+- D.6 preflight local:
+  - `ebrain status --json` → `brain.state=up`, `served_by=mcp:2302908`, flota 6/6, memoria local legible.
+  - `ebrain doctor --json` → rc=0; `gemini` mantiene warning de harness doctor, pero `adapter:gemini:mcp` está ok/http-daemon.
+  - `pgrep -af '... cli.ts serve ...'` → un solo `gbrain serve --http --port 8541 --bind 127.0.0.1`.
+  - `ebrain q "ebrain daemon HTTP MCP" 3` → terminó sin colgarse; no devolvió resultados para ese término.
 - Token store: verificado solo permiso/ruta, sin leer contenido: `600 ~/.config/ebrain/mcp-token.env`.
 - `ebrain daemon status` final observado UP/healthy tras restart.
 
@@ -75,7 +80,7 @@ No toqué TUI source; cero-hex no aplica a este cambio, aunque la suite TUI comp
 
 ## 5. Pendientes
 
-- D.6: prueba exacta de aceptación con ≥2 agentes reales concurrentes usando MCP sin colgarse. No la declaré hecha.
+- D.6: prueba exacta de aceptación con ≥2 agentes reales concurrentes usando MCP sin colgarse. No la declaré hecha; sólo corrí preflight local sin agentes pesados.
 - D.7: gate `[AUDIT_PASS]` Opus + Fable 5.
 - Installer `curl -fsSL ... | sh` todavía pendiente.
 - P3/TUI 6.6 sigue pendiente: launch wizard, advisor v1, prompt composer.
