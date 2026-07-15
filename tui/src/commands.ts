@@ -104,8 +104,10 @@ const HOME_HINTS: HintEntry[] = [
 /** Per-view hints for the Launch panel (F6.4.5) — the básico subset of the mockup's
  * LaunchScreen hints (the full advisor wizard's `c contexto` lands in F6.6.1). */
 const LAUNCH_HINTS: HintEntry[] = [
+  { k: "t", label: "task" },
+  { k: "r", label: "advise" },
   { k: "↑↓←→", label: "agent" },
-  { k: "enter", label: "launch" },
+  { k: "enter", label: "run/launch" },
 ];
 
 /** Per-view hints for the F6.5 knowledge panels — each matches the keys reduce()

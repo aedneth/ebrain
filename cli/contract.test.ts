@@ -1,6 +1,6 @@
 /**
  * cli/contract.test.ts — contrato JSON unificado (SPRINT-TUI 6.1.8, extendido en 6.1.6/6.1.7):
- * valida con zod el schema de los `--json` de F6.1 (status/doctor/spend/fleet/memory recent/
+ * valida con zod el schema de los `--json` de F6.1+ (status/doctor/spend/routing/fleet/memory recent/
  * sessions list+peek+mutate/advise) contra fixtures.
  *
  * Por qué FIXTURES y no spawns en vivo de los scripts reales: harness/core/doctor.sh invoca
@@ -169,6 +169,78 @@ describe("6.1.3 spend --json", () => {
   test("routes negativo (dato imposible) → falla", () => {
     const broken = { ...spendFixture, by_capability: [{ capability: "x", mtd: 0, routes: -1 }] };
     expect(SpendSchema.safeParse(broken).success).toBe(false);
+  });
+});
+
+// ── 6.6A ebrain routing --json ───────────────────────────────────────────────
+const RoutingModelSchema = z.object({
+  role: z.enum(["winner", "fallback", "floor"]),
+  slug: z.string(),
+  free: z.boolean(),
+  frontier: z.boolean(),
+  pricing: z.object({ input_per_m: z.number(), output_per_m: z.number() }).nullable(),
+});
+const RoutingSchema = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  budget: z.object({ monthly_usd: z.number(), hard_stop: z.boolean() }),
+  mtd: z.number(),
+  remaining: z.number(),
+  capabilities: z.array(z.object({
+    capability: z.string(),
+    mtd: z.number(),
+    routes: z.number().int().nonnegative(),
+    command: z.string(),
+    est_typical_usd: z.number().nullable(),
+    models: z.array(RoutingModelSchema).min(1),
+  })),
+  gbrain_untracked: z.literal(true),
+});
+
+const routingFixture = {
+  month: "2026-07",
+  budget: { monthly_usd: 10, hard_stop: true },
+  mtd: 0.014016,
+  remaining: 9.985984,
+  capabilities: [
+    {
+      capability: "coding",
+      mtd: 0.001253,
+      routes: 2,
+      command: 'ebrain route --cap coding "<prompt>"',
+      est_typical_usd: 0.00261,
+      models: [
+        { role: "winner", slug: "deepseek/deepseek-v4-pro", free: false, frontier: false, pricing: { input_per_m: 0.435, output_per_m: 0.87 } },
+        { role: "fallback", slug: "deepseek/deepseek-v4-flash", free: false, frontier: false, pricing: { input_per_m: 0.077, output_per_m: 0.154 } },
+        { role: "floor", slug: "qwen/qwen3-coder:free", free: true, frontier: false, pricing: { input_per_m: 0, output_per_m: 0 } },
+      ],
+    },
+  ],
+  gbrain_untracked: true,
+};
+
+describe("6.6A routing --json", () => {
+  test("fixture pasa el schema", () => {
+    expect(() => RoutingSchema.parse(routingFixture)).not.toThrow();
+  });
+  test("modelo sin pricing debe explicitar null, no omitir el campo", () => {
+    const fixture = {
+      ...routingFixture,
+      capabilities: [{
+        ...routingFixture.capabilities[0],
+        models: [{ ...routingFixture.capabilities[0].models[0], pricing: null }],
+      }],
+    };
+    expect(RoutingSchema.safeParse(fixture).success).toBe(true);
+  });
+  test("role inválido falla", () => {
+    const fixture = {
+      ...routingFixture,
+      capabilities: [{
+        ...routingFixture.capabilities[0],
+        models: [{ ...routingFixture.capabilities[0].models[0], role: "primary" }],
+      }],
+    };
+    expect(RoutingSchema.safeParse(fixture).success).toBe(false);
   });
 });
 

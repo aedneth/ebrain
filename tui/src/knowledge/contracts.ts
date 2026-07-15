@@ -161,6 +161,29 @@ export interface SpendData {
   gbrainUntracked: boolean;
 }
 
+export type RoutingModelRole = "winner" | "fallback" | "floor";
+
+export interface RoutingModel {
+  role: RoutingModelRole;
+  slug: string;
+  free: boolean;
+  frontier: boolean;
+  pricing: { inputPerM: number; outputPerM: number } | null;
+}
+
+export interface RoutingCapability {
+  capability: string;
+  mtd: number;
+  routes: number;
+  command: string;
+  estTypicalUsd: number | null;
+  models: RoutingModel[];
+}
+
+export interface RoutingData extends SpendData {
+  capabilities: RoutingCapability[];
+}
+
 export function parseSpend(j: unknown): SpendData | null {
   if (!isObj(j)) return null;
   const budget = isObj(j.budget) ? j.budget : {};
@@ -175,6 +198,110 @@ export function parseSpend(j: unknown): SpendData | null {
     hardStop: asBool(budget.hard_stop),
     byCap,
     gbrainUntracked: asBool(j.gbrain_untracked),
+  };
+}
+
+function asRoutingRole(v: unknown): RoutingModelRole {
+  return v === "winner" || v === "fallback" || v === "floor" ? v : "fallback";
+}
+
+export function parseRouting(j: unknown): RoutingData | null {
+  if (!isObj(j)) return null;
+  const base = parseSpend({
+    month: j.month,
+    budget: j.budget,
+    mtd: j.mtd,
+    remaining: j.remaining,
+    by_capability: [],
+    gbrain_untracked: j.gbrain_untracked,
+  });
+  if (!base) return null;
+  const capabilities: RoutingCapability[] = asArr(j.capabilities)
+    .filter(isObj)
+    .map((c) => ({
+      capability: asStr(c.capability, "?"),
+      mtd: asNum(c.mtd),
+      routes: asNum(c.routes),
+      command: asStr(c.command),
+      estTypicalUsd: typeof c.est_typical_usd === "number" ? c.est_typical_usd : null,
+      models: asArr(c.models).filter(isObj).map((m) => {
+        const pricing = isObj(m.pricing) ? m.pricing : null;
+        return {
+          role: asRoutingRole(m.role),
+          slug: asStr(m.slug, "?"),
+          free: asBool(m.free),
+          frontier: asBool(m.frontier),
+          pricing: pricing
+            ? { inputPerM: asNum(pricing.input_per_m), outputPerM: asNum(pricing.output_per_m) }
+            : null,
+        };
+      }),
+    }));
+  return {
+    ...base,
+    byCap: capabilities.map((c) => ({ capability: c.capability, mtd: c.mtd, routes: c.routes })),
+    capabilities,
+  };
+}
+
+export interface AdviceData {
+  task: string;
+  capability: string;
+  lane: string;
+  agent: string;
+  model: string;
+  reason: string;
+  estCost: { usd: number | null; note: string };
+  alternatives: { lane: string; agent: string; model: string; note: string }[];
+  frontier: boolean;
+}
+
+export function parseAdvice(j: unknown): AdviceData | null {
+  if (!isObj(j)) return null;
+  const est = isObj(j.est_cost) ? j.est_cost : {};
+  return {
+    task: asStr(j.task),
+    capability: asStr(j.capability, "general"),
+    lane: asStr(j.lane),
+    agent: asStr(j.agent),
+    model: asStr(j.model),
+    reason: asStr(j.reason),
+    estCost: {
+      usd: typeof est.usd === "number" ? est.usd : null,
+      note: asStr(est.note),
+    },
+    alternatives: asArr(j.alternatives).filter(isObj).map((a) => ({
+      lane: asStr(a.lane),
+      agent: asStr(a.agent),
+      model: asStr(a.model),
+      note: asStr(a.note),
+    })),
+    frontier: asBool(j.frontier),
+  };
+}
+
+export interface RouteRunData {
+  ts: string;
+  cap: string;
+  model: string;
+  tokensIn: number;
+  tokensOut: number;
+  usd: number;
+  estimated: boolean;
+  content: string;
+}
+
+export function parseRouteRun(j: unknown): RouteRunData | null {
+  if (!isObj(j)) return null;
+  return {
+    ts: asStr(j.ts),
+    cap: asStr(j.cap),
+    model: asStr(j.model, "?"),
+    tokensIn: asNum(j.tokens_in),
+    tokensOut: asNum(j.tokens_out),
+    usd: asNum(j.usd),
+    estimated: asBool(j.usd_estimated),
+    content: asStr(j.content),
   };
 }
 

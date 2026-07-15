@@ -42,8 +42,9 @@ ebrain — capa unificada de harness + memoria agéntica (provider-agnostic)
   ebrain harness status                                      estado de la flota harness + modo MCP
   ebrain doctor [--json]                                     salud CKIS completa (launchers/config/contract/sources/gasto)
   ebrain status [--json]                                     snapshot rápido (brain/gasto/flota/memoria)
-  ebrain ui                                                   TUI interactivo (home real + 5 vistas placeholder, SPRINT-TUI 6.3)
+  ebrain ui                                                   TUI interactivo (sessions + launch router + memory/routing/doctor)
   ebrain spend [--json]                                      gasto MTD por capacidad vs cap de routing.yaml
+  ebrain routing [--json]                                    stack OpenRouter: cadenas, modelos, pricing y gasto
   ebrain fleet [--json]                                      salud + clase RAM (heavy|light) de los 6 adapters
   ebrain memory recent [--json] [--limit N]                  últimos learnings + sesiones (agent-memory + Dev Brain)
   ebrain sessions list [--json]                               sesiones tmux ebr-* activas
@@ -70,6 +71,7 @@ case "$cmd" in
   doctor)    run "$CORE/doctor.sh" "$@" ;;
   status)    run "$CORE/status.sh" "$@" ;;
   spend)     run_bun "$EBRAIN_HOME/cli/spend.ts" "$@" ;;
+  routing)   run_bun "$EBRAIN_HOME/cli/routing.ts" "$@" ;;
   fleet)     run_bun "$EBRAIN_HOME/cli/fleet.ts" "$@" ;;
   memory)    run_bun "$EBRAIN_HOME/cli/memory.ts" "$@" ;;
   sessions)  run_bun "$EBRAIN_HOME/cli/sessions.ts" "$@" ;;

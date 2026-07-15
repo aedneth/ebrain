@@ -71,7 +71,7 @@ export async function loadRules(path = RULES_PATH): Promise<AdvisorRules> {
 // slugs que aparecen en las cadenas capabilities de routing.yaml (ver §1-3 de ese doc). Un modelo
 // ausente de esta tabla (drift de routing.yaml sin actualizar acá) → est_cost.usd=null + nota
 // explícita, NUNCA un número inventado.
-const PRICING_USD_PER_M: Record<string, { in: number; out: number }> = {
+export const PRICING_USD_PER_M: Record<string, { in: number; out: number }> = {
   "deepseek/deepseek-v4-pro": { in: 0.435, out: 0.87 },
   "deepseek/deepseek-v4-flash": { in: 0.077, out: 0.154 },
   "qwen/qwen3-coder:free": { in: 0, out: 0 },

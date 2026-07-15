@@ -4,7 +4,7 @@
 # de comportamiento ANTES de reemplazarlo por un wrapper. Corre en `ebrain doctor` (alarma de drift).
 #
 # También corre el contrato JSON unificado (SPRINT-TUI 6.1.8): `bun test cli/contract.test.ts`
-# (zod) valida el schema de los CINCO `--json` de F6.1 (status/doctor/spend/fleet/memory) contra
+# (zod) valida el schema de los `--json` contractuales (status/doctor/spend/routing/fleet/memory/...) contra
 # FIXTURES — nunca spawns en vivo de los scripts reales. Por qué fixtures y no vivo: doctor.sh
 # invoca ESTE script; un spawn en vivo de `doctor.sh --json` desde el suite sería un ciclo
 # (doctor→contract-test→bun test→doctor→…). Ver el header de cli/contract.test.ts para el detalle.

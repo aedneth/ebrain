@@ -10,6 +10,7 @@ import { test, expect, describe } from "bun:test";
 import { makeTheme } from "../src/theme.js";
 import { parseKey } from "../src/kit/input.js";
 import { displayWidth } from "../src/kit/draw.js";
+import { lineFrom } from "../src/kit/lineedit.js";
 import { buildFrame, reduce, initialState, type AppState } from "../src/app.js";
 
 const t = makeTheme({ trueColor: true, ascii: false });
@@ -17,17 +18,22 @@ const strip = (s: string) => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
 const size = { cols: 100, rows: 30 };
 
 function launchState(selected = 0): AppState {
-  return { tab: "launch", confirmQuit: false, cwd: "~/eBrain", launch: { selected } };
+  return {
+    tab: "launch",
+    confirmQuit: false,
+    cwd: "~/eBrain",
+    launch: { selected, task: "", advice: null, routeResult: null, status: "idle" },
+  };
 }
 
 describe("buildLaunchView — the agent grid (F6.4.5)", () => {
   test("lists the launchable agents + the lanzar hint", () => {
     const frame = buildFrame(launchState(), size, t).map(strip).join("\n");
-    expect(frame).toContain("launch agent");
+    expect(frame).toContain("launch · task router");
     expect(frame).toContain("claude");
     expect(frame).toContain("gemini");
     expect(frame).toContain("generic");
-    expect(frame).toContain("enter → new session");
+    expect(frame).toContain("without advice: enter");
   });
 
   test("shows heavy vs light class per agent", () => {
@@ -44,7 +50,7 @@ describe("buildLaunchView — the agent grid (F6.4.5)", () => {
   test("hint bar shows agent + launch", () => {
     const frame = buildFrame(launchState(), size, t).map(strip).join("\n");
     expect(frame).toContain("agent");
-    expect(frame).toContain("launch");
+    expect(frame).toContain("run/launch");
   });
 
   test("every row is exactly cols wide", () => {
@@ -66,6 +72,54 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
 
   test("enter emits a launch effect for the selected agent", () => {
     expect(reduce(launchState(1), { name: "enter" }).effect).toEqual({ type: "launch", agent: "codex" });
+  });
+
+  test("t opens task composer and enter requests advisor", () => {
+    const opened = reduce(launchState(), parseKey("t")).state;
+    expect(opened.overlay?.kind).toBe("launchTask");
+    const typed: AppState = { ...opened, overlay: { kind: "launchTask", line: lineFrom("Summarize batch transcripts") } };
+    const submitted = reduce(typed, { name: "enter" });
+    expect(submitted.effect).toEqual({ type: "adviseLaunchTask", task: "Summarize batch transcripts" });
+  });
+
+  test("enter with one-shot advice asks for route confirmation", () => {
+    const st: AppState = {
+      ...launchState(),
+      launch: {
+        selected: 0,
+        task: "Summarize batch transcripts",
+        routeResult: null,
+        status: "ready",
+        advice: {
+          task: "Summarize batch transcripts",
+          capability: "long_context",
+          lane: "one_shot_route",
+          agent: "route",
+          model: "minimax/minimax-m3",
+          reason: "batch summarize",
+          estCost: { usd: 0.0027, note: "estimated" },
+          alternatives: [],
+          frontier: false,
+        },
+      },
+    };
+    const r = reduce(st, { name: "enter" });
+    expect(r.state.overlay).toEqual({
+      kind: "confirmRoute",
+      task: "Summarize batch transcripts",
+      capability: "long_context",
+      model: "minimax/minimax-m3",
+      cost: "$0.002700",
+    });
+  });
+
+  test("confirm route requires explicit y", () => {
+    const st: AppState = {
+      ...launchState(),
+      overlay: { kind: "confirmRoute", task: "x", capability: "coding", model: "deepseek/deepseek-v4-pro", cost: "$0.001" },
+    };
+    expect(reduce(st, { name: "enter" }).effect).toBeUndefined();
+    expect(reduce(st, parseKey("y")).effect).toEqual({ type: "routeTask", task: "x", capability: "coding" });
   });
 
   test("governor override dialog: ONLY y proceeds (launchConfirmed); n/esc/enter do not", () => {

@@ -93,8 +93,8 @@ describe("Memory panel (6.5.2)", () => {
   });
 });
 
-// ── Routing (6.5.3) ───────────────────────────────────────────────────────────
-describe("Routing panel (6.5.3)", () => {
+// ── Routing (6.6A) ───────────────────────────────────────────────────────────
+describe("Routing panel (6.6A)", () => {
   const state = base("routing", {
     routing: {
       data: {
@@ -107,6 +107,30 @@ describe("Routing panel (6.5.3)", () => {
           { capability: "coding", mtd: 1.253, routes: 2 },
           { capability: "general", mtd: 0.521, routes: 1 },
         ],
+        capabilities: [
+          {
+            capability: "coding",
+            mtd: 1.253,
+            routes: 2,
+            command: 'ebrain route --cap coding "<prompt>"',
+            estTypicalUsd: 0.0026,
+            models: [
+              { role: "winner", slug: "deepseek/deepseek-v4-pro", free: false, frontier: false, pricing: { inputPerM: 0.435, outputPerM: 0.87 } },
+              { role: "fallback", slug: "deepseek/deepseek-v4-flash", free: false, frontier: false, pricing: { inputPerM: 0.077, outputPerM: 0.154 } },
+              { role: "floor", slug: "qwen/qwen3-coder:free", free: true, frontier: false, pricing: { inputPerM: 0, outputPerM: 0 } },
+            ],
+          },
+          {
+            capability: "general",
+            mtd: 0.521,
+            routes: 1,
+            command: 'ebrain route --cap general "<prompt>"',
+            estTypicalUsd: 0.0094,
+            models: [
+              { role: "winner", slug: "qwen/qwen3.7-max", free: false, frontier: false, pricing: { inputPerM: 1.25, outputPerM: 3.75 } },
+            ],
+          },
+        ],
         gbrainUntracked: true,
       },
       selected: 0,
@@ -114,14 +138,15 @@ describe("Routing panel (6.5.3)", () => {
     },
   });
 
-  it("renders the per-cap table, budget panel, gbrain flag and the deferred-chains note", () => {
+  it("renders the per-cap table, budget panel, gbrain flag and selected chain", () => {
     const t = frameText(state);
     expect(t).toContain("capability");
     expect(t).toContain("coding");
     expect(t).toContain("total today");
-    expect(t).toContain("budget · 2026-07");
+    expect(t).toContain("chain · 2026-07");
     expect(t).toContain("gbrain: untracked spend");
-    expect(t).toContain("pending routing --json contract"); // honest scoping (criterion #2)
+    expect(t).toContain("deepseek/deepseek-v4-pro");
+    expect(t).toContain("ebrain route --cap coding");
   });
 });
 
@@ -210,7 +235,14 @@ describe("reduce — knowledge-panel keys", () => {
   it("routing ↑↓ moves the cap selection", () => {
     const s = base("routing", {
       routing: {
-        data: { month: "m", mtd: 0, cap: 10, remaining: 10, hardStop: true, byCap: [{ capability: "a", mtd: 0, routes: 0 }, { capability: "b", mtd: 0, routes: 0 }], gbrainUntracked: false },
+        data: {
+          month: "m", mtd: 0, cap: 10, remaining: 10, hardStop: true, byCap: [{ capability: "a", mtd: 0, routes: 0 }, { capability: "b", mtd: 0, routes: 0 }],
+          capabilities: [
+            { capability: "a", mtd: 0, routes: 0, command: "ebrain route --cap a", estTypicalUsd: null, models: [{ role: "winner", slug: "a/model", free: false, frontier: false, pricing: null }] },
+            { capability: "b", mtd: 0, routes: 0, command: "ebrain route --cap b", estTypicalUsd: null, models: [{ role: "winner", slug: "b/model", free: false, frontier: false, pricing: null }] },
+          ],
+          gbrainUntracked: false,
+        },
         selected: 0,
         status: "ready",
       },
@@ -251,7 +283,7 @@ describe("focus model (F6.6)", () => {
   });
 
   it("Tab is a no-op on a single-box view (routing)", () => {
-    const s = base("routing", { routing: { data: { month: "m", mtd: 0, cap: 10, remaining: 10, hardStop: true, byCap: [], gbrainUntracked: false }, selected: 0, status: "ready" } });
+    const s = base("routing", { routing: { data: { month: "m", mtd: 0, cap: 10, remaining: 10, hardStop: true, byCap: [], capabilities: [], gbrainUntracked: false }, selected: 0, status: "ready" } });
     expect(reduce(s, { name: "tab" }).state.focusRegion).toBe(s.focusRegion ?? 0);
   });
 

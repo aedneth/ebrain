@@ -6,13 +6,20 @@ to: Opus (Claude Code, auditor) + Fable 5 (gate)
 created: 2026-07-14
 updated: 2026-07-15
 status: ready-for-audit
-scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + OpenRouter stack smoke
+scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A/B orchestration UX
 ---
 
 # HANDOFF-BACK — daemon work + audit-finding closure
 
 ## 1. Qué construí
 
+- F6.6A/B Orchestration UX (Codex maker, 2026-07-15):
+  - `cli/routing.ts`: nuevo contrato `ebrain routing --json` para exponer el stack OpenRouter como capacidades operables: winner/fallback/floor, pricing, gasto MTD, remaining y comando.
+  - Routing tab consume `routing --json`; ya muestra chains reales del stack chino y no lee YAML/JSONL directo.
+  - Launch task router: `t` abre composer de tarea; Enter pide `ebrain advise --json`; la vista muestra task/capability/lane/agent/model/costo/razón.
+  - Enter con `one_shot_route` abre confirmación explícita y ejecuta `ebrain route --json --cap <cap>`.
+  - Enter con carril de sesión lanza el agente recomendado y envía el prompt inicial a la sesión tmux; si el send falla, Sessions muestra la sesión creada y el error `initial prompt: ...`.
+  - Nuevo plan `docs/SPRINT-ORCHESTRATION.md` para workflows/skills y cost ledger v2.
 - Cierre findings Fable/Opus (Codex maker, 2026-07-15):
   - `cli/daemon-preflight.ts`: preflight de boot antes de `serve --http`; lista sources locales con lock libre, corre `assertNoClientSources()` sobre id/name/path y prepara thin-client CLI.
   - `cli/mcp-remote.ts`: registra/guarda OAuth client local para ops CLI; secret en `~/.config/ebrain/remote-client.env` chmod 600; config thin en `~/.config/ebrain/gbrain-thin/.gbrain/config.json` sin secret.
@@ -87,9 +94,20 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + OpenRouter stack smoke
 
 ## 4. Tests y verificación
 
+- F6.6A/B focused:
+  - `bun test cli/routing.test.ts cli/contract.test.ts cli/advise.test.ts cli/spend.test.ts` → 69 pass / 0 fail.
+  - `bun test ./tui/test/launch.test.ts ./tui/test/knowledge/contracts.test.ts ./tui/test/knowledge/panels.test.ts ./tui/test/app.test.ts` → 71 pass / 0 fail.
+  - `bun test ./cli/` → 151 pass / 0 fail.
+  - `bun test ./tui/test/` → 366 pass / 0 fail.
+  - `git diff --check` → limpio.
+  - Cero-hex TUI → limpio: `rg -n "#[0-9a-fA-F]{3,8}|38;2;|48;2;|38;5;|48;5;" tui/src --glob '!theme.ts'` no tuvo matches.
+  - `ebrain routing --json | jq ...` → 7 capabilities con winner/fallback/floor reales; no imprime secretos.
+  - `ebrain advise "Summarize this batch of transcripts" --json` → `one_shot_route` / `route` / `minimax/minimax-m3`.
+  - `ebrain advise "Fix a bug in the CLI router" --json` → `interactive_codex` / `codex`.
 - `bash -n scripts/ebrain-run scripts/ebrain-brain scripts/ebrain-q scripts/dream-cycle scripts/sessions-federate harness/core/remember.sh harness/core/doctor.sh scripts/ebrain-up scripts/ebrain-daemon` → OK.
-- `bun test ./cli/` → 147 pass / 0 fail.
-- `bun test ./tui/test/` → 360 pass / 0 fail.
+- F-D2 full suites previas:
+  - `bun test ./cli/` → 147 pass / 0 fail.
+  - `bun test ./tui/test/` → 360 pass / 0 fail.
 - `bash -n scripts/ebrain-mcp-bridge harness/core/mcp-wire.sh scripts/ebrain-up scripts/ebrain-brain` → OK.
 - `ebrain daemon restart` → preflight corrió, daemon UP healthy (PID observado 153533).
 - `ebrain up` → daemon UP, token ready, `tools/list` OK con 94 tools, 5 agentes registrados.
@@ -120,21 +138,34 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + OpenRouter stack smoke
   - Endpoint OpenRouter `/api/v1/models` confirmó presentes los slugs revisados: `deepseek/deepseek-v4-pro`, `moonshotai/kimi-k2.6`, `minimax/minimax-m3`, `qwen/qwen3.7-max`, `z-ai/glm-5.2`, `qwen/qwen3-coder:free`, `qwen/qwen3-next-80b-a3b-instruct:free`.
   - Smokes reales `ebrain-route --json` pasaron para `coding`, `agentic`, `long_context`, `terminal`, `general`, `web_design`, `reasoning`; `terminal` usó fallback a `qwen/qwen3.7-plus`.
   - Budget MTD después del smoke: aprox. USD 0.014 / 10.
-- `ebrain remember` ejecutado x2:
+- `ebrain remember` ejecutado para learnings durables:
   - Learning F-D2 bridge command-only + token runtime.
   - Learning smoke OpenRouter chino + fallback terminal.
+  - Learning F6.6A/B OpenRouter como rutas virtuales por capability.
+  - Learning F6.6B Launch task router.
+  - Learning gotcha shell: usar comillas simples si el learning contiene backticks literales. Hubo un learning intermedio con backticks evaluados por bash; quedó corregido con una llamada posterior.
 - `ebrain daemon status` final observado UP/healthy tras restart.
 
-No toqué TUI source; cero-hex no aplica a este cambio, aunque la suite TUI completa corrió.
+TUI source sí fue tocado en F6.6A/B; cero-hex aplicó y salió limpio.
 
 ## 5. Pendientes
 
+- Auditoría Opus del corte F6.6A/B antes de considerar merge de UX.
+- F6.6C/D: workflow/skill memory nativa (ver `docs/SPRINT-ORCHESTRATION.md`).
+- F6.6E: cost ledger v2 por proveedor/agente/modelo/sesión/workflow.
 - Auditoría Opus + Fable del cierre F-D2 bridge: revisar `cli/mcp-bridge.ts`, `cli/up.ts`, configs command-only y secreto fuera de repo.
 - Installer `curl -fsSL ... | sh` todavía pendiente.
 - P3/TUI 6.6 sigue pendiente: launch wizard, advisor v1, prompt composer.
 
 ## 6. Qué auditar
 
+- F6.6A/B:
+  - `cli/routing.ts` no llama a proveedores ni lee secretos; solo agrega config/ledger/pricing.
+  - Routing tab consume `fetchRouting()`/`parseRouting()`, no `routing.yaml`/`spend.jsonl`.
+  - Launch task router requiere confirmación explícita antes de ejecutar `route`.
+  - El prompt inicial de un carril de sesión se envía por `sendToSession(..., yes=true)` después de crear la sesión.
+  - Si `sendToSession` falla después de crear la sesión, la sesión se refresca en Sessions y se muestra error `initial prompt: ...`; Opus debe verificar que este manejo no oculte la sesión creada.
+  - Frontier sigue confirm-only.
 - D.5.4:
   - `scripts/ebrain-brain` corre `cli/daemon-preflight.ts` antes de bindear HTTP.
   - El preflight lista sources con el engine local mientras el lock está libre y hard-falla si detecta `brisas`/`dekko` en id/name/local_path.
@@ -167,8 +198,8 @@ No toqué TUI source; cero-hex no aplica a este cambio, aunque la suite TUI comp
 
 ### Evidencia nueva del cierre maker
 
-- `bun test ./cli/` = 147 pass / 0 fail.
-- `bun test ./tui/test/` = 360 pass / 0 fail.
+- F-D2 bridge: `bun test ./cli/` = 147 pass / 0 fail; `bun test ./tui/test/` = 360 pass / 0 fail.
+- F6.6A/B orchestration UX: `bun test ./cli/` = 151 pass / 0 fail; `bun test ./tui/test/` = 366 pass / 0 fail; `git diff --check` limpio.
 - `ebrain daemon restart` levantó healthy con preflight.
 - `ebrain up` fue idempotente: daemon UP, smoke `tools/list`=94, onboard 5/5.
 - `ebrain q "korvex" 2` devolvió resultados reales bajo daemon.

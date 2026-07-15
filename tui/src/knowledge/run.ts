@@ -19,12 +19,18 @@ import {
   parseFleet,
   parseDoctor,
   parseSpend,
+  parseRouting,
   parseMemory,
+  parseAdvice,
+  parseRouteRun,
   type OverviewData,
   type FleetData,
   type DoctorData,
   type SpendData,
+  type RoutingData,
   type MemoryData,
+  type AdviceData,
+  type RouteRunData,
 } from "./contracts.js";
 
 /** The repo's dispatcher: tui/src/knowledge/ -> ../../../cli/ebrain. */
@@ -99,8 +105,19 @@ export function fetchDoctor(): Promise<KResult<DoctorData>> {
 export function fetchSpend(): Promise<KResult<SpendData>> {
   return fetchParsed(["spend", "--json"], 15000, parseSpend);
 }
+export function fetchRouting(): Promise<KResult<RoutingData>> {
+  return fetchParsed(["routing", "--json"], 15000, parseRouting);
+}
 export function fetchMemory(limit = 8): Promise<KResult<MemoryData>> {
   return fetchParsed(["memory", "recent", "--json", "--limit", String(limit)], 15000, parseMemory);
+}
+
+export function fetchAdvice(task: string): Promise<KResult<AdviceData>> {
+  return fetchParsed(["advise", task, "--json"], 15000, parseAdvice);
+}
+
+export function runRoute(capability: string, task: string): Promise<KResult<RouteRunData>> {
+  return fetchParsed(["route", "--json", "--cap", capability, task], 120000, parseRouteRun);
 }
 
 /**

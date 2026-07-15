@@ -63,7 +63,9 @@ import type {
   MemoryData,
   MemoryLearning,
   MemorySession,
-  SpendData,
+  RoutingData,
+  AdviceData,
+  RouteRunData,
   FleetData,
   DoctorData,
   DoctorCheck,
@@ -72,10 +74,12 @@ import type {
 import {
   fetchStatus,
   fetchMemory,
-  fetchSpend,
+  fetchRouting,
   fetchFleet,
   fetchDoctor,
   runRemember,
+  fetchAdvice,
+  runRoute,
 } from "./knowledge/run.js";
 
 // Sessions data plane (F6.4) — REUSED from cli/sessions.ts via the control-plane
@@ -199,9 +203,9 @@ export interface MemorySlice {
   error?: string;
 }
 
-/** Routing panel (spend --json): by-capability spend + budget + gbrain flag (6.5.3). */
+/** Routing panel (routing --json): by-capability spend + OpenRouter chains (6.6A). */
 export interface RoutingSlice {
-  data: SpendData | null;
+  data: RoutingData | null;
   selected: number;
   status: LoadStatus;
   error?: string;
@@ -257,9 +261,29 @@ export type Overlay =
   | { kind: "confirmKill"; name: string }
   | { kind: "prompt"; name: string; line: LineState }
   | { kind: "confirmLaunch"; agent: string; cwd: string; reason: string }
+  | { kind: "confirmRoute"; task: string; capability: string; model: string; cost: string }
+  | { kind: "confirmAdvisorLaunch"; agent: string; task: string; reason: string }
+  | { kind: "launchTask"; line: LineState }
   | { kind: "remember"; line: LineState }
   /** Read-only drill-in detail (Enter on a memory/check) — a titled, word-wrapped modal. */
   | { kind: "detail"; title: string; body: string };
+
+export interface LaunchSlice {
+  selected: number;
+  task: string;
+  advice: AdviceData | null;
+  routeResult: RouteRunData | null;
+  status: LoadStatus | "running";
+  error?: string;
+}
+
+export function emptyLaunch(): LaunchSlice {
+  return { selected: 0, task: "", advice: null, routeResult: null, status: "idle" };
+}
+
+function launchOf(state: AppState): LaunchSlice {
+  return state.launch ?? emptyLaunch();
+}
 
 export interface AppState {
   tab: TabName;
@@ -273,8 +297,8 @@ export interface AppState {
   overlay?: Overlay | null;
   /** Live tmux session data (F6.4). Optional — sessionsOf() defaults an empty slice. */
   sessions?: SessionsSlice;
-  /** Launch-panel selection (F6.4.5). Optional — defaults to index 0. */
-  launch?: { selected: number };
+  /** Launch-panel state (F6.4.5 + F6.6B task router). Optional — defaults empty. */
+  launch?: LaunchSlice;
   /** Knowledge-panel slices (F6.5). Optional — the *Of() helpers default empties. */
   overview?: OverviewSlice;
   memory?: MemorySlice;
@@ -322,7 +346,7 @@ export function initialState(): AppState {
     branch: detectBranch(dir),
     overlay: null,
     sessions: emptySessions(),
-    launch: { selected: 0 },
+    launch: emptyLaunch(),
     overview: emptyOverview(),
     memory: emptyMemory(),
     routing: emptyRouting(),
@@ -375,6 +399,10 @@ export type AppEffect =
   | { type: "launch"; agent: string }
   /** Launch confirmed through the governor's dialog (an override that gets logged). */
   | { type: "launchConfirmed"; agent: string; cwd: string; reason: string }
+  | { type: "launchWithPrompt"; agent: string; task: string }
+  | { type: "launchWithPromptConfirmed"; agent: string; task: string; reason: string }
+  | { type: "adviseLaunchTask"; task: string }
+  | { type: "routeTask"; task: string; capability: string }
   // Knowledge panels (F6.5): each landing refreshes its slice from its subcommand.
   | { type: "refreshStatus" }
   | { type: "refreshMemory" }
@@ -504,7 +532,7 @@ function moveSelection(state: AppState, delta: number): ReduceResult {
 
   if (state.tab === "routing") {
     const r = routingOf(state);
-    const n = r.data?.byCap.length ?? 0;
+    const n = r.data?.capabilities.length ?? 0;
     if (n === 0) return settle(clear);
     return settle({ ...clear, routing: { ...r, selected: clampIndex(r.selected + delta, n) } });
   }
@@ -553,6 +581,47 @@ function drillIn(state: AppState): ReduceResult {
   }
 
   return settle(clear);
+}
+
+function costLabel(usd: number | null): string {
+  return usd == null ? "n/d" : `$${usd.toFixed(6)}`;
+}
+
+function launchEnter(state: AppState): ReduceResult {
+  const l = launchOf(state);
+  const clear = { ...state, confirmQuit: false };
+  const advice = l.advice;
+  if (!advice) {
+    const it = LAUNCHABLE[l.selected];
+    return it ? settle(clear, { type: "launch", agent: it.agent }) : settle(clear);
+  }
+
+  if (advice.lane === "one_shot_route" || advice.agent === "route") {
+    return settle({
+      ...clear,
+      overlay: {
+        kind: "confirmRoute",
+        task: advice.task,
+        capability: advice.capability,
+        model: advice.model,
+        cost: costLabel(advice.estCost.usd),
+      },
+    });
+  }
+
+  if (advice.frontier) {
+    return settle({
+      ...clear,
+      overlay: {
+        kind: "confirmAdvisorLaunch",
+        agent: advice.agent,
+        task: advice.task,
+        reason: `frontier lane '${advice.lane}' for ${advice.agent}. ${advice.reason}`,
+      },
+    });
+  }
+
+  return settle(clear, { type: "launchWithPrompt", agent: advice.agent, task: advice.task });
 }
 
 /**
@@ -627,6 +696,59 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       return settle(state);
     }
 
+    if (ov.kind === "confirmRoute") {
+      if (key.name === "char" && (key.char === "y" || key.char === "Y")) {
+        return {
+          state: { ...state, overlay: null },
+          quit: false,
+          forceRedraw: false,
+          effect: { type: "routeTask", task: ov.task, capability: ov.capability },
+        };
+      }
+      if (
+        key.name === "escape" ||
+        (key.name === "char" && (key.char === "n" || key.char === "N" || key.char === "q"))
+      ) {
+        return settle({ ...state, overlay: null });
+      }
+      return settle(state);
+    }
+
+    if (ov.kind === "confirmAdvisorLaunch") {
+      if (key.name === "char" && (key.char === "y" || key.char === "Y")) {
+        return {
+          state: { ...state, overlay: null },
+          quit: false,
+          forceRedraw: false,
+          effect: { type: "launchWithPromptConfirmed", agent: ov.agent, task: ov.task, reason: ov.reason },
+        };
+      }
+      if (
+        key.name === "escape" ||
+        (key.name === "char" && (key.char === "n" || key.char === "N" || key.char === "q"))
+      ) {
+        return settle({ ...state, overlay: null });
+      }
+      return settle(state);
+    }
+
+    if (ov.kind === "launchTask") {
+      if (key.name === "escape") return settle({ ...state, overlay: null });
+      if (key.name === "enter") {
+        const text = ov.line.text.trim();
+        if (text.length === 0) return settle({ ...state, overlay: null });
+        return {
+          state: { ...state, overlay: null },
+          quit: false,
+          forceRedraw: false,
+          effect: { type: "adviseLaunchTask", task: text },
+        };
+      }
+      const edited = lineApplyKey(ov.line, key);
+      if (edited.handled) return settle({ ...state, overlay: { kind: "launchTask", line: edited.state } });
+      return settle(state);
+    }
+
     if (ov.kind === "remember") {
       // Write to permanent agentic memory (6.5.2): enter submits · esc cancels.
       if (key.name === "escape") return settle({ ...state, overlay: null });
@@ -671,10 +793,7 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       const selected = Math.min(Math.max(0, cur + delta), LAUNCHABLE.length - 1);
       return settle({ ...state, confirmQuit: false, launch: { selected } });
     }
-    if (key.name === "enter") {
-      const it = LAUNCHABLE[state.launch?.selected ?? 0];
-      if (it) return settle({ ...state, confirmQuit: false }, { type: "launch", agent: it.agent });
-    }
+    if (key.name === "enter") return launchEnter(state);
   }
 
   // ↑↓ navigate items within the FOCUSED box; Enter drills into it (attach / open / nav).
@@ -701,6 +820,14 @@ export function reduce(state: AppState, key: Key): ReduceResult {
     // Overlays: "/" or ctrl+p ("\x10") open the command palette; "?" opens help.
     if (ch === "/" || ch === "\x10") return openPalette(state);
     if (ch === "?") return openHelp(state);
+
+    if (state.tab === "launch") {
+      if (ch === "t") return settle({ ...state, confirmQuit: false, overlay: { kind: "launchTask", line: lineFrom(launchOf(state).task) } });
+      if (ch === "r") {
+        const task = launchOf(state).task.trim();
+        if (task) return settle({ ...state, confirmQuit: false }, { type: "adviseLaunchTask", task });
+      }
+    }
 
     // Sessions panel actions (only on that tab): a attach · k kill · p prompt · r refrescar.
     if (state.tab === "sessions") {
@@ -830,11 +957,59 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
     return { box, top, left };
   }
 
+  if (overlay.kind === "confirmRoute") {
+    const width = Math.min(80, Math.max(42, cols - 6));
+    const box = confirm(
+      {
+        title: "run OpenRouter route",
+        message: `${overlay.capability} · ${overlay.model} · est. ${overlay.cost}`,
+        danger: false,
+        confirmKey: "y",
+        confirmLabel: "run route",
+        cancelKey: "n",
+        cancelLabel: "cancel",
+        width,
+      },
+      theme,
+    );
+    const left = Math.max(0, Math.floor((cols - width) / 2));
+    const top = Math.max(0, Math.floor((rows - box.length) / 2));
+    return { box, top, left };
+  }
+
+  if (overlay.kind === "confirmAdvisorLaunch") {
+    const width = Math.min(82, Math.max(44, cols - 6));
+    const box = confirm(
+      {
+        title: "advisor launch",
+        message: overlay.reason,
+        danger: overlay.reason.toLowerCase().includes("frontier"),
+        confirmKey: "y",
+        confirmLabel: `launch ${overlay.agent}`,
+        cancelKey: "n",
+        cancelLabel: "cancel",
+        width,
+      },
+      theme,
+    );
+    const left = Math.max(0, Math.floor((cols - width) / 2));
+    const top = Math.max(0, Math.floor((rows - box.length) / 2));
+    return { box, top, left };
+  }
+
   if (overlay.kind === "prompt") {
     const width = Math.min(64, Math.max(30, cols - 6));
     const box = buildPromptBox(overlay, width, theme);
     const left = Math.max(0, Math.floor((cols - width) / 2));
     const top = Math.max(0, Math.min(Math.floor(rows * 0.4), rows - box.length));
+    return { box, top, left };
+  }
+
+  if (overlay.kind === "launchTask") {
+    const width = Math.min(82, Math.max(36, cols - 6));
+    const box = buildLaunchTaskBox(overlay, width, theme);
+    const left = Math.max(0, Math.floor((cols - width) / 2));
+    const top = Math.max(0, Math.min(Math.floor(rows * 0.34), rows - box.length));
     return { box, top, left };
   }
 
@@ -872,6 +1047,17 @@ function buildPromptBox(overlay: Extract<Overlay, { kind: "prompt" }>, width: nu
   const target = overlay.name.startsWith("ebr-") ? overlay.name.slice(4) : overlay.name;
   return panel(
     { title: `prompt → ${target}`, dialog: true, width, height: 3, body: [field] },
+    theme,
+  );
+}
+
+function buildLaunchTaskBox(overlay: Extract<Overlay, { kind: "launchTask" }>, width: number, theme: Theme): string[] {
+  const field = promptBox(
+    { value: overlay.line.text, focus: true, placeholder: "describe the task to route or launch", hint: "enter advise · esc cancel", width: width - 4 },
+    theme,
+  );
+  return panel(
+    { title: "task router", dialog: true, width, height: 3, body: [field] },
     theme,
   );
 }
@@ -977,7 +1163,7 @@ function buildMiddle(state: AppState, rect: Rect, theme: Theme): string[] {
   let rows: string[];
   if (state.tab === "home") rows = buildOverviewView(overviewOf(state), sessionsOf(state), focused, rect, theme);
   else if (state.tab === "sessions") rows = buildSessionsView(sessionsOf(state), rect, theme);
-  else if (state.tab === "launch") rows = buildLaunchView(state.launch?.selected ?? 0, rect, theme);
+  else if (state.tab === "launch") rows = buildLaunchView(launchOf(state), rect, theme);
   else if (state.tab === "memory") rows = buildMemoryView(memoryOf(state), focused, rect, theme);
   else if (state.tab === "routing") rows = buildRoutingView(routingOf(state), rect, theme);
   else rows = buildDoctorView(doctorOf(state), focused, rect, theme);
@@ -1292,14 +1478,52 @@ const LAUNCHABLE: Array<{ agent: AgentName; cls: "heavy" | "light" }> = [
   { agent: "generic", cls: "light" },
 ];
 
-function buildLaunchView(sel: number, rect: Rect, theme: Theme): string[] {
+function buildLaunchView(launch: LaunchSlice, rect: Rect, theme: Theme): string[] {
   const reset = theme.reset;
-  const selected = Math.min(Math.max(0, sel), LAUNCHABLE.length - 1);
+  const selected = Math.min(Math.max(0, launch.selected), LAUNCHABLE.length - 1);
   const contentW = Math.max(0, rect.width - 4);
   const colGap = 2;
   const cellW = Math.max(10, Math.floor((contentW - colGap) / LAUNCH_COLS));
   const rowsN = Math.ceil(LAUNCHABLE.length / LAUNCH_COLS);
 
+  const body: string[] = [];
+  body.push(theme.fg("text.muted") + "t → describe task · enter → run recommendation · r → refresh advice" + reset);
+  if (launch.task) {
+    body.push(theme.fg("text.secondary") + "task      " + reset + theme.fg("text.primary") + truncate(launch.task, contentW - 10) + reset);
+  } else {
+    body.push(theme.fg("text.secondary") + "task      " + reset + theme.fg("text.muted") + "none · pick an agent below or press t" + reset);
+  }
+
+  if (launch.status === "loading") {
+    body.push(spinner({ label: "advising", active: true, frame: 1 }, theme));
+  } else if (launch.status === "running") {
+    body.push(spinner({ label: "running OpenRouter route", active: true, frame: 2 }, theme));
+  } else if (launch.status === "error") {
+    body.push(theme.fg("semantic.error") + "error     " + reset + theme.fg("text.primary") + truncate(launch.error ?? "launch failed", contentW - 10) + reset);
+  } else if (launch.advice) {
+    const a = launch.advice;
+    body.push(
+      theme.fg("text.secondary") + "advice    " + reset +
+      badge({ agent: (a.agent as AgentName) || "route" }, theme) + " " +
+      theme.fg("text.primary") + a.lane + reset +
+      theme.fg("text.muted") + " · " + a.capability + " · " + costLabel(a.estCost.usd) + reset,
+    );
+    body.push(theme.fg("text.secondary") + "model     " + reset + theme.fg("text.primary") + truncate(a.model, contentW - 10) + reset);
+    body.push(theme.fg("text.secondary") + "reason    " + reset + theme.fg("text.muted") + truncate(a.reason, contentW - 10) + reset);
+  }
+
+  if (launch.routeResult) {
+    const rr = launch.routeResult;
+    body.push(
+      theme.fg("semantic.ok") + "route ok  " + reset +
+      theme.fg("text.primary") + truncate(rr.model, Math.max(8, contentW - 34)) + reset +
+      theme.fg("text.muted") + ` · ${rr.tokensIn}+${rr.tokensOut} tok · $${rr.usd.toFixed(6)}${rr.estimated ? "~" : ""}` + reset,
+    );
+    if (rr.content) body.push(theme.fg("text.secondary") + "preview   " + reset + theme.fg("text.muted") + truncate(rr.content.replace(/\s+/g, " "), contentW - 10) + reset);
+  }
+
+  body.push("");
+  body.push(theme.fg("text.secondary") + "manual agents" + reset);
   const grid: string[] = [];
   for (let r = 0; r < rowsN; r++) {
     let line = "";
@@ -1319,16 +1543,16 @@ function buildLaunchView(sel: number, rect: Rect, theme: Theme): string[] {
     }
     grid.push(line);
   }
+  body.push(...grid);
 
   const selAgent = LAUNCHABLE[selected]!.agent;
   const foot =
-    theme.fg("text.muted") + "enter → new session " + reset +
+    theme.fg("text.muted") + "without advice: enter → new session " + reset +
     theme.fg("text.primary") + selAgent + reset +
-    theme.fg("text.muted") + " in the current cwd · the RAM governor checks before launching" + reset;
-
-  const body = [...grid, "", foot];
+    theme.fg("text.muted") + " · with advice: enter follows the advisor" + reset;
+  body.push("", foot);
   return panel(
-    { title: "launch agent", focus: true, width: rect.width, height: rect.height, body },
+    { title: "launch · task router", focus: true, width: rect.width, height: rect.height, body },
     theme,
   );
 }
@@ -1455,12 +1679,9 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
 }
 
 // ---------------------------------------------------------------------------
-// Routing view (F6.5.3) — screens-b.jsx's RoutingScreen, honestly scoped to the
-// `spend --json` contract: a per-capability MTD Table (navigable), the total-vs-cap
-// budget gauge, and the gbrain-untracked flag. The winner/fallback/floor CHAINS and the
-// per-event LEDGER from the mockup have NO --json contract yet (reading routing.yaml /
-// spend.jsonl directly would be orphan logic that fails gate criterion #2) — surfaced as
-// a documented "pendiente" note, same discipline that deferred the launch wizard to 6.6.
+// Routing view (F6.6A) — consumes `routing --json`: per-capability spend plus the
+// OpenRouter winner/fallback/floor chains as operable rows. The TUI still never reads
+// routing.yaml/spend.jsonl directly.
 // ---------------------------------------------------------------------------
 
 export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): string[] {
@@ -1478,11 +1699,12 @@ export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): str
   const [leftRect, rightRect] = splitH({ top: 0, left: 0, width: cols, height }, [{ flex: 1 }, rightW], 2);
 
   // Left: per-capability spend table + total line.
-  const selected = clampIndex(r.selected, Math.max(1, d.byCap.length));
-  const rows = d.byCap.map((c) => ({
+  const selected = clampIndex(r.selected, Math.max(1, d.capabilities.length));
+  const rows = d.capabilities.map((c) => ({
     cap: c.capability,
     routes: String(c.routes),
     mtd: "$" + c.mtd.toFixed(3),
+    est: c.estTypicalUsd == null ? "n/d" : "$" + c.estTypicalUsd.toFixed(4),
   }));
   const tableRows = table(
     {
@@ -1490,6 +1712,7 @@ export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): str
         { key: "cap", label: "capability", width: 15 },
         { key: "routes", label: "routes", width: 6, align: "right" },
         { key: "mtd", label: "mtd", width: 9, align: "right" },
+        { key: "est", label: "est", width: 9, align: "right" },
       ],
       rows,
       selected,
@@ -1502,11 +1725,12 @@ export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): str
     theme.fg("text.muted") + " / $" + d.cap.toFixed(2) + theme.reset;
   const leftBody = [...tableRows, "", totalLine];
   const leftPanel = panel(
-    { title: "caps · spend by lane", focus: true, width: leftRect.width, height, body: leftBody },
+    { title: "OpenRouter caps · spend + est.", focus: true, width: leftRect.width, height, body: leftBody },
     theme,
   );
 
-  // Right: budget gauge + remaining + hard-stop + gbrain flag + deferred note.
+  // Right: budget gauge + selected capability chain.
+  const selectedCap = d.capabilities[selected];
   const budgetBody: string[] = [];
   budgetBody.push(gauge({ value: d.mtd, max: d.cap, width: Math.max(8, rightRect.width - 6), suffix: "", tone: "auto" }, theme));
   budgetBody.push("");
@@ -1519,11 +1743,20 @@ export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): str
     budgetBody.push("");
     budgetBody.push(theme.fg("semantic.warn") + theme.glyph("badgeDot") + " gbrain: untracked spend" + theme.reset);
   }
-  budgetBody.push("");
-  budgetBody.push(theme.fg("text.muted") + "chains + per-event ledger:" + theme.reset);
-  budgetBody.push(theme.fg("text.muted") + "pending routing --json contract" + theme.reset);
+  if (selectedCap) {
+    budgetBody.push("");
+    budgetBody.push(theme.fg("text.primary") + selectedCap.capability + theme.reset);
+    for (const m of selectedCap.models.slice(0, 3)) {
+      const tone = m.role === "winner" ? "semantic.ok" : m.role === "floor" ? "text.muted" : "text.secondary";
+      const price = m.pricing ? `$${m.pricing.inputPerM}/$${m.pricing.outputPerM}M` : "pricing n/d";
+      budgetBody.push(theme.fg(tone as any) + m.role.padEnd(8) + theme.reset + truncate(m.slug, Math.max(10, rightRect.width - 18)));
+      budgetBody.push(theme.fg("text.muted") + "         " + price + (m.free ? " · free" : "") + theme.reset);
+    }
+    budgetBody.push("");
+    budgetBody.push(theme.fg("text.secondary") + truncate(selectedCap.command, Math.max(10, rightRect.width - 4)) + theme.reset);
+  }
   const rightPanel = panel(
-    { title: `budget · ${d.month}`, width: rightRect.width, height, body: budgetBody },
+    { title: `chain · ${d.month}`, width: rightRect.width, height, body: budgetBody },
     theme,
   );
 
@@ -1893,9 +2126,21 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       await performLaunch(agent, cwd, null);
     }
 
+    async function doLaunchWithPrompt(agent: string, task: string): Promise<void> {
+      const cwd = callerCwd();
+      const [cls, heavy] = await Promise.all([classOf(agent), countLiveHeavy()]);
+      const g = governLaunch({ launchingClass: cls, liveHeavyCount: heavy, availableMb: readAvailableMb() });
+      if (g.decision === "confirm") {
+        state = { ...state, overlay: { kind: "confirmAdvisorLaunch", agent, task, reason: g.reason } };
+        render();
+        return;
+      }
+      await performLaunch(agent, cwd, null, task);
+    }
+
     /** Actually create the session (via the manifest launch cmd + full harness env).
      * `override` non-null means the user pushed past the governor → log the override. */
-    async function performLaunch(agent: string, cwd: string, override: string | null): Promise<void> {
+    async function performLaunch(agent: string, cwd: string, override: string | null, initialPrompt?: string): Promise<void> {
       if (override) logOverride({ agent, cwd, reason: override });
       const r = await newSession(agent, launchSlug(cwd), { cwd });
       if (!r.ok) {
@@ -1905,9 +2150,20 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
         render();
         return;
       }
+      let promptSendError: string | null = null;
+      if (initialPrompt?.trim()) {
+        await new Promise((resolve) => setTimeout(resolve, 900));
+        const sent = await sendToSession(r.session.name, initialPrompt.trim(), true);
+        if (!sent.ok) promptSendError = sent.error.message;
+      }
       state = withTab(state, "sessions"); // jump to Sessions to show the new one
       render();
       await refreshSessions();
+      if (promptSendError) {
+        const s = sessionsOf(state);
+        state = { ...state, sessions: { ...s, status: "error", error: `initial prompt: ${promptSendError}` } };
+        render();
+      }
     }
 
     function launchSlug(cwd: string): string {
@@ -1988,14 +2244,43 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       const cur = routingOf(state);
       state = { ...state, routing: { ...cur, status: cur.data ? cur.status : "loading" } };
       if (state.tab === "routing") render();
-      const r = await fetchSpend();
+      const r = await fetchRouting();
       const rt = routingOf(state);
       if (r.ok) {
-        state = { ...state, routing: { ...rt, data: r.data, selected: Math.min(rt.selected, Math.max(0, r.data.byCap.length - 1)), status: "ready", error: undefined } };
+        state = { ...state, routing: { ...rt, data: r.data, selected: Math.min(rt.selected, Math.max(0, r.data.capabilities.length - 1)), status: "ready", error: undefined } };
       } else {
         state = { ...state, routing: { ...rt, status: "error", error: r.error } };
       }
       if (state.tab === "routing") render();
+    }
+
+    async function adviseLaunchTask(task: string): Promise<void> {
+      const cur = launchOf(state);
+      state = { ...state, launch: { ...cur, task, status: "loading", error: undefined } };
+      if (state.tab === "launch") render();
+      const r = await fetchAdvice(task);
+      const latest = launchOf(state);
+      if (r.ok) {
+        state = { ...state, launch: { ...latest, task, advice: r.data, routeResult: null, status: "ready", error: undefined } };
+      } else {
+        state = { ...state, launch: { ...latest, task, status: "error", error: r.error } };
+      }
+      if (state.tab === "launch") render();
+    }
+
+    async function runRouteTask(task: string, capability: string): Promise<void> {
+      const cur = launchOf(state);
+      state = { ...state, launch: { ...cur, status: "running", error: undefined } };
+      if (state.tab === "launch") render();
+      const r = await runRoute(capability, task);
+      const latest = launchOf(state);
+      if (r.ok) {
+        state = { ...state, launch: { ...latest, routeResult: r.data, status: "ready", error: undefined } };
+        await refreshRouting();
+      } else {
+        state = { ...state, launch: { ...latest, status: "error", error: r.error } };
+      }
+      if (state.tab === "launch") render();
     }
 
     /** Fleet + Doctor (6.5.4). `force` (the `r` re-run) refetches even when cached and
@@ -2090,6 +2375,18 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
           break;
         case "launchConfirmed":
           await performLaunch(effect.agent, effect.cwd, effect.reason);
+          break;
+        case "launchWithPrompt":
+          await doLaunchWithPrompt(effect.agent, effect.task);
+          break;
+        case "launchWithPromptConfirmed":
+          await performLaunch(effect.agent, callerCwd(), effect.reason, effect.task);
+          break;
+        case "adviseLaunchTask":
+          await adviseLaunchTask(effect.task);
+          break;
+        case "routeTask":
+          await runRouteTask(effect.task, effect.capability);
           break;
       }
     }

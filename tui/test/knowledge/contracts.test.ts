@@ -15,6 +15,9 @@ import {
   parseFleet,
   parseDoctor,
   parseSpend,
+  parseRouting,
+  parseAdvice,
+  parseRouteRun,
   parseMemory,
 } from "../../src/knowledge/contracts.ts";
 
@@ -126,6 +129,64 @@ describe("parseSpend (spend --json)", () => {
     expect(p.cap).toBe(10);
     expect(p.byCap).toEqual([]);
     expect(p.gbrainUntracked).toBe(false);
+  });
+});
+
+describe("parseRouting (routing --json)", () => {
+  test("normalizes chains and pricing", () => {
+    const d = parseRouting({
+      month: "2026-07",
+      budget: { monthly_usd: 10, hard_stop: true },
+      mtd: 0.014,
+      remaining: 9.986,
+      gbrain_untracked: true,
+      capabilities: [{
+        capability: "coding",
+        mtd: 0.001,
+        routes: 2,
+        command: 'ebrain route --cap coding "<prompt>"',
+        est_typical_usd: 0.0026,
+        models: [
+          { role: "winner", slug: "deepseek/deepseek-v4-pro", free: false, frontier: false, pricing: { input_per_m: 0.435, output_per_m: 0.87 } },
+          { role: "floor", slug: "qwen/qwen3-coder:free", free: true, frontier: false, pricing: { input_per_m: 0, output_per_m: 0 } },
+        ],
+      }],
+    })!;
+    expect(d.capabilities[0]!.models[0]!.pricing).toEqual({ inputPerM: 0.435, outputPerM: 0.87 });
+    expect(d.byCap[0]).toEqual({ capability: "coding", mtd: 0.001, routes: 2 });
+  });
+});
+
+describe("parseAdvice / parseRouteRun", () => {
+  test("normalizes advisor output", () => {
+    const d = parseAdvice({
+      task: "Summarize transcripts",
+      capability: "long_context",
+      lane: "one_shot_route",
+      agent: "route",
+      model: "minimax/minimax-m3",
+      reason: "batch",
+      est_cost: { usd: 0.0027, note: "estimated" },
+      alternatives: [{ lane: "interactive_opencode", agent: "opencode", model: "opencode", note: "session" }],
+      frontier: false,
+    })!;
+    expect(d.estCost.usd).toBe(0.0027);
+    expect(d.alternatives[0]!.agent).toBe("opencode");
+  });
+
+  test("normalizes route result", () => {
+    const d = parseRouteRun({
+      ts: "2026-07-15T00:00:00Z",
+      cap: "coding",
+      model: "deepseek/deepseek-v4-pro",
+      tokens_in: 10,
+      tokens_out: 5,
+      usd: 0.0001,
+      content: "ok",
+    })!;
+    expect(d.tokensIn).toBe(10);
+    expect(d.estimated).toBe(false);
+    expect(d.content).toBe("ok");
   });
 });
 

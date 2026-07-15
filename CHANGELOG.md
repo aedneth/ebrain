@@ -4,6 +4,16 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — F6.6A/B: OpenRouter stack operable en Routing + Launch task router
+
+- **Nuevo `ebrain routing --json`:** contrato read-only para el stack chino OpenRouter: capacidades, chains winner/fallback/floor, pricing verificado cuando existe, gasto MTD, remaining cap y comando operable. La TUI ya no necesita leer `routing.yaml`/`spend.jsonl` directo.
+- **Routing tab actualizado:** muestra las cadenas reales por capability (`deepseek`, `kimi`, `minimax`, `qwen`, `z-ai/glm`) con spend/estimates y comando; se elimina la nota “pending routing --json contract”.
+- **Launch task router:** la vista Launch conserva el grid manual de agentes y suma `t` para describir tarea → `ebrain advise --json`. Enter con `one_shot_route` confirma costo/modelo y ejecuta `ebrain route --json --cap`; Enter con carril de sesión lanza el agente recomendado y envía el prompt inicial. Frontier sigue confirm-only.
+- **Plan estructurado:** nuevo `docs/SPRINT-ORCHESTRATION.md` separa F6.6A/B cerradas de workflows/skills (F6.6C/D) y cost ledger v2 (F6.6E).
+- **Verify:** `bun test ./cli/` = **151 pass / 0 fail**; `bun test ./tui/test/` = **366 pass / 0 fail**; `git diff --check` limpio; cero-hex TUI limpio (`rg` sin matches fuera de `theme.ts`); smoke vivo `ebrain routing --json` muestra 7 capabilities y `ebrain advise` distingue one-shot OpenRouter vs sesión Codex. No se ejecutó un route pago adicional en este cierre; el path `routeTask` quedó cubierto por contrato/reducer y los smokes OpenRouter live venían del corte F-D2.
+
+---
+
 ## 2026-07-15 — F-D2 cerrado: bridge stdio→daemon sin bearer en configs + smoke OpenRouter chino
 
 - **F-D2 hardening universal cerrado:** `ebrain onboard` ya no persiste bearer/header en configs de agentes. Claude/Codex/Gemini/Cursor/OpenCode quedan registrados contra `scripts/ebrain-mcp-bridge`, un MCP stdio local que lee `EBRAIN_MCP_TOKEN` desde `~/.config/ebrain/mcp-token.env` chmod 600 en runtime y proxya al daemon HTTP-MCP `127.0.0.1:8541`. Las configs quedan command-only; el token store sigue fuera del repo.
