@@ -60,6 +60,10 @@ describe("parseKey", () => {
     expect(parseKey("\n")).toEqual({ name: "enter" });
   });
 
+  it("parses Alt+Enter as a composer line break", () => {
+    expect(parseKey("\x1b\r")).toEqual({ name: "linebreak" });
+  });
+
   it("parses Tab", () => {
     expect(parseKey("\t")).toEqual({ name: "tab" });
   });

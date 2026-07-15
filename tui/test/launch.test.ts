@@ -129,6 +129,21 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     expect(reduce(review.state, parseKey("y")).effect).toEqual({ type: "requestTargetLaunch", plan: planned.launch!.wizard!.plan });
   });
 
+  test("wizard Tab reaches profile selection instead of being intercepted by the page focus ring", () => {
+    const st: AppState = {
+      ...launchState(),
+      launch: {
+        ...launchState().launch!,
+        wizard: {
+          targets: [{ id: "opencode-openrouter", agent: "opencode", provider: "openrouter", ramClass: "heavy" }],
+          profiles: { initialized: true, profiles: [{ id: "my-stack", label: "My stack", provider: "openrouter", capabilities: ["coding"], models: 1, evidence: { source: "user", asOf: "d" } }] },
+          targetSelected: 0, profileSelected: 0, capability: "coding", cwd: "/tmp/project", focus: "target", plan: null,
+        },
+      },
+    };
+    expect(reduce(st, { name: "tab" }).state.launch?.wizard?.focus).toBe("profile");
+  });
+
   test("governor override dialog: ONLY y proceeds (launchConfirmed); n/esc/enter do not", () => {
     const st: AppState = {
       ...launchState(0),

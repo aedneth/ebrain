@@ -124,15 +124,28 @@ describe("reduce — sessions nav & actions emit effects (pure, no tmux)", () =>
     expect(cancelled.state.overlay).toBeNull();
   });
 
-  test("p opens a prompt; typing + enter emits a send with the typed text", () => {
+  test("p composes a prompt, previews it, and only y emits the exact payload", () => {
     const opened = reduce(base, parseKey("p"));
     expect(opened.state.overlay?.kind).toBe("prompt");
     let st = opened.state;
     for (const ch of "hola") st = reduce(st, parseKey(ch)).state;
-    expect((st.overlay as { kind: "prompt"; line: { text: string } }).line.text).toBe("hola");
-    const sent = reduce(st, { name: "enter" });
+    expect((st.overlay as { kind: "prompt"; draft: { text: string } }).draft.text).toBe("hola");
+    const review = reduce(st, { name: "enter" });
+    expect(review.effect).toBeUndefined();
+    expect(review.state.overlay).toMatchObject({ kind: "confirmSend", text: "hola" });
+    const sent = reduce(review.state, parseKey("y"));
     expect(sent.effect).toEqual({ type: "send", name: "ebr-claude-korvex", text: "hola" });
     expect(sent.state.overlay).toBeNull();
+  });
+
+  test("prompt composer preserves multiline paste and does not persist it in session state", () => {
+    const opened = reduce(base, parseKey("p")).state;
+    const pasted = reduce(opened, { name: "paste", text: "first line\nsecond line" }).state;
+    const draft = pasted.overlay as { kind: "prompt"; draft: { text: string } };
+    expect(draft.draft.text).toBe("first line\nsecond line");
+    const review = reduce(pasted, { name: "enter" });
+    expect(review.state.overlay).toMatchObject({ kind: "confirmSend", text: "first line\nsecond line" });
+    expect(review.state.sessions?.rows[0]?.name).toBe("ebr-claude-korvex");
   });
 
   test("prompt: esc cancels without sending; empty + enter just closes", () => {

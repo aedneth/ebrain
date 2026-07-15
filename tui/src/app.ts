@@ -30,6 +30,7 @@ import { Screen } from "./kit/screen.js";
 import { splitV, splitH, type Rect } from "./kit/layout.js";
 import { padTo, truncate, displayWidth } from "./kit/draw.js";
 import { startNavReader, type Key } from "./kit/input.js";
+import { composerApplyKey, composerFrom, type ComposerState } from "./kit/composer.js";
 
 import { wordmark } from "./widgets/brand/wordmark.js";
 import { statusBar, statusSep, tabBar, hintBar, footer } from "./widgets/chrome/index.js";
@@ -278,7 +279,8 @@ export type Overlay =
   | { kind: "palette"; palette: PaletteState }
   | { kind: "help" }
   | { kind: "confirmKill"; name: string }
-  | { kind: "prompt"; name: string; line: LineState }
+  | { kind: "prompt"; name: string; draft: ComposerState }
+  | { kind: "confirmSend"; name: string; text: string }
   | { kind: "confirmLaunch"; agent: string; cwd: string; reason: string }
   | { kind: "wizardCwd"; line: LineState }
   | { kind: "confirmTargetLaunch"; plan: TargetPlanData }
@@ -429,7 +431,7 @@ export type AppEffect =
   | { type: "kill"; name: string }
   | { type: "send"; name: string; text: string }
   /** Launch `agent` — the loop runs the RAM governor, which may open a confirm. */
-  | { type: "launch"; agent: string }
+  | { type: "launch"; agent: string; prompt?: string }
   /** Launch confirmed through the governor's dialog (an override that gets logged). */
   | { type: "launchConfirmed"; agent: string; cwd: string; reason: string }
   | { type: "profileLaunchTask"; task: string }
@@ -747,6 +749,12 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       return settle(state);
     }
 
+    if (ov.kind === "confirmSend") {
+      if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "send", name: ov.name, text: ov.text });
+      if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: null });
+      return settle(state);
+    }
+
     if (ov.kind === "launchTask") {
       if (key.name === "escape") return settle({ ...state, overlay: null });
       if (key.name === "enter") {
@@ -777,21 +785,24 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       return settle(state);
     }
 
-    // ov.kind === "prompt": type a line; enter sends (deliberate) · esc cancels.
+    // Prompt drafts stay in memory only. Enter opens a review; only y sends exact bytes.
     if (key.name === "escape") return settle({ ...state, overlay: null });
     if (key.name === "enter") {
-      const text = ov.line.text.trim();
+      const text = ov.draft.text;
       if (text.length === 0) return settle({ ...state, overlay: null }); // empty → just close
-      return { state: { ...state, overlay: null }, quit: false, forceRedraw: false, effect: { type: "send", name: ov.name, text } };
+      return settle({ ...state, overlay: { kind: "confirmSend", name: ov.name, text } });
     }
-    const edited = lineApplyKey(ov.line, key);
-    if (edited.handled) return settle({ ...state, overlay: { kind: "prompt", name: ov.name, line: edited.state } });
+    const edited = composerApplyKey(ov.draft, key);
+    if (edited.handled) return settle({ ...state, overlay: { kind: "prompt", name: ov.name, draft: edited.state } });
     return settle(state);
   }
 
   // Tab / Shift+Tab move the focus RING between the boxes of the current view — they no
   // longer switch views (1-6 does that). Single-region views: a harmless no-op.
   if (key.name === "tab" || key.name === "shifttab") {
+    const launch = state.tab === "launch" ? launchOf(state) : null;
+    const wizard = launch ? wizardOf(launch) : null;
+    if (launch && wizard) return settle({ ...state, launch: { ...launch, wizard: { ...wizard, focus: wizard.focus === "target" ? "profile" : "target" } } });
     const regions = regionsFor(state.tab);
     if (regions.length <= 1) return settle({ ...state, confirmQuit: false });
     const delta = key.name === "tab" ? 1 : -1;
@@ -804,7 +815,6 @@ export function reduce(state: AppState, key: Key): ReduceResult {
     const launch = launchOf(state);
     const wizard = wizardOf(launch);
     if (wizard) {
-      if (key.name === "tab" || key.name === "shifttab") return settle({ ...state, launch: { ...launch, wizard: { ...wizard, focus: wizard.focus === "target" ? "profile" : "target" } } });
       if (key.name === "up" || key.name === "down") {
         const delta = key.name === "down" ? 1 : -1;
         if (wizard.focus === "target") return settle({ ...state, launch: { ...launch, wizard: { ...wizard, targetSelected: clampIndex(wizard.targetSelected + delta, wizard.targets.length), plan: null } } });
@@ -876,7 +886,7 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       if (sel) {
         if (ch === "a") return settle({ ...state, confirmQuit: false }, { type: "attach", name: sel.name });
         if (ch === "k") return settle({ ...state, confirmQuit: false, overlay: { kind: "confirmKill", name: sel.name } });
-        if (ch === "p") return settle({ ...state, confirmQuit: false, overlay: { kind: "prompt", name: sel.name, line: lineFrom("") } });
+        if (ch === "p") return settle({ ...state, confirmQuit: false, overlay: { kind: "prompt", name: sel.name, draft: composerFrom("") } });
       }
     }
 
@@ -1015,6 +1025,12 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
     return { box, top, left };
   }
 
+  if (overlay.kind === "confirmSend") {
+    const width = Math.min(84, Math.max(44, cols - 6));
+    const box = buildSendPreviewBox(overlay, width, theme);
+    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+  }
+
   if (overlay.kind === "launchTask") {
     const width = Math.min(82, Math.max(36, cols - 6));
     const box = buildLaunchTaskBox(overlay, width, theme);
@@ -1025,7 +1041,7 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
 
   if (overlay.kind === "wizardCwd") {
     const width = Math.min(82, Math.max(36, cols - 6));
-    const box = buildLaunchTaskBox({ kind: "launchTask", line: overlay.line }, width, theme);
+    const box = buildWizardCwdBox(overlay, width, theme);
     return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
   }
   if (overlay.kind === "confirmTargetLaunch" || overlay.kind === "confirmTargetGovernor") {
@@ -1063,15 +1079,26 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
 /** Prompt overlay box: a square dialog panel wrapping a single PromptBox row. Mid-line
  * caret is F6.6.3's composer; here the caret trails (single-line append is the case). */
 function buildPromptBox(overlay: Extract<Overlay, { kind: "prompt" }>, width: number, theme: Theme): string[] {
-  const field = promptBox(
-    { value: overlay.line.text, focus: true, hint: "enter send · esc cancel", width: width - 4 },
+  const lines = overlay.draft.text.split("\n");
+  const visible = lines.slice(Math.max(0, lines.length - 4));
+  const field = visible.map((line, index) => promptBox(
+    { value: line, focus: index === visible.length - 1, placeholder: "write prompt", hint: index === visible.length - 1 ? "alt+enter line · enter preview" : undefined, width: width - 4 },
     theme,
-  );
+  ));
   const target = overlay.name.startsWith("ebr-") ? overlay.name.slice(4) : overlay.name;
   return panel(
-    { title: `prompt → ${target}`, dialog: true, width, height: 3, body: [field] },
+    { title: `prompt → ${target}`, dialog: true, width, height: field.length + 2, body: field },
     theme,
   );
+}
+
+function buildSendPreviewBox(overlay: Extract<Overlay, { kind: "confirmSend" }>, width: number, theme: Theme): string[] {
+  const target = overlay.name.startsWith("ebr-") ? overlay.name.slice(4) : overlay.name;
+  const content = overlay.text.split("\n").slice(0, 6).map((line) => theme.fg("text.primary") + truncate(line || " ", width - 6) + theme.reset);
+  if (overlay.text.split("\n").length > content.length) content.push(theme.fg("text.muted") + "…" + theme.reset);
+  content.push(theme.fg("text.muted") + "exact payload · not saved" + theme.reset);
+  content.push(theme.fg("accent.teal") + "[y] send" + theme.reset + theme.fg("text.muted") + "   [n] cancel" + theme.reset);
+  return panel({ title: `review prompt → ${target}`, dialog: true, focus: true, width, height: content.length + 2, body: content }, theme);
 }
 
 function buildLaunchTaskBox(overlay: Extract<Overlay, { kind: "launchTask" }>, width: number, theme: Theme): string[] {
@@ -1083,6 +1110,14 @@ function buildLaunchTaskBox(overlay: Extract<Overlay, { kind: "launchTask" }>, w
     { title: "task router", dialog: true, width, height: 3, body: [field] },
     theme,
   );
+}
+
+function buildWizardCwdBox(overlay: Extract<Overlay, { kind: "wizardCwd" }>, width: number, theme: Theme): string[] {
+  const field = promptBox(
+    { value: overlay.line.text, focus: true, placeholder: "working directory", hint: "enter save · esc cancel", width: width - 4 },
+    theme,
+  );
+  return panel({ title: "launch cwd", dialog: true, width, height: 3, body: [field] }, theme);
 }
 
 /** Word-wrap `text` into lines of at most `width` display cells (plain text — the
@@ -1510,7 +1545,7 @@ function buildLaunchView(launch: LaunchSlice, rect: Rect, theme: Theme): string[
   const rowsN = Math.ceil(LAUNCHABLE.length / LAUNCH_COLS);
 
   const body: string[] = [];
-  body.push(theme.fg("text.muted") + "t → task signals · r → refresh profile · enter → launch selected agent" + reset);
+  body.push(theme.fg("text.muted") + "t → task prompt + signals · r → refresh profile · enter → launch selected agent" + reset);
   body.push(theme.fg("text.muted") + "w → launch wizard" + reset);
   if (launch.task) {
     body.push(theme.fg("text.secondary") + "task      " + reset + theme.fg("text.primary") + truncate(launch.task, contentW - 10) + reset);
@@ -1541,7 +1576,7 @@ function buildLaunchView(launch: LaunchSlice, rect: Rect, theme: Theme): string[
     const target = selectedWizardTarget(wizard);
     const profile = selectedWizardProfile(wizard);
     body.push("");
-    body.push(theme.fg("accent.teal") + "launch wizard" + reset + theme.fg("text.muted") + " · up/down select · c cwd · [/ ] capability · enter preview" + reset);
+    body.push(theme.fg("accent.teal") + "launch wizard" + reset + theme.fg("text.muted") + " · tab target/profile · up/down select · c cwd · [/ ] capability · enter preview" + reset);
     body.push(theme.fg("text.secondary") + "target     " + reset + theme.fg(wizard.focus === "target" ? "accent.teal" : "text.primary") + (target?.id ?? "no declared target") + reset);
     body.push(theme.fg("text.secondary") + "profile    " + reset + theme.fg(wizard.focus === "profile" ? "accent.teal" : "text.primary") + (profile?.label ?? "run profiles init") + reset);
     body.push(theme.fg("text.secondary") + "capability " + reset + theme.fg("text.primary") + wizard.capability + reset);
@@ -1578,7 +1613,7 @@ function buildLaunchView(launch: LaunchSlice, rect: Rect, theme: Theme): string[
 
   const selAgent = LAUNCHABLE[selected]!.agent;
   const foot =
-    theme.fg("text.muted") + "enter → new session " + reset +
+    theme.fg("text.muted") + (launch.task ? "enter → new session + send task " : "enter → new session ") + reset +
     theme.fg("text.primary") + selAgent + reset +
     theme.fg("text.muted") + " · profile never changes this selection" + reset;
   body.push("", foot);
@@ -2299,9 +2334,10 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
         return;
       }
       let promptSendError: string | null = null;
-      if (initialPrompt?.trim()) {
+      const initialPrompt = launchOf(state).task;
+      if (initialPrompt.length > 0) {
         await new Promise((resolve) => setTimeout(resolve, 900));
-        const sent = await sendToSession(r.session.name, initialPrompt.trim(), true);
+        const sent = await sendToSession(r.session.name, initialPrompt, true);
         if (!sent.ok) promptSendError = sent.error.message;
       }
       state = withTab(state, "sessions"); // jump to Sessions to show the new one
@@ -2477,7 +2513,11 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       const [targets, profiles] = await Promise.all([fetchTargets(), fetchProfiles()]);
       const current = launchOf(state);
       if (!targets.ok || !profiles.ok || !profiles.data.initialized || profiles.data.profiles.length === 0 || targets.data.length === 0) {
-        state = { ...state, launch: { ...current, status: "error", error: !targets.ok ? targets.error : !profiles.ok ? profiles.error : "no profiles or declared targets" } };
+        const error = !targets.ok ? targets.error : !profiles.ok ? profiles.error :
+          !profiles.data.initialized || profiles.data.profiles.length === 0
+            ? "OpenRouter wizard needs a local execution profile: run 'ebrain profiles init --yes', then press w again"
+            : "no adapter declares an OpenRouter target";
+        state = { ...state, launch: { ...current, status: "error", error } };
       } else {
         const capability = current.profile?.selectedCapability ?? profiles.data.profiles[0]!.capabilities[0] ?? "general";
         const first = profiles.data.profiles[0]!;

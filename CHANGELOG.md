@@ -4,6 +4,14 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — F6.6.5: composer exacto + evidencia de benchmarks descriptiva
+
+- **Prompt seguro y deliberado:** `p` en Sessions abre un composer multilinea; paste y Alt+Enter conservan saltos de linea. Enter abre preview y solo `y` manda los bytes exactos. Los drafts no se persisten ni se incorporan al ledger/historial.
+- **Launch estabilizado y guiado:** se elimina la referencia indefinida `initialPrompt`; un task de Launch se toma del estado actual antes de enviarse. Cuando faltan perfiles OpenRouter, `w` explica la inicializacion local requerida; Tab alterna target/perfil como indica la vista.
+- **Benchmark evidence sin autoridad:** `cli/benchmark-evidence.ts` valida procedencia (`source`, `as_of`, `version`, `task_scope`) y metricas opcionales sin aceptar winner, secretos ni politica de routing. `docs/BENCHMARK-EVIDENCE-SCHEMA.md` publica el contrato.
+
+---
+
 ## 2026-07-15 — F6.6.4: Launch Wizard gobernado por usuario
 
 - **Wizard en Launch:** carga targets/perfiles por CLI JSON, permite seleccionar target/perfil/capability/cwd y materializa `targets plan` antes de cualquier sesion.

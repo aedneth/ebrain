@@ -50,6 +50,14 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 - **Fix manual reportado:** el grid hacia `launch: {selected}` y descartaba `task`; ahora preserva el slice completo. Regresion cubre flecha -> `r` sin crash.
 - **Auditar:** flujo `w` sin profiles, cwd cliente literal/symlink, confirmaciones `y` exclusivas, y que la TUI no construya argv ni lea archivos de perfil.
 
+## Actualizacion 2026-07-15 — F6.6.5 composer y evidencia cerrado (pendiente auditoria)
+
+- **Fix del reporte visual:** `performLaunch()` referenciaba `initialPrompt` fuera de alcance al lanzar un agente manual despues de usar `t`; ahora toma el task desde `LaunchSlice`, por lo que el flujo no puede tirar `ReferenceError`. El task se entrega sin trim si existe, preservando el payload.
+- **UX del wizard:** `w` sin store de perfiles explica que requiere `ebrain profiles init --yes` y que los agentes manuales siguen independientes; no crea configuracion de usuario sin confirmacion. Tab llega al selector profile (antes quedaba interceptado por el focus ring) y `c` abre un dialogo de cwd correctamente rotulado.
+- **Prompt composer:** `p` en Sessions mantiene drafts solo en estado transitorio. Bracketed paste conserva saltos de linea y Alt+Enter inserta uno; Enter abre un preview y solo `y` emite `send` con el texto exacto. No hay historial ni evento de costo que contenga el prompt.
+- **Evidencia de benchmarks:** `cli/benchmark-evidence.ts` es un parser estricto opcional: exige fuente, fecha ISO, version, task scope, modelo y metricas; prohíbe campos desconocidos, `winner`, secretos y politica de routing. No se conecta a la selección de modelos. `docs/BENCHMARK-EVIDENCE-SCHEMA.md` explica el formato.
+- **Auditar:** exactitud del payload por `sendToSession`, cancelacion distinta de `y`, que ningún draft llegue a sesiones/costos/logs, y que el schema no permita campos desconocidos ni derive defaults/rankings.
+
 ## 1. Qué construí
 
 - F6.6E Unified Cost Ledger v2 (Codex maker, 2026-07-15):

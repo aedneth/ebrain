@@ -23,6 +23,7 @@ export type Key =
   | { name: "left" }
   | { name: "right" }
   | { name: "enter" }
+  | { name: "linebreak" }
   | { name: "tab" }
   | { name: "shifttab" }
   | { name: "escape" }
@@ -46,6 +47,9 @@ const PASTE_OFF = "\x1b[?2004l";
 
 // Common escape sequences
 const SEQUENCES: Record<string, Key> = {
+  // Most terminals encode Alt+Enter as ESC + CR. The composer owns this key; normal
+  // fields continue to submit on plain Enter.
+  "\x1b\r": { name: "linebreak" },
   "\x1b[A": { name: "up" },
   "\x1b[B": { name: "down" },
   "\x1b[C": { name: "right" },
