@@ -9,7 +9,9 @@
 set -uo pipefail
 
 agent="${1:?uso: mcp-wire.sh <cursor|opencode>}"
-SRV="$HOME/.config/ebrain/ebrain-mcp"
+SRV="$HOME/eBrain/scripts/ebrain-mcp-bridge"
+[ -x "$SRV" ] || SRV="$HOME/.config/ebrain/ebrain-mcp-bridge"
+[ -x "$SRV" ] || SRV="$HOME/.config/ebrain/ebrain-mcp"
 [ -x "$SRV" ] || SRV="$HOME/.config/ebrain/gbrain-mcp"
 command -v jq >/dev/null 2>&1 || { echo "mcp-wire: jq requerido" >&2; exit 1; }
 [ -x "$SRV" ] || { echo "mcp-wire: falta el launcher MCP $SRV" >&2; exit 1; }
@@ -32,7 +34,7 @@ case "$agent" in
     ;;
   opencode)
     f="$HOME/.config/opencode/opencode.json"
-    merge "$f" '.mcp.ebrain = {type:"local", command:[$cmd], enabled:true} | .instructions = ((.instructions // []) + [$agm] | unique)' \
+    merge "$f" '.mcp.ebrain = {type:"local", command:[$cmd]} | .instructions = (if (.instructions|type) == "array" then (.instructions + [$agm] | unique) elif (.instructions|type) == "string" then ([.instructions, $agm] | unique) else [$agm] end)' \
       && echo "mcp-wire ✓ opencode → $f (server 'ebrain' + instructions AGENTS.md)"
     ;;
   *) echo "mcp-wire: agente no soportado '$agent' (cursor|opencode)" >&2; exit 2 ;;

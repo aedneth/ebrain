@@ -12,6 +12,7 @@ import { access } from "fs/promises";
 import { constants } from "fs";
 import { dirname, join } from "path";
 import { homedir } from "os";
+import { bridgeCommandConfig, bridgeCommandPath } from "./mcp-bridge.ts";
 import {
   EBRAIN_MCP_TOKEN_ENV,
   DEFAULT_PORT,
@@ -19,7 +20,6 @@ import {
   healthCheck,
   healthUrl,
   mcpUrl,
-  readTokenFile,
   redactSecrets,
   runProcess,
   tokenStorePaths,
@@ -85,32 +85,29 @@ export async function which(binary: string, pathValue = process.env.PATH || ""):
   return null;
 }
 
-export function commandForAgent(agent: OnboardAgent, token: string, url = mcpUrl(port())): CommandSpec | null {
+export function commandForAgent(agent: OnboardAgent, token: string, url = mcpUrl(port()), bridge = bridgeCommandPath(EBRAIN_HOME)): CommandSpec | null {
+  void token;
+  void url;
   switch (agent) {
     case "claude":
       return {
         binary: "claude",
-        tokenInArgv: true,
-        args: ["mcp", "add", "--scope", "user", "--transport", "http", MCP_SERVER_NAME, url, "--header", `Authorization: Bearer ${token}`],
+        tokenInArgv: false,
+        args: ["mcp", "add", "--scope", "user", MCP_SERVER_NAME, "--", bridge],
       };
     case "codex":
       return {
         binary: "codex",
         tokenInArgv: false,
-        args: ["mcp", "add", MCP_SERVER_NAME, "--url", url, "--bearer-token-env-var", EBRAIN_MCP_TOKEN_ENV],
+        args: ["mcp", "add", MCP_SERVER_NAME, "--", bridge],
       };
     case "gemini":
       return {
         binary: "gemini",
-        tokenInArgv: true,
-        args: ["mcp", "add", "--scope", "user", "--transport", "http", "--header", `Authorization: Bearer ${token}`, MCP_SERVER_NAME, url],
+        tokenInArgv: false,
+        args: ["mcp", "add", "--scope", "user", "--transport", "stdio", MCP_SERVER_NAME, bridge],
       };
     case "opencode":
-      return {
-        binary: "opencode",
-        tokenInArgv: true,
-        args: ["mcp", "add", MCP_SERVER_NAME, "--url", url, "--header", `Authorization=Bearer ${token}`],
-      };
     case "cursor":
     case "generic":
       return null;
@@ -202,6 +199,9 @@ function hardenAgentConfig(agent: OnboardAgent): void {
 }
 
 export function mergeCursorMcpConfig(current: Record<string, unknown>, token: string, url = mcpUrl(port())): Record<string, unknown> {
+  void token;
+  void url;
+  const bridge = bridgeCommandConfig(bridgeCommandPath(EBRAIN_HOME));
   const mcpServers = current.mcpServers && typeof current.mcpServers === "object" && !Array.isArray(current.mcpServers)
     ? current.mcpServers as Record<string, unknown>
     : {};
@@ -209,11 +209,33 @@ export function mergeCursorMcpConfig(current: Record<string, unknown>, token: st
     ...current,
     mcpServers: {
       ...mcpServers,
+      [MCP_SERVER_NAME]: bridge,
+    },
+  };
+}
+
+export function mergeOpenCodeMcpConfig(current: Record<string, unknown>, token: string): Record<string, unknown> {
+  void token;
+  const mcp = current.mcp && typeof current.mcp === "object" && !Array.isArray(current.mcp)
+    ? current.mcp as Record<string, unknown>
+    : {};
+  const bridge = bridgeCommandConfig(bridgeCommandPath(EBRAIN_HOME));
+  const { instructions: rawInstructions, ...rest } = current;
+  const instructions = Array.isArray(rawInstructions)
+    ? rawInstructions
+    : typeof rawInstructions === "string"
+      ? [rawInstructions]
+      : undefined;
+  return {
+    ...rest,
+    mcp: {
+      ...mcp,
       [MCP_SERVER_NAME]: {
-        url,
-        headers: { Authorization: `Bearer ${token}` },
+        type: "local",
+        command: [bridge.command, ...bridge.args],
       },
     },
+    ...(instructions === undefined ? {} : { instructions }),
   };
 }
 
@@ -223,15 +245,28 @@ async function registerCursor(token: string): Promise<OnboardResult> {
   try {
     const next = mergeCursorMcpConfig(readJsonObject(file), token);
     writeJsonObject(file, next);
-    return { agent: "cursor", status: "registered", detail: "~/.cursor/mcp.json -> HTTP MCP" };
+    return { agent: "cursor", status: "registered", detail: "~/.cursor/mcp.json -> daemon bridge" };
   } catch (e) {
     return { agent: "cursor", status: "failed", detail: redactSecrets(e instanceof Error ? e.message : String(e), [token]) };
+  }
+}
+
+async function registerOpenCode(token: string): Promise<OnboardResult> {
+  if (!(await which("opencode"))) return { agent: "opencode", status: "skipped", detail: "opencode not installed" };
+  const file = join(HOME, ".config", "opencode", "opencode.json");
+  try {
+    const next = mergeOpenCodeMcpConfig(readJsonObject(file), token);
+    writeJsonObject(file, next);
+    return { agent: "opencode", status: "registered", detail: "~/.config/opencode/opencode.json -> daemon bridge" };
+  } catch (e) {
+    return { agent: "opencode", status: "failed", detail: redactSecrets(e instanceof Error ? e.message : String(e), [token]) };
   }
 }
 
 async function onboardOne(agent: OnboardAgent, token: string): Promise<OnboardResult> {
   if (agent === "generic") return { agent, status: "skipped", detail: "generic has no native MCP client" };
   if (agent === "cursor") return registerCursor(token);
+  if (agent === "opencode") return registerOpenCode(token);
 
   const spec = commandForAgent(agent, token);
   if (!spec) return { agent, status: "skipped", detail: "no registration command" };
@@ -242,7 +277,7 @@ async function onboardOne(agent: OnboardAgent, token: string): Promise<OnboardRe
   return {
     agent,
     status: res.ok ? "registered" : "failed",
-    detail: res.ok ? "HTTP MCP registered" : res.detail,
+    detail: res.ok ? "daemon bridge registered" : res.detail,
   };
 }
 

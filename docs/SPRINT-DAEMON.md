@@ -3,8 +3,8 @@ type: sprint-plan
 project: ebrain
 program: FD — Daemon compartido HTTP-MCP (fuera de F6)
 created: 2026-07-14
-modified: 2026-07-14
-status: AUDIT_PASS (Opus 2026-07-14) + FABLE_AUDIT_PASS (Fable 5 2026-07-15) · findings F-D1/F-D2/F-F1/F-F2 de cierre
+modified: 2026-07-15
+status: AUDIT_PASS (Opus 2026-07-14) + FABLE_AUDIT_PASS (Fable 5 2026-07-15) · findings F-D1/F-D2/F-F1/F-F2 cerrados por maker
 tags: [ebrain, daemon, mcp, http, pglite, lock, sprint, tareas]
 related: [adr/ADR-004-shared-brain-daemon.md, adr/ADR-001-brain-topology.md, adr/ADR-002-unified-harness.md, SPRINT-TUI.md]
 ---
@@ -21,11 +21,12 @@ Opus audita cada gate con `[AUDIT_PASS]` antes de avanzar. Commit por fase. Ning
 brisas-del-golfo/dekko. Pasos `[HUMANO]` (secretos, cutover en vivo) los ejecuta Eduardo con Opus al lado.
 Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` bloqueado.
 
-**Estado P1/P2 (Codex maker, 2026-07-14):** construido `ebrain up` + `ebrain onboard`.
+**Estado P1/P2 (Codex maker, 2026-07-14/15):** construido `ebrain up` + `ebrain onboard`.
 El boot del host asegura `EBRAIN_MCP_TOKEN` **antes** de bindear HTTP; el token queda en
 `~/.config/ebrain/mcp-token.env` (chmod 600, nunca impreso). `ebrain up` es idempotente:
 daemon healthy → token ready → smoke `tools/list` → registra claude/codex/gemini/cursor/opencode
-por HTTP-MCP. Verificado en vivo: `tools/list` = 94 tools; `ebrain onboard --all` re-ejecuta limpio.
+por un bridge stdio local que proxya al HTTP-MCP sin persistir bearer en configs de agentes. Verificado en vivo:
+`tools/list` = 94 tools; `ebrain onboard --all` re-ejecuta limpio.
 Doctor/harness ya reportan daemon + modo MCP; launchers nuevos `ebrain-run`/`ebrain-mcp` conviven con
 compat `gbrain-run`/`gbrain-mcp`.
 
@@ -38,7 +39,8 @@ compat `gbrain-run`/`gbrain-mcp`.
 one to expose."* — cli.ts:952). Es decir, un agente **NO puede** correr `gbrain serve` como thin-client-proxy.
 El modo thin-client (`callRemoteTool`) sirve para **ops de CLI** (`query`/`search`/`think`), no para exponer MCP.
 
-→ La arquitectura correcta NO es "thin-client serve" sino **MCP-HTTP directo**:
+→ La arquitectura correcta NO es "thin-client serve" sino **un host MCP-HTTP único**, con bridge stdio
+adapter-facing para no persistir credenciales en configs:
 
 ```
         ┌─────────────────────────────────────────────┐
@@ -49,19 +51,21 @@ El modo thin-client (`callRemoteTool`) sirve para **ops de CLI** (`query`/`searc
         └───────────────▲───────────────▲───────────────┘
                         │ http/mcp+bearer │
           ┌─────────────┘                 └─────────────┐
-    agente A (claude)                             agente B (codex)   … N agentes
-    MCP = --transport http                        MCP = --url http…    (todos concurrentes,
-    http://localhost:8541/mcp                     http://localhost:8541/mcp   sin lock local)
+    bridge stdio A                              bridge stdio B        … N bridges
+    lee token store 600                         lee token store 600    (sin PGLite local)
+           ▲                                           ▲
+           │ stdio command-only                         │ stdio command-only
+    agente A (claude)                             agente B (codex)
 ```
 
 - **Host:** un solo `gbrain serve --http` bindeado a **loopback** (127.0.0.1:8541) — dueño único del lock.
-- **Agentes:** cada CLI registra el MCP de ebrain como **transporte HTTP** al host (reemplaza el stdio
-  `~/.config/ebrain/gbrain-mcp`). Confirmado que soportan HTTP MCP nativo: **claude** `mcp add --transport http`;
-  **codex** `mcp add --url` ("streamable HTTP server"); **gemini** `mcp add <url>`; **cursor**/**opencode** por
-  `url` en su config. `generic` (bash) no tiene MCP.
-- **Auth:** OAuth 2.1 client_credentials + bearer (serve-http ya lo trae: `mcpAuthRouter` + `requireBearerAuth`).
-  Un client provisionado para los agentes locales; el secret vía `GBRAIN_REMOTE_CLIENT_SECRET` (env), **manejado
-  por Eduardo, nunca impreso**.
+- **Agentes:** el estado final pre-release registra cada CLI contra `scripts/ebrain-mcp-bridge`: un MCP stdio
+  local command-only que lee `EBRAIN_MCP_TOKEN` desde `~/.config/ebrain/mcp-token.env` chmod 600 en runtime y
+  proxya al host HTTP. Esta capa conserva la topología de un solo dueño del lock y evita persistir
+  `Authorization`/bearer en configs de Claude/Gemini/Cursor/OpenCode. `generic` (bash) no tiene MCP.
+- **Auth:** el host sigue exponiendo OAuth 2.1 client_credentials + bearer (serve-http ya lo trae:
+  `mcpAuthRouter` + `requireBearerAuth`). El bridge usa el bearer local `EBRAIN_MCP_TOKEN` desde el store 600;
+  las ops CLI thin-client usan OAuth client_credentials separado. Ningún valor se imprime ni se versiona.
 
 ━━━
 
@@ -119,7 +123,12 @@ memoria viva. **Decisión: rename SOLO de la superficie ebrain-owned, el engine 
 
 ## FASE D.4 — Rewire MCP de los adapters (stdio → HTTP)  `[~]`
 
-- [x] D.4.1 Cambiar `mcp.register` de cada adapter de stdio (`gbrain-mcp`) a HTTP: manifests delegan a `ebrain onboard <agent>`; `onboard` registra claude/codex/gemini/cursor/opencode en `http://127.0.0.1:8541/mcp` con bearer. Codex usa `--bearer-token-env-var EBRAIN_MCP_TOKEN`; claude/gemini/opencode usan header; cursor mergea `~/.cursor/mcp.json`. **Verify:** `ebrain onboard --all` = 5 OK; `ebrain up` = smoke `tools/list` 94 tools.
+- [x] D.4.1 Cambiar `mcp.register` de cada adapter de stdio legacy (`gbrain-mcp`) al daemon compartido:
+  manifests delegan a `ebrain onboard <agent>`; `onboard` registra claude/codex/gemini/cursor/opencode con
+  `scripts/ebrain-mcp-bridge` command-only. El bridge expone stdio hacia cada agente, lee el token local en runtime
+  y proxya al host HTTP `127.0.0.1:8541`, sin abrir PGLite y sin persistir headers/bearer en configs de agentes.
+  **Verify:** `ebrain onboard --all` = 5 OK; `bun run cli/mcp-bridge.ts --probe` = 94 tools; `opencode mcp list`
+  conecta; subconfigs `ebrain` de Claude/Gemini sin patrón bearer/header/token.
 - [x] D.4.2 Mantener el stdio `gbrain-mcp` como **fallback** (no borrar) para rollback y para el modo sin-daemon. **Verify:** `scripts/gbrain-mcp` sigue versionado; `scripts/README.md` documenta fallback vs daemon.
 - [x] D.4.4 **Rename de launchers (surface, ver §Rename policy):** `~/.config/ebrain/gbrain-run`→`ebrain-run` y `gbrain-mcp`→`ebrain-mcp` con **symlink de compat** del nombre viejo→nuevo; refs de repo actualizadas (`doctor.sh`/`status.sh`/`remember.sh`/`mcp-wire.sh`/scripts). **Verify:** `ls -l ~/.config/ebrain/{ebrain-run,ebrain-mcp,gbrain-run,gbrain-mcp}` muestra ejecutables nuevos + symlinks compat; suite verde.
 - [x] D.4.3 Actualizar doctor/harness para reportar el modo MCP activo (stdio-local vs http-daemon) por agente. **Verify:** `ebrain doctor --json` muestra `adapter:<agent>:mcp` ok para claude/codex/gemini/cursor/opencode; `ebrain harness status` imprime `mcp ✓ http-daemon`.
@@ -155,7 +164,7 @@ Entregado: `cli/isolation.ts` (módulo puro, SoT de los invariantes) + `cli/isol
 > **Doble gate:** `[AUDIT_PASS]` Opus **+** `[FABLE_AUDIT_PASS]` Fable 5 (checker independiente). Ambos coinciden en PASS sobre los 4 gates GO; los findings abajo son de cierre, ninguno bloquea la fase (el canal MCP de agentes — el objetivo — funciona). Reporte Fable: `docs/AUDIT-FABLE-FASE-D.md`.
 
 - **F-D1 (media — CERRADO por Codex 2026-07-15):** `assertNoClientSources()` ya corre en boot pre-bind vía `cli/daemon-preflight.ts`; `doctor.sh` también chequea sources vía daemon MCP cuando el host está UP.
-- **F-D2 (baja + un item real — PARCIAL):** fix inmediato aplicado: configs conocidos de claude/codex/gemini/cursor/opencode se fuerzan a chmod 600 post-onboard; `~/.gemini/settings.json` verificado en 600. Sigue pendiente hardening pre-release de indirection universal/token-store por adapter: las CLIs instaladas solo exponen bearer-env HTTP en Codex; Claude/Gemini/OpenCode aceptan headers literales para HTTP.
+- **F-D2 (media/baja — CERRADO por Codex 2026-07-15):** configs conocidos de claude/codex/gemini/cursor/opencode se fuerzan a chmod 600 post-onboard; además `ebrain onboard` dejó de escribir bearer/header HTTP directo. Todos los adapters MCP quedan command-only contra `scripts/ebrain-mcp-bridge`, que lee `EBRAIN_MCP_TOKEN` desde el token store 600 en runtime y proxya al daemon HTTP. OpenCode requirió schema propio `type:"local", command:[bridge]` e `instructions` array/ausente. **Verify:** `ebrain onboard --all` 5 OK; bridge probe 94 tools; `opencode mcp list` conectado; Cursor/OpenCode sin headers; subconfigs `ebrain` de Claude/Gemini sin patrón bearer/header/token.
 - **F-F1 (media — CERRADO por Codex 2026-07-15):** `ebrain-run` usa un `GBRAIN_HOME` thin-client separado (`~/.config/ebrain/gbrain-thin`) con `remote_mcp`; el secret OAuth vive en `~/.config/ebrain/remote-client.env` chmod 600 y no en el config thin. `ebrain q` lista sources vía MCP, usa `--source-id`, falla ruidoso si no puede hablar con el daemon y ya no devuelve vacío silencioso. `remember`/`sessions-federate` hacen write-through vía MCP `put_page` a `agent-memory`; `dream-cycle` es daemon-aware y no promete sweeps locales imposibles.
 - **F-F2 (baja — NUEVO, Fable · confirmado por Opus) — evidencia vacua retirada:** el probe `ebrain q "brisas dekko cliente"` que maker y Opus usaron como "prueba de aislamiento vivo" no probaba nada (devuelve vacío/cuelga para TODO por F-F1). Retirado de la evidencia (ver D.5.3). El aislamiento se sostiene por federación default-deny + CI test.
 
@@ -167,7 +176,7 @@ Entregado: `cli/isolation.ts` (módulo puro, SoT de los invariantes) + `cli/isol
    - Si el host está down: arranca `ebrain daemon start`; el launcher acuña `EBRAIN_MCP_TOKEN` antes de exponer HTTP.
    - Si el host ya está up: reutiliza el token store o acuña por admin HTTP local si falta.
    - Siempre corre smoke `tools/list` y `ebrain onboard --all`.
-2. `ebrain onboard [--all|agent]` re-registra HTTP-MCP idempotente sin mostrar tokens.
+2. `ebrain onboard [--all|agent]` re-registra el bridge idempotente sin mostrar tokens ni escribir bearer en configs.
 3. Rollback local: `ebrain daemon stop` y registrar el fallback stdio con `~/.config/ebrain/gbrain-mcp` si se necesita volver al modelo anterior.
 
 ## Runbook histórico de CUTOVER (D.6 — reversible)

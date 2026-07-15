@@ -4,6 +4,15 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — F-D2 cerrado: bridge stdio→daemon sin bearer en configs + smoke OpenRouter chino
+
+- **F-D2 hardening universal cerrado:** `ebrain onboard` ya no persiste bearer/header en configs de agentes. Claude/Codex/Gemini/Cursor/OpenCode quedan registrados contra `scripts/ebrain-mcp-bridge`, un MCP stdio local que lee `EBRAIN_MCP_TOKEN` desde `~/.config/ebrain/mcp-token.env` chmod 600 en runtime y proxya al daemon HTTP-MCP `127.0.0.1:8541`. Las configs quedan command-only; el token store sigue fuera del repo.
+- **OpenCode corregido:** su schema válido es `mcp.ebrain={type:"local", command:[bridge]}` y `instructions` debe ser array o ausente. `opencode mcp list` ahora conecta por el bridge.
+- **Stack chino OpenRouter revalidado en vivo:** dry-run confirmó las cadenas `deepseek`, `moonshotai/kimi`, `minimax`, `qwen` y `z-ai/glm`; el endpoint `/models` tenía presentes los slugs primarios/floors revisados. Smokes reales por `ebrain-route --json` pasaron para `coding`, `agentic`, `long_context`, `terminal`, `general`, `web_design`, `reasoning`; `terminal` usó fallback server-side a `qwen/qwen3.7-plus`, validando la cadena de failover. Gasto mensual quedó muy por debajo del cap de USD 10.
+- **Verify:** `bun test ./cli/` = **147 pass / 0 fail**; `bun test ./tui/test/` = **360 pass / 0 fail**; `ebrain onboard --all` = 5 OK; `bun run cli/mcp-bridge.ts --probe` = 94 tools; `ebrain daemon status` UP healthy; configs conocidas + token store = chmod 600; subconfigs `ebrain` de Claude/Gemini sin patrón bearer/header/token; Cursor/OpenCode command-only y sin headers.
+
+---
+
 ## 2026-07-15 — Cierre findings FASE D: D.5.4 + F-F1 + F-D2 permisos
 
 - **D.5.4 cerrado:** `scripts/ebrain-brain` corre `cli/daemon-preflight.ts` antes de `serve --http`; lista sources con el engine local cuando el lock aún está libre y aplica `assertNoClientSources()` sobre id/name/path. Si aparece `brisas`/`dekko`, el daemon hard-falla antes de bindear HTTP. Test nuevo: `cli/daemon-preflight.test.ts`.
