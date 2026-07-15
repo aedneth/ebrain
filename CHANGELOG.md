@@ -4,6 +4,14 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — F6.6.3: target OpenCode/OpenRouter con argv declarado
+
+- **`ebrain targets`:** descubre targets declarados en manifests y construye `plan`/`launch` desde un perfil de usuario, sin inferir soporte para otros adapters.
+- **OpenCode primero:** `opencode-openrouter` usa el selector comprobado `--model provider/model`; su argv se mantiene estructurado hasta la serializacion segura requerida por tmux.
+- **Telemetria honesta:** crear una sesion registra solo un evento `untracked` atribuido. Tokens/USD se agregan despues y solo si un adapter los reporta.
+
+---
+
 ## 2026-07-15 — F6.6.2: perfiles OpenRouter locales, verificables y sin secretos
 
 - **`ebrain profiles`:** contratos `list`, `show`, `validate`, `init`, `catalog-add` y `create` para perfiles de ejecucion elegidos por el usuario.

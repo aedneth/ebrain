@@ -23,3 +23,10 @@ env:
 doctor: "opencode --version"
 guard: advisory
 launch: opencode --auto   # F6.6 — `--auto` (auto-approve) arranca en full-access por diseño: aislamiento por dir + normas gobiernan, no gates
+targets:
+  # F6.6.3: `opencode --help` verifies --model provider/model. Arguments remain structured
+  # until sessions.ts performs the final safe shell serialization required by tmux.
+  - id: opencode-openrouter
+    provider: openrouter
+    argv: [opencode, --auto]
+    model: { flag: --model, prefix: "openrouter/" }

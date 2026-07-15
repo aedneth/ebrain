@@ -13,7 +13,7 @@ import { mkdirSync, rmSync, writeFileSync, chmodSync, mkdtempSync, symlinkSync }
 import { tmpdir } from "os";
 import { join } from "path";
 import {
-  sessionName, parseSessionName, isSafeToken, isClientPath, scrubSecrets,
+  sessionName, parseSessionName, isSafeToken, isClientPath, scrubSecrets, shellCommandFromArgv,
   listSessions, newSession, peekSession, sendToSession, killSession, resolveLaunch,
   SESSION_PREFIX,
 } from "./sessions.ts";
@@ -43,6 +43,12 @@ test("isSafeToken: solo [a-zA-Z0-9_-], rechaza espacios/slashes/shell-metacaract
   expect(isSafeToken("../etc/passwd")).toBe(false);
   expect(isSafeToken("rm -rf")).toBe(false);
   expect(isSafeToken("")).toBe(false);
+});
+
+test("shellCommandFromArgv serializa argv estructurado sin permitir control chars", () => {
+  expect(shellCommandFromArgv(["opencode", "--model", "openrouter/deepseek/deepseek-v4-pro"])).toBe("'opencode' '--model' 'openrouter/deepseek/deepseek-v4-pro'");
+  expect(shellCommandFromArgv(["echo", "it's literal"])).toBe("'echo' 'it'\\''s literal'");
+  expect(() => shellCommandFromArgv(["opencode\nrm -rf /"])).toThrow("argv de launch invalido");
 });
 
 // ── deny-list de cliente (aislamiento duro, CLAUDE.md) ──────────────────────

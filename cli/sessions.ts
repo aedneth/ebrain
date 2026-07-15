@@ -164,6 +164,16 @@ export async function listSessions(): Promise<Result<{ sessions: SessionRow[] }>
 // ── resolución del comando de lanzamiento (manifest del adapter) ──────────
 export interface ManifestLaunch { cmd: string; env: Record<string, string> }
 
+/** Serialize a previously validated argv for tmux's shell-command interface. No caller should
+ * build this from free-form text: execution targets provide a structured argv and models are
+ * validated by the profile store before this boundary. */
+export function shellCommandFromArgv(argv: string[]): string {
+  if (argv.length === 0 || argv.some((arg) => typeof arg !== "string" || arg.length === 0 || /[\u0000\r\n]/.test(arg))) {
+    throw new Error("argv de launch invalido");
+  }
+  return argv.map((arg) => `'${arg.replace(/'/g, `'\\''`)}'`).join(" ");
+}
+
 // Lee `launch:` (string, comando) + `env:` (objeto, AGENT_NAME etc.) del manifest declarativo del
 // adapter — MISMO env que `ebrain harness install` documenta para ese agente (harness/core/install.sh
 // ya usa manifest-get.ts para esto; acá lo leemos directo con Bun.YAML por ser un solo archivo chico,
@@ -186,7 +196,7 @@ export async function resolveLaunch(agent: string, adaptersDir = ADAPTERS_DIR): 
 }
 
 // ── new ──────────────────────────────────────────────────────────────────
-export interface NewSessionOpts { cwd?: string; env?: Record<string, string>; launchCmd?: string; adaptersDir?: string }
+export interface NewSessionOpts { cwd?: string; env?: Record<string, string>; launchCmd?: string; launchArgv?: string[]; adaptersDir?: string }
 export interface NewSessionInfo { name: string; agent: string; slug: string; cwd: string }
 
 export async function newSession(agent: string, slug: string, opts: NewSessionOpts = {}): Promise<Result<{ session: NewSessionInfo }>> {
@@ -215,7 +225,14 @@ export async function newSession(agent: string, slug: string, opts: NewSessionOp
 
   let cmd: string;
   let env: Record<string, string>;
-  if (opts.launchCmd) {
+  if (opts.launchArgv) {
+    try {
+      cmd = shellCommandFromArgv(opts.launchArgv);
+    } catch (error) {
+      return { ok: false, error: { type: "bad-agent", message: error instanceof Error ? error.message : "argv de launch invalido" } };
+    }
+    env = { AGENT_NAME: agent, ...(opts.env ?? {}) };
+  } else if (opts.launchCmd) {
     // escape hatch de test/dev (E2E con scripts/fake-agent.sh) — NO usado por el launch flow real
     // (F6.6.1), que siempre resuelve desde el manifest. `agent` sigue siendo el nombre lógico
     // (puede no ser un adapter real, p.ej. "test") — se exporta igual como AGENT_NAME.

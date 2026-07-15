@@ -79,12 +79,12 @@ Regla de arquitectura: la TUI no lee YAML/JSONL ni secretos directo. Toda superf
 - [x] Migracion conservadora: `profiles init --yes` materializa el stack chino existente como `legacy-openrouter`, no como default universal; `EXECUTION-PROFILES.md` documenta el setup plug-and-play.
 - **Verify:** `cli/profiles.test.ts` + `cli/contract.test.ts`; smoke temporal `init -> catalog-add -> create -> validate`, permisos store/dir 600/700 y modelos no catalogados rechazados antes de guardar.
 
-## F6.6.3 — Targets agenciales reales `[ ]`
+## F6.6.3 — Targets agenciales reales `[x]`
 
-- [ ] Extender manifests con capacidad declarativa de selector de modelo, provider y argv estructurado.
-- [ ] Primer target: sesion OpenCode/OpenRouter con `--model provider/model`; otros adapters solo se habilitan despues de comprobar su CLI.
-- [ ] Registrar atribucion de agente/sesion/perfil/modelo para telemetria de tokens; no scrapea paneles ni cuotas.
-- **Verify:** E2E fake-agent valida argv y contexto; modelo no soportado o target sin selector falla antes de tmux.
+- [x] Extender manifests con capacidad declarativa de selector de modelo, provider y argv estructurado.
+- [x] Primer target: sesion OpenCode/OpenRouter con `--model provider/model`; otros adapters solo se habilitan despues de comprobar su CLI.
+- [x] `targets launch` registra un evento `untracked` con agente/sesion/modelo/capability; no inventa tokens/USD ni scrapea cuotas.
+- **Verify:** `cli/targets.test.ts`, `cli/sessions.test.ts`; argv exacto, control characters/targets no declarados/capabilities ausentes fallan antes de tmux; `ebrain targets list --json` detecta solo `opencode-openrouter`.
 
 ## F6.6.4 — Launch Wizard gobernado por usuario `[ ]`
 

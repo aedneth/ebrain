@@ -47,6 +47,7 @@ ebrain — capa unificada de harness + memoria agéntica (provider-agnostic)
   ebrain routing [--json]                                    stack OpenRouter: cadenas, modelos, pricing y gasto
   ebrain cost [--json]                                       ledger unificado por provider/agent/model/session/workflow
   ebrain profiles <list|show|validate|init|catalog-add|create> [--json] perfiles OpenRouter locales elegidos por usuario
+  ebrain targets <list|plan|launch> [--json]                  targets de adapters con selector de modelo declarado
   ebrain workflows <list|search|show|run|capture|skillify>   workflows/SOPs locales + skillify con aprobación
   ebrain fleet [--json]                                      salud + clase RAM (heavy|light) de los 6 adapters
   ebrain memory recent [--json] [--limit N]                  últimos learnings + sesiones (agent-memory + Dev Brain)
@@ -78,6 +79,7 @@ case "$cmd" in
   routing)   run_bun "$EBRAIN_HOME/cli/routing.ts" "$@" ;;
   cost)      run_bun "$EBRAIN_HOME/cli/cost.ts" "$@" ;;
   profiles)  run_bun "$EBRAIN_HOME/cli/profiles.ts" "$@" ;;
+  targets)   run_bun "$EBRAIN_HOME/cli/targets.ts" "$@" ;;
   workflows) run_bun "$EBRAIN_HOME/cli/workflows.ts" "$@" ;;
   fleet)     run_bun "$EBRAIN_HOME/cli/fleet.ts" "$@" ;;
   memory)    run_bun "$EBRAIN_HOME/cli/memory.ts" "$@" ;;

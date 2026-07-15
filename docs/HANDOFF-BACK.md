@@ -35,6 +35,14 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 - **Verify:** `cli/profiles.test.ts` cubre migracion, schema, catalogo requerido, duplicados, store invalido y permisos. Smoke temporal `init -> catalog-add -> create -> validate` confirma perfiles=2 y store/dir `600/700`. No se modifico el store real ni se hizo llamada a proveedor.
 - **Siguiente fase:** F6.6.3 declara targets reales y argv seguro por adapter; OpenCode/OpenRouter es el primer candidato verificado por `opencode --help` (`--model provider/model`).
 
+## Actualizacion 2026-07-15 — F6.6.3 target OpenCode/OpenRouter cerrado (pendiente auditoria)
+
+- **Construido:** `cli/targets.ts` expone `list`, `plan` y `launch`. Un target solo existe si un manifest declara provider, argv y selector de modelo validos; no se extrapola soporte entre CLIs.
+- **Primer target:** `harness/adapters/opencode/manifest.yaml` declara `opencode-openrouter` con argv `[opencode,--auto]` y `--model openrouter/<model>`, basado en la ayuda de la CLI instalada.
+- **Seguridad:** `sessions.shellCommandFromArgv()` recibe argv ya validado y serializa cada argumento con quoting literal para tmux; control chars, targets inexistentes y capabilities sin modelo fallan antes de crear sesion. `targets launch` exige `--yes`.
+- **Costo:** el lanzamiento inicial escribe `untracked` por provider/agente/modelo/sesion/capability porque iniciar un proceso no consume ni reporta tokens. No hubo llamada OpenRouter real en esta validacion.
+- **Verify pendiente de checker:** revisar quoting argv, prefijo `openrouter/`, deny-list que sigue en `newSession`, y que el event `untracked` no se presente como USD. Siguiente fase: F6.6.4 Launch Wizard.
+
 ## 1. Qué construí
 
 - F6.6E Unified Cost Ledger v2 (Codex maker, 2026-07-15):
