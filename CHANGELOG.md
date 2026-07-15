@@ -4,6 +4,13 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — F6.7.2: perf TUI medida y distribución decidida
+
+- **Celeron:** boot previo 0.08-0.10 s, RSS activo observado 47 MiB, CPU idle ~0.6% y peek 1 Hz ~1.8% de un core.
+- **D8:** se mantiene `bun run`; no se agrega `bun build --compile` porque no hay ganancia medible frente al costo de distribución/release.
+
+---
+
 ## 2026-07-15 — F6.7.1: hardening de edge cases TUI
 
 - **Carrera tmux cerrada:** si el servidor desaparece después de listar sesiones y antes de `peek`, la UI limpia output stale y muestra un error recuperable en lugar de presentarlo como live.

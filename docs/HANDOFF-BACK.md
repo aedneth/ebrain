@@ -71,6 +71,12 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 - **Matriz:** `docs/TUI-EDGE-CASES.md` enlaza tmux ausente/muerto, cache/lock, timeout, terminal menor a 80x24, fallback 256/ASCII y el lifecycle de restore. No se afirma un E2E de crash: queda en el checklist humano/auditor porque depende de TTY/señales reales.
 - **Residual conocido:** un bloque PEM partido por el límite de `capture-pane` puede exponer body base64 sin header/footer. No se implementó una redacción masiva que oculte output legítimo; el tradeoff debe ser evaluado por GPT-5.6-sol en el gate final.
 
+## Actualizacion 2026-07-15 — F6.7.2 perf cerrado (pendiente auditoria final)
+
+- **Medición:** se inició una TUI y fake-agent locales en tmux temporal, se navegó a Sessions y se midió `/proc/<pid>/stat` durante 5 s (`CLK_TCK=100`). RSS pico observado: 47 MiB; CPU idle: ~0.6% de un core; con `peek` a 1 Hz: ~1.8%. Las sesiones temporales fueron eliminadas al acabar. El boot 0.08-0.10 s/RSS 43 MiB de F6.3 sigue siendo la evidencia de cold boot.
+- **Decisión D8:** no se compila con `bun build --compile` en esta release. El boot ya está muy por debajo de 1.5 s y el RSS bajo 100 MiB; un binario agregaría mantenimiento sin beneficio medido. Reconsiderar solo ante regresión o requisito de distribución standalone.
+- **Rastro:** `docs/f6-success-criteria.md` inicia la matriz de 8 criterios con evidencia de maker; no es una aprobación del gate.
+
 ## 1. Qué construí
 
 - F6.6E Unified Cost Ledger v2 (Codex maker, 2026-07-15):
