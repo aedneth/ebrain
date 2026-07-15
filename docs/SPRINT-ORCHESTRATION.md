@@ -72,12 +72,12 @@ Regla de arquitectura: la TUI no lee YAML/JSONL ni secretos directo. Toda superf
 - [x] La TUI reemplaza advice por Task Profile: Enter conserva el agente seleccionado manualmente y no dispara route/sesion desde una clasificacion.
 - **Verify:** `cli/advise.test.ts`, `cli/contract.test.ts`, `tui/test/{launch,knowledge/contracts}.test.ts`; CLI 161/0, TUI 371/0; smokes `task-profile` + alias verdes. Ninguna salida incluye creditos, suscripciones, ranking ni USD de sesion.
 
-## F6.6.2 — Perfiles de ejecucion y catalogo de evidencia `[ ]`
+## F6.6.2 — Perfiles de ejecucion y catalogo de evidencia `[x]`
 
-- [ ] Nuevo contrato `ebrain profiles {list,show,validate} --json` y store local sin secretos, con permisos privados.
-- [ ] Perfil = modelos/orden/fallback/limites elegidos por el usuario; catalogo = metadata con fuente y `as_of`, sin auto-seleccion.
-- [ ] Migracion conservadora: el stack chino existente queda como perfil local heredado, no como default universal; onboarding documenta configuracion plug-and-play.
-- **Verify:** contract tests, permisos 700/600, IDs/modelos no permitidos fallan antes de ejecutar y el perfil heredado preserva la cadena actual.
+- [x] Nuevo contrato `ebrain profiles {list,show,validate,init,catalog-add,create} --json` y store local sin secretos, con permisos privados.
+- [x] Perfil = modelos/orden/fallback elegidos por el usuario; catalogo = metadata con fuente y `as_of`, sin auto-seleccion. `catalog-add` exige procedencia/fecha antes de que `create` acepte un modelo.
+- [x] Migracion conservadora: `profiles init --yes` materializa el stack chino existente como `legacy-openrouter`, no como default universal; `EXECUTION-PROFILES.md` documenta el setup plug-and-play.
+- **Verify:** `cli/profiles.test.ts` + `cli/contract.test.ts`; smoke temporal `init -> catalog-add -> create -> validate`, permisos store/dir 600/700 y modelos no catalogados rechazados antes de guardar.
 
 ## F6.6.3 — Targets agenciales reales `[ ]`
 

@@ -27,6 +27,14 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 - **Benchmark plan:** `docs/BENCHMARK-EVIDENCE-PLAN.md` difiere una integracion de evidencia opt-in post-ship. El gate exige fuente/version/fecha, costo y reproducibilidad; nunca auto-routing.
 - **Siguiente fase:** F6.6.2 perfiles locales y catalogo fechado; luego F6.6.3 target OpenCode/OpenRouter y F6.6.4 wizard.
 
+## Actualizacion 2026-07-15 — F6.6.2 perfiles locales cerrado (pendiente auditoria de fase)
+
+- **Construido:** `cli/profiles.ts` implementa `list`, `show`, `validate`, `init`, `catalog-add` y `create`; `docs/EXECUTION-PROFILES.md` describe el uso OSS.
+- **Modelo de datos:** un perfil OpenRouter contiene solo IDs de modelo, orden por capability y evidencia (`source`, `as_of`). El parser permite un schema exacto; cualquier campo desconocido (incluido material de credenciales), provider invalido, modelo no catalogado o duplicado falla antes de escribir.
+- **Migracion/eleccion:** `init --yes` migra el routing local como `legacy-openrouter`, sin usarlo como default. El usuario agrega su propia metadata al catalogo y crea perfiles con `--cap` en el orden que desea; cada mutacion exige `--yes`.
+- **Verify:** `cli/profiles.test.ts` cubre migracion, schema, catalogo requerido, duplicados, store invalido y permisos. Smoke temporal `init -> catalog-add -> create -> validate` confirma perfiles=2 y store/dir `600/700`. No se modifico el store real ni se hizo llamada a proveedor.
+- **Siguiente fase:** F6.6.3 declara targets reales y argv seguro por adapter; OpenCode/OpenRouter es el primer candidato verificado por `opencode --help` (`--model provider/model`).
+
 ## 1. Qué construí
 
 - F6.6E Unified Cost Ledger v2 (Codex maker, 2026-07-15):

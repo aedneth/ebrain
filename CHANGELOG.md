@@ -4,6 +4,15 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — F6.6.2: perfiles OpenRouter locales, verificables y sin secretos
+
+- **`ebrain profiles`:** contratos `list`, `show`, `validate`, `init`, `catalog-add` y `create` para perfiles de ejecucion elegidos por el usuario.
+- **Migracion explicita:** `profiles init --yes` convierte el routing local existente en `legacy-openrouter`; no se cambia la configuracion de nadie ni se instala un default universal.
+- **Integridad y permisos:** el catalogo exige `source` + `as_of` antes de permitir un modelo; el store estricto rechaza campos desconocidos, modelos no catalogados y duplicados. Directorio `700`, archivo `600`, escrituras atomicas.
+- **Guia OSS:** `docs/EXECUTION-PROFILES.md` documenta el setup, alta de catalogo y creacion de perfiles sin credenciales ni cuotas.
+
+---
+
 ## 2026-07-15 — F6.6.1: Task Profile explicable, sin advisor de modelos
 
 - **Nuevo `ebrain task-profile --json`:** expone tarea, senales keyword, capability seleccionada y modos de ejecucion compatibles. No devuelve agente, modelo, ranking, benchmark, credito, suscripcion ni costo de sesion.

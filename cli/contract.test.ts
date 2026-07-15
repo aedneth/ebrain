@@ -682,3 +682,48 @@ describe("ADR-005 task-profile --json", () => {
     expect(Object.keys(parsed)).not.toContain("model");
   });
 });
+
+// ── F6.6.2 ebrain profiles --json ──────────────────────────────────────────
+const ProfileEvidenceSchema = z.object({ source: z.string().min(1), as_of: z.string().datetime() });
+const ExecutionProfileSchema = z.object({
+  id: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
+  label: z.string().min(1),
+  provider: z.literal("openrouter"),
+  capabilities: z.record(z.string(), z.array(z.string().min(1)).min(1)).refine((value) => Object.keys(value).length > 0),
+  evidence: ProfileEvidenceSchema,
+});
+const ProfilesListSchema = z.object({
+  schema_version: z.literal(1),
+  initialized: z.boolean(),
+  profiles: z.array(z.object({
+    id: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/),
+    label: z.string().min(1),
+    provider: z.literal("openrouter"),
+    capabilities: z.array(z.string().min(1)),
+    models: z.number().int().nonnegative(),
+    evidence: ProfileEvidenceSchema,
+  })),
+});
+
+const profileFixture = {
+  id: "legacy-openrouter",
+  label: "Migrated OpenRouter routing",
+  provider: "openrouter",
+  capabilities: { coding: ["deepseek/deepseek-v4-pro", "qwen/qwen3-coder:free"] },
+  evidence: { source: "local-routing.yaml", as_of: "2026-07-15T00:00:00.000Z" },
+};
+
+describe("F6.6.2 profiles --json", () => {
+  test("list vacio no inicializado es una forma valida", () => {
+    expect(() => ProfilesListSchema.parse({ schema_version: 1, initialized: false, profiles: [] })).not.toThrow();
+  });
+  test("perfil migrado pasa el contrato", () => {
+    expect(() => ExecutionProfileSchema.parse(profileFixture)).not.toThrow();
+    expect(() => ProfilesListSchema.parse({ schema_version: 1, initialized: true, profiles: [{ ...profileFixture, capabilities: ["coding"], models: 2 }] })).not.toThrow();
+  });
+  test("provider/fecha/capability invalidos fallan", () => {
+    expect(ExecutionProfileSchema.safeParse({ ...profileFixture, provider: "unknown" }).success).toBe(false);
+    expect(ExecutionProfileSchema.safeParse({ ...profileFixture, evidence: { ...profileFixture.evidence, as_of: "yesterday" } }).success).toBe(false);
+    expect(ExecutionProfileSchema.safeParse({ ...profileFixture, capabilities: {} }).success).toBe(false);
+  });
+});
