@@ -14,6 +14,7 @@ import { parseKey } from "../../src/kit/input.js";
 import { displayWidth } from "../../src/kit/draw.js";
 import {
   buildFrame,
+  failSessionPeek,
   reduce,
   initialState,
   type AppState,
@@ -64,6 +65,14 @@ describe("buildSessionsView — fleet + live peek from a fixture", () => {
   test("no-tmux state is explicit (not an error)", () => {
     const frame = buildFrame(stateOn(slice({ rows: [], status: "no-tmux" })), size, t).map(strip).join("\n");
     expect(frame).toContain("tmux is not installed");
+  });
+
+  test("a tmux failure after listing clears stale peek output and is visible", () => {
+    const failed = failSessionPeek(slice({ peek: { name: ROWS[0]!.name, text: "stale output", at: 0 } }), "peek ebr-claude-korvex: no server running");
+    expect(failed.peek).toBeNull();
+    const frame = buildFrame(stateOn(failed), size, t).map(strip).join("\n");
+    expect(frame).toContain("no server running");
+    expect(frame).not.toContain("stale output");
   });
 
   test("hint bar shows the mockup's session actions", () => {

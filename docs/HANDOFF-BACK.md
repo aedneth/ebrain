@@ -65,6 +65,12 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 - **Gotchas:** el matching actual es literal por substring: `script` aparece dentro de `TypeScript`, por lo que esa señal debe ser esperada; `tools` no dispara el keyword exacto `tool-call`. No se cambió el clasificador durante esta tarea, solo se documentó y cubrió su conducta vigente.
 - **Auditar con GPT-5.6-sol al cierre:** que los diez fixtures no introduzcan ranking implícito, que cubran todas las capabilities sin duplicar IDs, y que cambiar reglas rompa la expectativa explicable correspondiente.
 
+## Actualizacion 2026-07-15 — F6.7.1 edge hardening cerrado (pendiente auditoria final)
+
+- **Fix:** la muerte de tmux entre `listSessions()` y `peekSession()` ya no deja output antiguo marcado como live. `failSessionPeek()` limpia la captura y cambia Sessions a un error recuperable con mensaje; una regresión pura lo verifica.
+- **Matriz:** `docs/TUI-EDGE-CASES.md` enlaza tmux ausente/muerto, cache/lock, timeout, terminal menor a 80x24, fallback 256/ASCII y el lifecycle de restore. No se afirma un E2E de crash: queda en el checklist humano/auditor porque depende de TTY/señales reales.
+- **Residual conocido:** un bloque PEM partido por el límite de `capture-pane` puede exponer body base64 sin header/footer. No se implementó una redacción masiva que oculte output legítimo; el tradeoff debe ser evaluado por GPT-5.6-sol en el gate final.
+
 ## 1. Qué construí
 
 - F6.6E Unified Cost Ledger v2 (Codex maker, 2026-07-15):

@@ -4,6 +4,13 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — F6.7.1: hardening de edge cases TUI
+
+- **Carrera tmux cerrada:** si el servidor desaparece después de listar sesiones y antes de `peek`, la UI limpia output stale y muestra un error recuperable en lugar de presentarlo como live.
+- **Matriz de degradación:** `docs/TUI-EDGE-CASES.md` enlaza guards para lock, timeouts, terminal pequeño, fallback 256/ASCII y restauración del terminal, incluyendo el residual acotado de PEM parcial.
+
+---
+
 ## 2026-07-15 — F6.6.6: fixtures canónicos de Task Profile
 
 - **Cobertura sin recomendador:** diez tareas versionadas ejercen las seis capacidades y comprueban exclusivamente señales explicables, capability y modos compatibles.

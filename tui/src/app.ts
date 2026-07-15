@@ -182,6 +182,12 @@ export function emptySessions(): SessionsSlice {
   return { rows: [], selected: 0, peek: null, status: "idle" };
 }
 
+/** A tmux server can disappear after list succeeds but before the next capture. Keep
+ * that race visible and clear the stale pane instead of presenting old output as live. */
+export function failSessionPeek(slice: SessionsSlice, error: string): SessionsSlice {
+  return { ...slice, peek: null, status: "error", error };
+}
+
 function sessionsOf(state: AppState): SessionsSlice {
   return state.sessions ?? emptySessions();
 }
@@ -1452,6 +1458,10 @@ export function buildSessionsView(s: SessionsSlice, rect: Rect, theme: Theme): s
   const height = rect.height;
   if (height <= 0) return [];
 
+  if (s.status === "error") {
+    return buildCenteredMessagePanel("sessions", `error: ${s.error ?? "tmux became unavailable"}`, rect, theme);
+  }
+
   // Empty / status states — a single centered message panel (NEVER a spinner-forever).
   if (s.rows.length === 0) {
     const msg =
@@ -2231,7 +2241,11 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       if (!shouldCapture(now, lastPeekAt)) return;
       lastPeekAt = now;
       const r = await peekSession(name);
-      if (!r.ok) return;
+      if (!r.ok) {
+        state = { ...state, sessions: failSessionPeek(sessionsOf(state), `peek ${name}: ${r.error.message}`) };
+        if (state.tab === "sessions") render();
+        return;
+      }
       const s = sessionsOf(state);
       state = { ...state, sessions: { ...s, peek: { name, text: r.text, at: Date.now() } } };
       if (state.tab === "sessions") render();
