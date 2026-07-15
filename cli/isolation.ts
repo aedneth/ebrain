@@ -41,7 +41,10 @@ export function federatedSources(rawSourcesList: string): string[] {
 
 /**
  * Aserción de gate: ningún source de cliente puede aparecer NUNCA en un set federado.
- * El host compartido (D.4/D.6) la corre sobre su config de sources antes de exponer MCP.
+ * Hoy la ejerce el CI test (cli/isolation.test.ts); cablearla al boot del host
+ * (scripts/ebrain-brain, antes de exponer MCP) es la tarea D.5.4, PENDIENTE.
+ * Auditoría Opus 2026-07-14: la enforcement en runtime del host aún NO está cableada
+ * — el aislamiento vivo hoy se apoya en federación default-deny + fail-check de doctor.
  */
 export function assertNoClientSources(sources: readonly string[]): void {
   const leaked = sources.filter(isClientSource);

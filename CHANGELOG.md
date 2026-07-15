@@ -4,6 +4,15 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-14 — FASE D CERRADA: `[AUDIT_PASS]` Opus (D.6 concurrencia PASS + D.7 gate) — daemon HTTP-MCP compartido
+
+- **D.6 = PASS (auditoría Opus, checker).** Desde estado frío (daemon DOWN, cero `cli.ts serve`), `ebrain up` levantó el host loopback, leyó el token sin imprimirlo, smoke `tools/list`=94, onboard 5/5. **Prueba de concurrencia (criterio 1 del ADR-004):** 6 clientes MCP `tools/list` simultáneos → los 6 = 94 tools en **0.24s** con **UN solo** `cli.ts serve --http`; `claude mcp list`=`✔ Connected` + `codex mcp list`=registrado (env-var bearer) **en paralelo**, serve count=1 durante/después. `ss` = bind `127.0.0.1:8541` loopback-only. Resuelve de raíz el "MCP nunca carga" (lock single-writer): N clientes MCP servidos por UN dueño del lock, sin colgarse.
+- **D.7 = `[AUDIT_PASS]` (Opus).** Los 4 gates GO satisfechos: (1) ≥2 agentes concurrentes ✔ · (2) serve HTTP auth+loopback auditado ✔ · (3) RAM viable ✔ (host idle ~9MB, 1428MB avail, governor un-heavy intacto) · (4) aislamiento cliente con test ✔ (con caveat). Suites: `bun test ./cli/` 135/0, `./tui/test/` 360/0. Idempotencia `ebrain up`×2 + `onboard --all`×2 limpia. Secret-safety: cero token en tracked/`daemon.log`; store fuera del repo chmod 600. **Fable 5 = segundo checker PENDIENTE (lo dispara Eduardo).**
+- **Findings de auditoría:** **F-D1 (media/baja):** `assertNoClientSources()` no está cableada al boot del host — solo la ejerce el CI test; los docs lo sobre-afirmaban como "enforced en runtime". Corregidos D.5.3 + docstring de `cli/isolation.ts`; abierta **D.5.4** (maker/Codex) para cablearla al preflight de `ebrain-brain`. No es leak activo (probe vivo = cero cliente). **F-D2 (baja):** claude/gemini/opencode/cursor guardan el bearer en reposo en sus configs; solo codex usa indirección env-var → item de hardening antes del release público.
+- **Verify:** ver `docs/SPRINT-DAEMON.md` D.6/D.7 + findings; `docs/HANDOFF-BACK.md` §Audit result (Opus).
+
+---
+
 ## 2026-07-14 — P2 FASE D: doctor/harness ve el daemon + rename superficial de launchers
 
 - **D.2.4 / D.4.3:** `ebrain doctor --json` ahora reporta `daemon:status`, launchers del daemon y modo MCP por adapter (`adapter:<agent>:mcp = http-daemon`). `ebrain harness status` muestra el modo MCP declarado por los manifests. Verificado: daemon OK, claude/codex/gemini/cursor/opencode con `MCP=http-daemon`.

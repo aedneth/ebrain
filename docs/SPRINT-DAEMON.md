@@ -4,7 +4,7 @@ project: ebrain
 program: FD — Daemon compartido HTTP-MCP (fuera de F6)
 created: 2026-07-14
 modified: 2026-07-14
-status: proposed
+status: audit-pass (Opus 2026-07-14) · Fable 5 pendiente
 tags: [ebrain, daemon, mcp, http, pglite, lock, sprint, tareas]
 related: [adr/ADR-004-shared-brain-daemon.md, adr/ADR-001-brain-topology.md, adr/ADR-002-unified-harness.md, SPRINT-TUI.md]
 ---
@@ -130,18 +130,29 @@ Entregado: `cli/isolation.ts` (módulo puro, SoT de los invariantes) + `cli/isol
 
 - [x] D.5.1 **Default-deny de federación (ADR-001):** `federatedSources(raw)` (fn pura que espeja el filtro `federated · !default · !cliente` de ebrain-q) + `assertNoClientSources(list)` (aserción que TIRA si un source de cliente se cuela). **Verify:** test rojo si un source deny aparece; verde con el set limpio.
 - [x] D.5.2 **Aislamiento de repos de cliente (dos planos):** (a) plano-sesión — `isClientPath` bloquea literal/subpath/case + **cierra el gap F6.4.8**: un symlink de nombre inocente que RESUELVE a brisas/dekko se deniega (test con symlink real en tmp). (b) plano-source — `isClientSource` deniega nombres de source de cliente incl. `code-graph/brisas-del-golfo` (el vector del Dev Brain, ADR-001 §Frontera). **Verify:** brisas/dekko ausentes de todo set federado.
-- [x] D.5.3 **GATE criterio 4:** los tests corren en la suite CI (`bun test ./cli/isolation.test.ts` = 6/6). **Enforce (no solo doc):** el host compartido (D.4/D.6) corre `assertNoClientSources()` sobre su config de sources ANTES de exponer MCP — el invariante queda enforced en código.
+- [x] D.5.3 **GATE criterio 4:** los tests corren en la suite CI (`bun test ./cli/isolation.test.ts` = 6/6). **Nivel de enforcement (corregido en auditoría Opus 2026-07-14):** el invariante está cubierto por (a) el CI test del módulo puro, (b) federación default-deny en el discovery de sources (ebrain-q), y (c) el fail-check vivo de `doctor.sh` (`grep -qiE 'brisas|dekko'` cuando el lock está libre). **NO** hay todavía una aserción en el boot del host que hard-falle el daemon si un source de cliente aparece → ver D.5.4. Verificación viva: `ebrain q "brisas dekko cliente" 3` contra el canal compartido = cero contenido de cliente.
+- [ ] D.5.4 **(follow-up, maker/Codex)** Cablear `assertNoClientSources()` (de `cli/isolation.ts`) al preflight de `scripts/ebrain-brain`: listar los sources configurados del engine y hard-fallar el boot ANTES de `serve --http` si alguno es de repo-cliente. Cierra el gap entre la afirmación "enforced en código" y la realidad (finding F-D1). **Verify:** un source `brisas`/`dekko` inyectado en config de test hace que `ebrain daemon start` rehúse con rc≠0.
 
-## FASE D.6 — CUTOVER en vivo (`[HUMANO]` + Opus, juntos — runbook abajo)  `[ ]`
+## FASE D.6 — CUTOVER en vivo (`[HUMANO]` + Opus, juntos — runbook abajo)  `[x]`
 
-- [ ] D.6.1 Ejecutar el runbook de cutover (reversible). **Verify:** ≥2 agentes lanzados cargan el MCP concurrentemente **sin colgarse** (el criterio 1). 
-- [ ] D.6.2 Confirmar que la TUI/CLI lock-aware sigue sana (status/doctor/memory contra el host). **Verify:** paneles vivos.
+- [x] D.6.1 Runbook de cutover ejecutado (reversible). **Auditoría Opus 2026-07-14 — PASS:** desde estado frío (daemon DOWN, cero `cli.ts serve`), `ebrain up` levantó el host, leyó el token (nunca impreso), smoke `tools/list`=94, onboard 5/5. **Prueba de concurrencia (criterio 1):** 6 clientes MCP `tools/list` simultáneos → los 6 devolvieron 94 tools en 0.24s con **UN solo** `cli.ts serve --http`; + `claude mcp list`=`✔ Connected` y `codex mcp list`=registrado (env-var bearer) **en paralelo**, serve count = 1 durante y después. `ss` confirma bind loopback `127.0.0.1:8541`.
+- [x] D.6.2 TUI/CLI lock-aware sana. **Verify:** `ebrain status --json` = `brain.state=up · served_by=mcp:<pid>`, fleet 6/6, memoria legible (8 learnings/39 sessions); `ebrain doctor --json` rc=0, 28 ok / 3 warn (`sources:isolation` diferido por lock = esperado), `daemon:status ok`, 5 adapters `MCP=http-daemon`. Idempotencia: `ebrain up`×2 + `ebrain onboard --all`×2 sin duplicar ni romper.
 
-## FASE D.7 — GATE + auditoría  `[ ]`
+## FASE D.7 — GATE + auditoría  `[x]`
 
-- [ ] D.7.1 GATE FD `[AUDIT_PASS]`: los 4 criterios satisfechos + suite verde + cero-hex (si tocó TUI).
-- [ ] D.7.2 **Fable 5** audita la fase (maker≠checker), + la auditoría profunda 6.5→ que Eduardo pidió.
-- [ ] D.7.3 CHANGELOG + `ebrain remember` del aprendizaje (lock single-writer → daemon HTTP-MCP).
+- [x] D.7.1 **GATE FD `[AUDIT_PASS]` (Opus, checker, 2026-07-14):** los 4 criterios GO satisfechos —
+  (1) ≥2 agentes concurrentes = PASS (D.6.1); (2) serve HTTP auth+loopback auditado = PASS (D.2.3 + `ss` loopback);
+  (3) RAM viable = PASS (D.1; host idle ~9MB, 1428MB avail con daemon up, governor un-heavy intacto);
+  (4) aislamiento cliente con test = PASS a nivel test+vivo (D.5) **con caveat**: la enforcement en boot del host
+  queda pendiente (D.5.4) — es defensa-en-profundidad, no un leak activo. Suites verdes: `bun test ./cli/` 135/0,
+  `bun test ./tui/test/` 360/0. TUI no tocado → cero-hex n/a. Secret-safety: sin token en archivos tracked ni en
+  `daemon.log`; store fuera del repo, chmod 600.
+- [ ] D.7.2 **Fable 5** audita la fase (segundo checker, maker≠checker) — PENDIENTE (lo dispara Eduardo).
+- [x] D.7.3 CHANGELOG + `ebrain remember` del aprendizaje (lock single-writer → daemon HTTP-MCP). Hecho por Opus en el cierre de auditoría.
+
+### Findings de auditoría (Opus 2026-07-14)
+- **F-D1 (isolation enforcement, media/baja):** `assertNoClientSources()` NO está cableada al boot del host; solo la ejerce el CI test. Los docs (D.5.3 + docstring de `cli/isolation.ts`) lo afirmaban como "enforced en runtime". **Acción checker:** corregidas ambas afirmaciones + abierta D.5.4 (maker). No es leak activo (probe vivo por canal compartido = cero cliente).
+- **F-D2 (token en reposo, baja):** claude/gemini/opencode/cursor guardan el valor del bearer en sus configs (`~/.claude.json`, settings de gemini, `~/.cursor/mcp.json` [chmod 600], config de opencode); solo **codex** usa indirección por env-var (`--bearer-token-env-var`). Aceptable para loopback-local P1; **item de hardening antes del release público** (preferir indirección por env/secret-store o token de vida corta rotable).
 
 ━━━
 

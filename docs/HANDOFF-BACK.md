@@ -101,3 +101,31 @@ No toqué TUI source; cero-hex no aplica a este cambio, aunque la suite TUI comp
 - Arquitectura:
   - La decisión bearer-local es aceptable para loopback P1.
   - Cursor/OpenCode con header literal en config es el mejor compromiso actual o requiere un store/env nativo por agente.
+
+━━━
+
+## 7. Audit result (Opus, checker — 2026-07-14)
+
+**Veredicto: `[AUDIT_PASS]` para FASE D (daemon HTTP-MCP). Fable 5 = segundo checker, PENDIENTE.**
+
+### D.6 concurrencia — PASS (evidencia)
+- Estado frío verificado antes del test: daemon DOWN, **cero** `cli.ts serve`, token store presente chmod 600, 1428 MB avail.
+- `ebrain up` (cold boot): daemon UP · token leído del store (nunca impreso) · smoke `tools/list`=94 · onboard 5/5 `registered`.
+- Idempotencia: `ebrain up`×2 y `ebrain onboard --all`×2 → limpio, sin duplicados ni errores (opencode confirmado upsert-tolerante en vivo).
+- **Criterio 1 (≥2 agentes concurrentes sin colgarse):** 6 clientes MCP `tools/list` simultáneos → los 6 = 94 tools en **0.24s**, `serve` count = **1**. `claude mcp list`=`✔ Connected` + `codex mcp list`=registrado (env-var bearer), **en paralelo**, serve=1 mid-handshake y después.
+- Invariante single-writer: `ss` = `127.0.0.1:8541` loopback-only, un `bun` PID dueño; char-class pgrep = 1 serve real.
+- Aislamiento vivo por el canal compartido: `ebrain q "brisas dekko cliente" 3` = cero contenido de cliente.
+- `ebrain status --json` = brain up / served_by mcp / fleet 6/6 / memoria legible; `ebrain doctor --json` rc=0 (28 ok / 3 warn; `sources:isolation` diferido por lock = esperado).
+
+### D.7 gate — los 4 criterios GO
+1. ≥2 concurrentes = **PASS**. 2. serve HTTP auth+loopback = **PASS**. 3. RAM = **PASS**. 4. aislamiento con test = **PASS (con caveat F-D1)**.
+- Suites: `bun test ./cli/` 135/0 · `bun test ./tui/test/` 360/0. TUI no tocado → cero-hex n/a.
+- Secret-safety: sin token en archivos tracked ni en `daemon.log`; store fuera del repo, chmod 600.
+
+### Findings (para que el maker cierre)
+- **F-D1 (media/baja) — enforcement de aislamiento no cableada al runtime.** `assertNoClientSources()`/`isClientSource`/`federatedSources` viven en `cli/isolation.ts` pero **solo los llama el CI test** — NO el boot del host. D.5.3 y el docstring de `cli/isolation.ts` lo afirmaban como "enforced en runtime, no solo doc": overstatement. **Corregido por Opus** (docs ajustados) + **abierta D.5.4**: cablear la aserción al preflight de `scripts/ebrain-brain` (listar sources del engine, hard-fallar boot si hay cliente). No es leak activo. → **Codex: implementar D.5.4.**
+- **F-D2 (baja) — token bearer en reposo en configs de agente.** claude/gemini/opencode/cursor guardan el valor del token en sus configs (`~/.claude.json`, settings gemini, `~/.cursor/mcp.json` [chmod 600], config opencode). Solo **codex** usa indirección `--bearer-token-env-var` (lo correcto). Aceptable para loopback-local P1; **hardening antes del release público**: preferir indirección env/secret-store o token corto rotable para todos los adapters. → backlog open-source.
+
+### Pendiente tras esta auditoría
+- **Fable 5** corre como segundo checker sobre FASE D (lo dispara Eduardo).
+- Codex: **D.5.4** (F-D1) + P1 restante (`ebrain up` installer `curl | sh`) + P3/TUI 6.6.
