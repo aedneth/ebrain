@@ -115,7 +115,8 @@ const LAUNCH_HINTS: HintEntry[] = [
 const MEMORY_HINTS: HintEntry[] = [
   { k: "tab", label: "focus box" },
   { k: "↑↓", label: "navigate" },
-  { k: "enter", label: "open" },
+  { k: "enter", label: "open/run" },
+  { k: "a", label: "attach workflow" },
   { k: "r", label: "remember" },
 ];
 const ROUTING_HINTS: HintEntry[] = [{ k: "↑↓", label: "caps" }];

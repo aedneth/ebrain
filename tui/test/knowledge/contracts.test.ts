@@ -19,6 +19,8 @@ import {
   parseAdvice,
   parseRouteRun,
   parseMemory,
+  parseWorkflows,
+  parseWorkflowRun,
 } from "../../src/knowledge/contracts.ts";
 
 describe("parseStatus (status --json)", () => {
@@ -223,5 +225,39 @@ describe("parseMemory (memory recent --json)", () => {
     const p = parseMemory({})!;
     expect(p.learnings).toEqual([]);
     expect(p.sessions).toEqual([]);
+  });
+});
+
+describe("parseWorkflows (workflows list/run --json)", () => {
+  const workflow = {
+    id: "second-brain-structured-agentic-development",
+    title: "Structured Agentic Development",
+    source: "second-brain",
+    version: 3,
+    trigger: "Use when building software.",
+    summary: "Plan, implement, verify and audit.",
+    tags: ["workflow", "sop"],
+    steps: 4,
+    gates: 2,
+  };
+
+  test("normalizes summaries and ignores malformed rows", () => {
+    const d = parseWorkflows({ workflows: [workflow, { id: "missing-title" }] })!;
+    expect(d.workflows).toHaveLength(1);
+    expect(d.workflows[0]!.title).toBe("Structured Agentic Development");
+    expect(d.workflows[0]!.steps).toBe(4);
+  });
+
+  test("normalizes a materialized prompt without treating it as execution", () => {
+    const d = parseWorkflowRun({
+      id: workflow.id,
+      title: workflow.title,
+      version: 3,
+      prompt: "Use ebrain workflow: Structured Agentic Development",
+      checklist: ["1. Plan", "Gate: tests"],
+    })!;
+    expect(d.prompt).toContain("Use ebrain workflow");
+    expect(d.checklist).toHaveLength(2);
+    expect(parseWorkflowRun({ id: "x", title: "x" })).toBeNull();
   });
 });

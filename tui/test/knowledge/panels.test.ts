@@ -76,19 +76,25 @@ describe("Memory panel (6.5.2)", () => {
         ],
         sessions: [{ ts: "2026-07-14T12:45:46Z", project: "sb", agent: "claude", commit: "abc1234", summary: "refactor router" }],
       },
+      workflows: {
+        workflows: [{ id: "second-brain-structured-agentic-development", title: "Structured Agentic Development", source: "second-brain", version: 2, trigger: "Use for software", summary: "Plan then verify", tags: ["sop"], steps: 4, gates: 2 }],
+      },
       selected: 0,
+      workflowSelected: 0,
       status: "ready",
     },
   });
 
-  it("renders results, session-logs, the search box and the remember hint", () => {
+  it("renders results, workflows, session-logs, the search box and the remember hint", () => {
     const t = frameText(state);
     expect(t).toContain("deepseek v3 falla con tool-use paralelo");
     expect(t).toContain("results");
     expect(t).toContain("session-logs");
+    expect(t).toContain("workflows");
+    expect(t).toContain("Structured Agentic Dev");
     expect(t).toContain("07-14 12:45");
     expect(t).toContain("refactor router");
-    expect(t).toContain("r → remember");
+    expect(t).toContain("r remember");
     expect(t).toContain("semantic search"); // informational PromptBox placeholder
   });
 });
@@ -216,6 +222,22 @@ describe("reduce — knowledge-panel keys", () => {
     });
     expect(reduce(s, { name: "down" }).state.memory!.selected).toBe(1);
     expect(reduce({ ...s, memory: { ...s.memory!, selected: 1 } }, { name: "up" }).state.memory!.selected).toBe(0);
+  });
+
+  it("memory workflow focus runs a materialized prompt or attaches it to Launch", () => {
+    const s = base("memory", {
+      focusRegion: 1,
+      memory: {
+        data: { learnings: [], sessions: [] },
+        workflows: { workflows: [{ id: "local-dev-sop", title: "Dev SOP", source: "local", version: 1, trigger: "Use it", summary: "Plan", tags: [], steps: 2, gates: 1 }] },
+        selected: 0,
+        workflowSelected: 0,
+        logSelected: 0,
+        status: "ready",
+      },
+    });
+    expect(reduce(s, { name: "enter" }).effect).toEqual({ type: "runWorkflow", id: "local-dev-sop" });
+    expect(reduce(s, { name: "char", char: "a" }).effect).toEqual({ type: "attachWorkflow", id: "local-dev-sop" });
   });
 
   it("memory `r` opens the remember composer; enter emits a remember effect", () => {

@@ -350,3 +350,73 @@ export function parseMemory(j: unknown): MemoryData | null {
     }));
   return { learnings, sessions };
 }
+
+// ---------------------------------------------------------------------------
+// Workflows (workflows list/run --json) — user-local SOPs with explicit execution
+// ---------------------------------------------------------------------------
+
+export interface WorkflowSummaryData {
+  id: string;
+  title: string;
+  source: string;
+  version: number;
+  trigger: string;
+  summary: string;
+  tags: string[];
+  steps: number;
+  gates: number;
+}
+
+export interface WorkflowsData {
+  workflows: WorkflowSummaryData[];
+}
+
+export interface WorkflowRunData {
+  id: string;
+  title: string;
+  version: number;
+  prompt: string;
+  checklist: string[];
+}
+
+function parseWorkflowSummary(v: unknown): WorkflowSummaryData | null {
+  if (!isObj(v)) return null;
+  const id = asStr(v.id);
+  const title = asStr(v.title);
+  if (!id || !title) return null;
+  return {
+    id,
+    title,
+    source: asStr(v.source, "local"),
+    version: asNum(v.version, 1),
+    trigger: asStr(v.trigger),
+    summary: asStr(v.summary),
+    tags: asArr(v.tags).map((tag) => asStr(tag)).filter(Boolean),
+    steps: asNum(v.steps),
+    gates: asNum(v.gates),
+  };
+}
+
+/** Parse `ebrain workflows list --json`; malformed rows are ignored defensively. */
+export function parseWorkflows(j: unknown): WorkflowsData | null {
+  if (!isObj(j)) return null;
+  return {
+    workflows: asArr(j.workflows).map(parseWorkflowSummary).filter((w): w is WorkflowSummaryData => w !== null),
+  };
+}
+
+/** Parse `ebrain workflows run <id> --json`; run only materializes a prompt, never executes it. */
+export function parseWorkflowRun(j: unknown): WorkflowRunData | null {
+  if (!isObj(j)) return null;
+  const id = asStr(j.id);
+  const title = asStr(j.title);
+  const prompt = asStr(j.prompt);
+  if (!id || !title || !prompt) return null;
+  return {
+    id,
+    title,
+    version: asNum(j.version, 1),
+    prompt,
+    checklist: asArr(j.checklist).map((item) => asStr(item)).filter(Boolean),
+  };
+}

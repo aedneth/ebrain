@@ -38,19 +38,19 @@ Regla de arquitectura: la TUI no lee YAML/JSONL ni secretos directo. Toda superf
 - [x] Frontier sigue confirm-only.
 - Tests: `tui/test/launch.test.ts`.
 
-## F6.6C — Workflow/Skill memory `[ ]`
+## F6.6C — Workflow/Skill memory `[x]`
 
-- [ ] Contrato `ebrain workflows list/search/show/run --json`.
-- [ ] Ingesta inicial de SOPs/workflows de Second Brain + Company Brain como workflows versionados.
-- [ ] `ebrain workflows capture`: extraer candidatos desde session logs + memories.
-- [ ] `ebrain workflows skillify`: generar skill local (`SKILL.md` + assets/scripts) con aprobación humana.
-- [ ] TUI Memory/Workflow panel: browse, run, attach-to-launch.
+- [x] Contrato `ebrain workflows list/search/show/run --json`.
+- [x] Ingesta inicial de SOPs/workflows de Second Brain + Company Brain como workflows versionados.
+- [x] `ebrain workflows capture`: extraer candidatos desde session logs + memories.
+- [x] `ebrain workflows skillify`: generar skill local (`SKILL.md`) con aprobación humana explícita (`--yes`). Assets/scripts permanecen curados manualmente.
+- [x] TUI Memory/Workflow panel: browse, materialize prompt, attach-to-launch.
 
-## F6.6D — Hermes-inspired learning loop `[ ]`
+## F6.6D — Hermes-inspired learning loop `[x]`
 
-- [ ] Documentar adaptación ebrain del patrón Hermes: conversación → learning → workflow → skill.
-- [ ] Proponer workflows repetidos, nunca escribir skills sin confirmación.
-- [ ] Integrar con skills federadas existentes (`list_skills`/`get_skill`) y `ebrain remember`.
+- [x] Documentar adaptación ebrain del patrón Hermes: conversación → learning → workflow → skill (`WORKFLOW-LEARNING-LOOP.md`).
+- [x] Proponer workflows repetidos, nunca escribir skills sin confirmación.
+- [x] Integrar con skills federadas existentes (`list_skills`/`get_skill`) y `ebrain remember`.
 
 ## F6.6E — Unified cost ledger v2 `[ ]`
 

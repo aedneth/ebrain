@@ -4,6 +4,16 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — F6.6C/D: workflow memory versionada + learning loop con aprobacion
+
+- **`ebrain workflows`:** nuevo contrato JSON para `ingest`, `list`, `search`, `show`, `run`, `capture` y `skillify`. Descubre SOPs/workflows privados en runtime, guarda solo una representacion redactada y versionada en `~/.config/ebrain/workflows` (`700`/`600`), y nunca agrega ese contenido al repo.
+- **Ejecucion deliberada:** `run` materializa prompt/checklist sin ejecutar nada. `skillify` escribe un `SKILL.md` local solo tras `--yes`; candidatos de `capture` requieren repeticion y son propuestas, no automatizaciones.
+- **Memory UI:** nuevo panel workflows junto a learnings/session logs. Tab enfoca paneles; Enter previsualiza el prompt y `a` lo adjunta a Launch para que routing/lanzamiento sigan siendo explicitos.
+- **Loop documentado:** `docs/WORKFLOW-LEARNING-LOOP.md` fija la adaptacion Hermes: sesion -> learning -> workflow -> skill, el puente hacia `list_skills`/`get_skill` y los guardrails de secretos, aislamiento y maker != checker.
+- **Verify:** contratos CLI + parsers/reducer/render TUI cubiertos; las suites completas y el gate externo quedan requeridos antes de merge.
+
+---
+
 ## 2026-07-15 — F6.6A/B: OpenRouter stack operable en Routing + Launch task router
 
 - **Nuevo `ebrain routing --json`:** contrato read-only para el stack chino OpenRouter: capacidades, chains winner/fallback/floor, pricing verificado cuando existe, gasto MTD, remaining cap y comando operable. La TUI ya no necesita leer `routing.yaml`/`spend.jsonl` directo.

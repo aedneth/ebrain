@@ -6,13 +6,20 @@ to: Opus (Claude Code, auditor) + Fable 5 (gate)
 created: 2026-07-14
 updated: 2026-07-15
 status: ready-for-audit
-scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A/B orchestration UX
+scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-D orchestration UX + workflow learning loop
 ---
 
 # HANDOFF-BACK — daemon work + audit-finding closure
 
 ## 1. Qué construí
 
+- F6.6C/D Workflow/Skill memory (Codex maker, 2026-07-15):
+  - Nuevo `cli/workflows.ts` y superficie `ebrain workflows {ingest,list,search,show,run,capture,skillify} --json`.
+  - `ingest` descubre SOPs/workflows en roots locales de Second Brain y Company Brain, persiste registros versionados en `~/.config/ebrain/workflows` (directorio 700, registros 600) y redacta contenido antes de guardarlo/materializarlo.
+  - Los IDs incluyen scope del root (`workflows`, `sops`, `ckis`, `backlog`) para que paths relativos homonimos no se sobrescriban.
+  - `run` genera prompt/checklist, sin ejecutar shell, proveedor ni agente. `capture` solo propone candidatos repetidos desde learnings/sessions. `skillify` solo escribe un `SKILL.md` local con `--yes` explicito.
+  - Memory TUI consume el contrato por `knowledge/run.ts`: paneles learnings/workflows/session logs; Tab cambia foco, Enter previsualiza el prompt y `a` lo adjunta a Launch. Adjuntar no llama al advisor, OpenRouter ni tmux.
+  - Nuevo `docs/WORKFLOW-LEARNING-LOOP.md`: adaptacion de Hermes conversation -> learning -> workflow -> skill, con integration de `ebrain remember` y skills federadas (`list_skills`/`get_skill`).
 - F6.6A/B Orchestration UX (Codex maker, 2026-07-15):
   - `cli/routing.ts`: nuevo contrato `ebrain routing --json` para exponer el stack OpenRouter como capacidades operables: winner/fallback/floor, pricing, gasto MTD, remaining y comando.
   - Routing tab consume `routing --json`; ya muestra chains reales del stack chino y no lee YAML/JSONL directo.
@@ -64,6 +71,10 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A/B orchestration UX
 
 ## 2. Decisiones y por qué
 
+- **Workflow store local redactado, no vault ni repo:** los SOPs de Eduardo permanecen privados; ebrain versiona su representacion local para la experiencia diaria, con hash/version y permisos restrictivos, sin convertir el vault en artefacto open-source.
+- **Materializar antes de actuar:** Enter y `workflows run` devuelven texto revisable. El traspaso a Launch es una segunda accion y ejecutar un route o sesion sigue sus propios candados. Esto mantiene workflows como memoria operable, no autonomia implicita.
+- **Skillify con `--yes`, assets/scripts manuales:** un candidato repetido no es evidencia suficiente para publicar automatizacion. La conversion a skill requiere aprobacion humana y la curacion de artefactos adicionales permanece deliberada.
+- **Scope en IDs por root:** Second Brain y Company Brain tienen varios roots; el mismo path relativo en `workflows` y `sops` debe representar dos workflows distintos, no una actualizacion falsa del mismo registro.
 - **Thin-client separado, no `remote_mcp` en `~/.gbrain/config.json`:** el host necesita el config local real para poder correr `gbrain serve`; si `remote_mcp` vive en ese mismo config, upstream considera la instalación thin-client y rehúsa `serve`. Por eso ebrain separa el plano: host = `~/.gbrain`; ops CLI = `GBRAIN_HOME=~/.config/ebrain/gbrain-thin`.
 - **OAuth client para ops CLI, bearer store para bridge de agentes:** upstream `callRemoteTool` usa OAuth client_credentials, no el bearer legacy de `EBRAIN_MCP_TOKEN`. Se registra un client local pre-bind para CLI/write-back y se guarda el secret en env file 600. Los agentes no reciben ese secret: hablan stdio con `ebrain-mcp-bridge`, y el bridge lee el bearer local desde el token store 600.
 - **Write-back chico por `put_page`, no `gbrain sync`:** `sync` es localOnly/thin-refused; bajo daemon pelearía el lock. Para `remember` y sesiones nuevas, `put_page` da búsqueda inmediata sin abrir PGLite local.
@@ -78,6 +89,9 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A/B orchestration UX
 
 ## 3. Gotchas nuevos
 
+- `workflows` tiene roots hermanos del mismo brain; no usar solo `source + relative path` como identidad. Incluir scope del root evita que `workflows/release.md` y `sops/release.md` se pisen.
+- El parser de flags no puede excluir `rest[-1 + 1]`: sin `--limit`/`--min-count` eso descarta el primer posicional. `parseArgs()` ahora construye posicionales de forma explicita y hay regresion para `run`, `skillify` y search multi-word.
+- El store y los prompts deben pasar por `scrubSecrets` incluso si el input es Markdown local: una ruta confiable no garantiza contenido seguro de volver a publicar por MCP.
 - No escribir `remote_mcp` en el config host (`~/.gbrain/config.json`) en esta topología: rompe `gbrain serve`. Usar el `GBRAIN_HOME` thin-client separado.
 - `gbrain query` thin-client necesita `--source-id`, no `--source`; el wrapper viejo etiquetaba resultados con el source iterado aunque la búsqueda no estuviera scoped.
 - Con `set -o pipefail`, `sort | awk | head` puede terminar en rc 141 por SIGPIPE aunque haya resultados correctos. `ebrain-q` lo neutraliza al final del pipeline.
@@ -94,6 +108,12 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A/B orchestration UX
 
 ## 4. Tests y verificación
 
+- F6.6C/D:
+  - `bun test ./cli/` → 169 pass / 0 fail.
+  - `bun test ./tui/test/` → 369 pass / 0 fail.
+  - Focal: `bun test ./cli/workflows.test.ts ./cli/contract.test.ts` → 60 pass / 0 fail; `bun test ./tui/test/knowledge/contracts.test.ts ./tui/test/knowledge/panels.test.ts` → 34 pass / 0 fail.
+  - Smoke aislado contra `docs/` en store temporal: ingest=37, list limitado=2, `run` devuelve id/titulo/checklist/prompt, capture=0 candidatos y `skillify` sin `--yes` rc=2. No se ingirieron ni mostraron SOPs privados.
+  - `git diff --check` limpio; cero-hex TUI limpio (`rg` sin matches fuera de `theme.ts`).
 - F6.6A/B focused:
   - `bun test cli/routing.test.ts cli/contract.test.ts cli/advise.test.ts cli/spend.test.ts` → 69 pass / 0 fail.
   - `bun test ./tui/test/launch.test.ts ./tui/test/knowledge/contracts.test.ts ./tui/test/knowledge/panels.test.ts ./tui/test/app.test.ts` → 71 pass / 0 fail.
@@ -151,7 +171,6 @@ TUI source sí fue tocado en F6.6A/B; cero-hex aplicó y salió limpio.
 ## 5. Pendientes
 
 - Auditoría Opus del corte F6.6A/B antes de considerar merge de UX.
-- F6.6C/D: workflow/skill memory nativa (ver `docs/SPRINT-ORCHESTRATION.md`).
 - F6.6E: cost ledger v2 por proveedor/agente/modelo/sesión/workflow.
 - Auditoría Opus + Fable del cierre F-D2 bridge: revisar `cli/mcp-bridge.ts`, `cli/up.ts`, configs command-only y secreto fuera de repo.
 - Installer `curl -fsSL ... | sh` todavía pendiente.
@@ -159,6 +178,12 @@ TUI source sí fue tocado en F6.6A/B; cero-hex aplicó y salió limpio.
 
 ## 6. Qué auditar
 
+- F6.6C/D:
+  - `cli/workflows.ts` nunca escribe ni imprime secretos; `workflowFromMarkdown`, capture y skillify trabajan sobre contenido redactado.
+  - `ingest` rechaza paths de cliente y los IDs scoped no colisionan entre roots hermanos.
+  - `run` es solo materializacion de texto; `skillify` exige `--yes` y crea archivos locales 600.
+  - `tui/src/knowledge/run.ts` es el unico I/O de workflows; `buildMemoryView` no lee vault/fs y `a` solo adjunta el prompt a Launch.
+  - Verificar que las afirmaciones de `WORKFLOW-LEARNING-LOOP.md` sobre skillpack/MCP coinciden con el wiring actual de skills federadas.
 - F6.6A/B:
   - `cli/routing.ts` no llama a proveedores ni lee secretos; solo agrega config/ledger/pricing.
   - Routing tab consume `fetchRouting()`/`parseRouting()`, no `routing.yaml`/`spend.jsonl`.

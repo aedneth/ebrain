@@ -1,7 +1,7 @@
 /**
  * cli/contract.test.ts — contrato JSON unificado (SPRINT-TUI 6.1.8, extendido en 6.1.6/6.1.7):
- * valida con zod el schema de los `--json` de F6.1+ (status/doctor/spend/routing/fleet/memory recent/
- * sessions list+peek+mutate/advise) contra fixtures.
+ * valida con zod el schema de los `--json` de F6.1+ (status/doctor/spend/routing/workflows/
+ * fleet/memory recent/sessions list+peek+mutate/advise) contra fixtures.
  *
  * Por qué FIXTURES y no spawns en vivo de los scripts reales: harness/core/doctor.sh invoca
  * contract-test.sh como uno de sus propios checks, y contract-test.sh (después de F6.1.8) corre
@@ -241,6 +241,120 @@ describe("6.6A routing --json", () => {
       }],
     };
     expect(RoutingSchema.safeParse(fixture).success).toBe(false);
+  });
+});
+
+// ── 6.6C ebrain workflows --json ────────────────────────────────────────────
+const WorkflowSummarySchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  source: z.enum(["second-brain", "company-brain", "local", "captured"]),
+  version: z.number().int().positive(),
+  trigger: z.string(),
+  summary: z.string(),
+  tags: z.array(z.string()),
+  steps: z.number().int().nonnegative(),
+  gates: z.number().int().nonnegative(),
+});
+const WorkflowRecordSchema = WorkflowSummarySchema.extend({
+  schema_version: z.literal(1),
+  source_path: z.string(),
+  content_hash: z.string().regex(/^[0-9a-f]{64}$/),
+  updated_at: z.string(),
+  steps: z.array(z.string()),
+  gates: z.array(z.string()),
+  body: z.string(),
+});
+const WorkflowsListSchema = z.object({
+  workflows: z.array(WorkflowSummarySchema),
+});
+const WorkflowsIngestSchema = z.object({
+  ingested: z.number().int().nonnegative(),
+  changed: z.number().int().nonnegative(),
+  workflows: z.array(WorkflowSummarySchema),
+  store_dir: z.string(),
+});
+const WorkflowsSearchSchema = z.object({
+  query: z.string(),
+  workflows: z.array(WorkflowSummarySchema.extend({ score: z.number().positive() })),
+});
+const WorkflowsShowSchema = z.object({
+  workflow: WorkflowRecordSchema,
+});
+const WorkflowsRunSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  version: z.number().int().positive(),
+  prompt: z.string().min(1),
+  checklist: z.array(z.string()),
+});
+const WorkflowsCaptureSchema = z.object({
+  candidates: z.array(z.object({
+    id: z.string().min(1),
+    title: z.string().min(1),
+    count: z.number().int().positive(),
+    sources: z.array(z.string()),
+    snippets: z.array(z.string()),
+  })),
+});
+const WorkflowsSkillifySchema = z.union([
+  z.object({ ok: z.literal(true), path: z.string(), workflow: WorkflowSummarySchema }),
+  z.object({
+    ok: z.literal(false),
+    error: z.object({ type: z.enum(["not-found", "confirm-required"]), message: z.string() }),
+    would: z.object({ path: z.string() }).optional(),
+  }),
+]);
+
+const workflowSummaryFixture = {
+  id: "second-brain-structured-agentic-development",
+  title: "Structured Agentic Development",
+  source: "second-brain",
+  version: 2,
+  trigger: "Use when building software changes",
+  summary: "Spec-driven development loop.",
+  tags: ["workflow", "second-brain", "dev"],
+  steps: 4,
+  gates: 2,
+};
+const workflowRecordFixture = {
+  ...workflowSummaryFixture,
+  schema_version: 1,
+  source_path: "/home/eduardo.borjas/Documents/Second Brain/01-systems/workflows/structured-agentic-development/_workflow.md",
+  content_hash: "a".repeat(64),
+  updated_at: "2026-07-15T00:00:00.000Z",
+  steps: ["Load context", "Plan", "Implement", "Verify"],
+  gates: ["Verify: bun test ./cli/", "Gate: maker != checker"],
+  body: "# Structured Agentic Development\n\nBody",
+};
+
+describe("6.6C workflows --json", () => {
+  test("list fixture pasa el schema", () => {
+    expect(() => WorkflowsListSchema.parse({ workflows: [workflowSummaryFixture] })).not.toThrow();
+  });
+  test("ingest fixture pasa el schema", () => {
+    expect(() => WorkflowsIngestSchema.parse({ ingested: 1, changed: 1, workflows: [workflowSummaryFixture], store_dir: "/tmp/workflows" })).not.toThrow();
+  });
+  test("search fixture pasa el schema", () => {
+    expect(() => WorkflowsSearchSchema.parse({ query: "dev", workflows: [{ ...workflowSummaryFixture, score: 12 }] })).not.toThrow();
+  });
+  test("show fixture pasa el schema", () => {
+    expect(() => WorkflowsShowSchema.parse({ workflow: workflowRecordFixture })).not.toThrow();
+  });
+  test("run fixture pasa el schema", () => {
+    expect(() => WorkflowsRunSchema.parse({ id: workflowSummaryFixture.id, title: workflowSummaryFixture.title, version: 2, prompt: "Use ebrain workflow", checklist: ["1. Verify"] })).not.toThrow();
+  });
+  test("capture fixture pasa el schema", () => {
+    expect(() => WorkflowsCaptureSchema.parse({ candidates: [{ id: "captured-release", title: "release", count: 2, sources: ["session:a"], snippets: ["follow release workflow"] }] })).not.toThrow();
+  });
+  test("skillify confirm-required fixture pasa el schema", () => {
+    expect(() => WorkflowsSkillifySchema.parse({ ok: false, error: { type: "confirm-required", message: "repeat with --yes" }, would: { path: "/tmp/SKILL.md" } })).not.toThrow();
+  });
+  test("rompe version no-positiva", () => {
+    expect(WorkflowSummarySchema.safeParse({ ...workflowSummaryFixture, version: 0 }).success).toBe(false);
+  });
+  test("rompe content_hash no-sha256", () => {
+    expect(WorkflowsShowSchema.safeParse({ workflow: { ...workflowRecordFixture, content_hash: "abc" } }).success).toBe(false);
   });
 });
 

@@ -63,6 +63,8 @@ import type {
   MemoryData,
   MemoryLearning,
   MemorySession,
+  WorkflowsData,
+  WorkflowSummaryData,
   RoutingData,
   AdviceData,
   RouteRunData,
@@ -74,6 +76,8 @@ import type {
 import {
   fetchStatus,
   fetchMemory,
+  fetchWorkflows,
+  runWorkflow,
   fetchRouting,
   fetchFleet,
   fetchDoctor,
@@ -193,11 +197,14 @@ export interface OverviewSlice {
   atLabel: string | null;
 }
 
-/** Memory panel (memory recent --json): learnings + session-logs, navigable (6.5.2).
- * `selected` = focused learning; `logSelected` = focused session-log (F6.6 focus model). */
+/** Memory panel: learnings + local workflows + session logs, navigable (F6.6C).
+ * `selected` = focused learning; `workflowSelected` = focused workflow;
+ * `logSelected` = focused session-log. */
 export interface MemorySlice {
   data: MemoryData | null;
+  workflows: WorkflowsData | null;
   selected: number;
+  workflowSelected: number;
   logSelected: number;
   status: LoadStatus;
   error?: string;
@@ -230,7 +237,7 @@ export function emptyOverview(): OverviewSlice {
   return { data: null, memory: null, memSelected: 0, status: "idle", atLabel: null };
 }
 export function emptyMemory(): MemorySlice {
-  return { data: null, selected: 0, logSelected: 0, status: "idle" };
+  return { data: null, workflows: null, selected: 0, workflowSelected: 0, logSelected: 0, status: "idle" };
 }
 export function emptyRouting(): RoutingSlice {
   return { data: null, selected: 0, status: "idle" };
@@ -364,7 +371,7 @@ const REGIONS: Record<TabName, readonly string[]> = {
   home: ["sessions", "memories", "system"],
   sessions: ["list"],
   launch: ["grid"],
-  memory: ["results", "logs"],
+  memory: ["results", "workflows", "logs"],
   routing: ["caps"],
   doctor: ["checks", "fleet"],
 };
@@ -406,6 +413,10 @@ export type AppEffect =
   // Knowledge panels (F6.5): each landing refreshes its slice from its subcommand.
   | { type: "refreshStatus" }
   | { type: "refreshMemory" }
+  /** Materialize a workflow prompt; never executes the workflow. */
+  | { type: "runWorkflow"; id: string }
+  /** Materialize then place the workflow prompt in Launch for explicit routing/launch. */
+  | { type: "attachWorkflow"; id: string }
   | { type: "refreshRouting" }
   | { type: "refreshFleetDoctor" }
   /** Doctor `r`: re-run `doctor --json` (async, spinner) without leaving the view. */
@@ -520,6 +531,11 @@ function moveSelection(state: AppState, delta: number): ReduceResult {
 
   if (state.tab === "memory") {
     const m = memoryOf(state);
+    if (region === "workflows") {
+      const n = m.workflows?.workflows.length ?? 0;
+      if (n === 0) return settle(clear);
+      return settle({ ...clear, memory: { ...m, workflowSelected: clampIndex(m.workflowSelected + delta, n) } });
+    }
     if (region === "logs") {
       const n = m.data?.sessions.length ?? 0;
       if (n === 0) return settle(clear);
@@ -572,6 +588,13 @@ function drillIn(state: AppState): ReduceResult {
   if (state.tab === "memory" && region === "results") {
     const l = memoryOf(state).data?.learnings[memoryOf(state).selected];
     if (l) return settle({ ...clear, overlay: { kind: "detail", title: `memory · ${l.project}`, body: l.text } });
+    return settle(clear);
+  }
+  // Workflow run only materializes a reviewable prompt. The user still attaches it to
+  // Launch and confirms a route/session there; no workflow command executes here.
+  if (state.tab === "memory" && region === "workflows") {
+    const w = memoryOf(state).workflows?.workflows[memoryOf(state).workflowSelected];
+    if (w) return settle(clear, { type: "runWorkflow", id: w.id });
     return settle(clear);
   }
   // Doctor check → read-only detail of the check's message.
@@ -844,6 +867,12 @@ export function reduce(state: AppState, key: Key): ReduceResult {
     // Memory panel: r opens the remember composer (writes to permanent agentic memory).
     if (state.tab === "memory" && ch === "r") {
       return settle({ ...state, confirmQuit: false, overlay: { kind: "remember", line: lineFrom("") } });
+    }
+    // Attach a selected workflow as a Launch task. This only materializes text; it
+    // does not invoke OpenRouter or start an agent until the user acts in Launch.
+    if (state.tab === "memory" && ch === "a" && focusedRegion(state) === "workflows") {
+      const w = memoryOf(state).workflows?.workflows[memoryOf(state).workflowSelected];
+      if (w) return settle({ ...state, confirmQuit: false }, { type: "attachWorkflow", id: w.id });
     }
     // Doctor panel: r re-runs the diagnostics in place (async spinner, never blocks).
     if (state.tab === "doctor" && ch === "r") {
@@ -1594,6 +1623,18 @@ function renderLogRow(s: MemorySession, width: number, theme: Theme): string {
   return truncate(ts + " " + b, width);
 }
 
+function renderWorkflowRow(w: WorkflowSummaryData, width: number, sel: boolean, theme: Theme): string {
+  const reset = theme.reset;
+  const tone = theme.fg("accent.teal");
+  const meta = `v${w.version} · ${w.steps} steps · ${w.gates} gates`;
+  const metaW = Math.min(22, Math.max(10, Math.floor(width * 0.38)));
+  const titleW = Math.max(0, width - 2 - metaW);
+  const title = (sel ? theme.fg("text.primary") + BOLD : theme.fg("text.secondary")) +
+    padTo(truncate(w.title, titleW), titleW) + reset;
+  return tone + theme.glyph("badgeDot") + " " + reset + title + theme.fg("text.muted") +
+    padTo(truncate(meta, metaW), metaW, "right") + reset;
+}
+
 export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, theme: Theme): string[] {
   const cols = rect.width;
   const height = rect.height;
@@ -1606,6 +1647,7 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
   }
 
   const learnings = m.data.learnings;
+  const workflows = m.workflows?.workflows ?? [];
   const sessions = m.data.sessions;
   const [searchRect, midRect, footRect] = splitV(rect, [1, { flex: 1 }, 1]);
 
@@ -1622,7 +1664,7 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
     ),
   );
 
-  // Mid: results (flex) + session-logs (fixed).
+  // Mid: recent learnings (left) + workflows/session logs stacked on the right.
   const rightW = Math.min(40, Math.max(24, Math.floor(cols * 0.34)));
   const [leftRect, rightRect] = splitH({ top: 0, left: 0, width: cols, height: midRect.height }, [{ flex: 1 }, rightW], 2);
 
@@ -1648,9 +1690,26 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
     theme,
   );
 
-  const logW = Math.max(8, rightRect.width - 4);
+  const [workflowRect, logsRect] = splitV(rightRect, [{ flex: 1 }, { flex: 1 }], 1);
+  const workflowW = Math.max(8, workflowRect.width - 4);
+  const workflowSel = clampIndex(m.workflowSelected, Math.max(1, workflows.length));
+  const workflowRoom = Math.max(1, workflowRect.height - 2);
+  const workflowOff = scrollOffset(workflowSel, workflowRoom, workflows.length);
+  const workflowsBody =
+    workflows.length > 0
+      ? workflows.slice(workflowOff, workflowOff + workflowRoom).map((w, i) => {
+          const row = renderWorkflowRow(w, workflowW, focused === "workflows" && workflowOff + i === workflowSel, theme);
+          return focused === "workflows" && workflowOff + i === workflowSel ? highlightRow(padTo(row, workflowW), theme) : row;
+        })
+      : [theme.fg("text.secondary") + "run `ebrain workflows ingest`" + theme.reset];
+  const workflowsPanel = panel(
+    { title: `workflows · ${workflows.length}`, focus: focused === "workflows", width: workflowRect.width, height: workflowRect.height, body: workflowsBody },
+    theme,
+  );
+
+  const logW = Math.max(8, logsRect.width - 4);
   const logSel = clampIndex(m.logSelected, Math.max(1, sessions.length));
-  const logRoom = Math.max(1, midRect.height - 2);
+  const logRoom = Math.max(1, logsRect.height - 2);
   const logOff = scrollOffset(logSel, logRoom, sessions.length);
   const logsBody =
     sessions.length > 0
@@ -1660,17 +1719,24 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
         })
       : [theme.fg("text.secondary") + "no sessions" + theme.reset];
   const rightPanel = panel(
-    { title: "session-logs", focus: focused === "logs", width: rightRect.width, height: midRect.height, body: logsBody },
+    { title: "session-logs", focus: focused === "logs", width: logsRect.width, height: logsRect.height, body: logsBody },
     theme,
   );
 
   const gap = " ".repeat(Math.max(0, cols - leftRect.width - rightRect.width));
-  for (let i = 0; i < midRect.height; i++) out.push((leftPanel[i] ?? "") + gap + (rightPanel[i] ?? ""));
+  for (let i = 0; i < midRect.height; i++) {
+    const right = i < workflowRect.height
+      ? workflowsPanel[i] ?? ""
+      : i === workflowRect.height
+        ? " ".repeat(rightRect.width)
+        : rightPanel[i - workflowRect.height - 1] ?? "";
+    out.push((leftPanel[i] ?? "") + gap + right);
+  }
 
   // Footer hint (the composer opens as an overlay on `r`).
   if (footRect.height > 0) {
     const foot =
-      theme.fg("text.muted") + "r → remember (permanent agentic memory) · ↑↓ results" + theme.reset;
+      theme.fg("text.muted") + "r remember · enter run/open · a attach workflow · ↑↓ focused box" + theme.reset;
     out.push(padTo(truncate(foot, cols), cols));
   }
 
@@ -2230,14 +2296,56 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       const cur = memoryOf(state);
       state = { ...state, memory: { ...cur, status: cur.data ? cur.status : "loading" } };
       if (state.tab === "memory") render();
-      const r = await fetchMemory(8);
+      const [r, workflows] = await Promise.all([fetchMemory(8), fetchWorkflows(8)]);
       const m = memoryOf(state);
       if (r.ok) {
-        state = { ...state, memory: { ...m, data: r.data, selected: Math.min(m.selected, Math.max(0, r.data.learnings.length - 1)), status: "ready", error: undefined } };
+        const nextWorkflows = workflows.ok ? workflows.data : m.workflows;
+        state = {
+          ...state,
+          memory: {
+            ...m,
+            data: r.data,
+            workflows: nextWorkflows,
+            selected: Math.min(m.selected, Math.max(0, r.data.learnings.length - 1)),
+            workflowSelected: Math.min(m.workflowSelected, Math.max(0, (nextWorkflows?.workflows.length ?? 0) - 1)),
+            status: "ready",
+            error: workflows.ok ? undefined : `workflows: ${workflows.error}`,
+          },
+        };
       } else {
         state = { ...state, memory: { ...m, status: "error", error: r.error } };
       }
       if (state.tab === "memory") render();
+    }
+
+    async function doRunWorkflow(id: string): Promise<void> {
+      const r = await runWorkflow(id);
+      if (r.ok) {
+        state = { ...state, overlay: { kind: "detail", title: `workflow · ${r.data.title}`, body: r.data.prompt } };
+      } else {
+        const m = memoryOf(state);
+        state = { ...state, memory: { ...m, status: "error", error: `workflow: ${r.error}` } };
+      }
+      if (state.tab === "memory") render();
+    }
+
+    async function doAttachWorkflow(id: string): Promise<void> {
+      const r = await runWorkflow(id);
+      if (!r.ok) {
+        const m = memoryOf(state);
+        state = { ...state, memory: { ...m, status: "error", error: `workflow: ${r.error}` } };
+        if (state.tab === "memory") render();
+        return;
+      }
+      const launch = launchOf(state);
+      state = {
+        ...state,
+        tab: "launch",
+        focusRegion: 0,
+        overlay: null,
+        launch: { ...launch, task: r.data.prompt, advice: null, routeResult: null, status: "idle", error: undefined },
+      };
+      render();
     }
 
     async function refreshRouting(): Promise<void> {
@@ -2345,6 +2453,12 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
           break;
         case "refreshMemory":
           await refreshMemory();
+          break;
+        case "runWorkflow":
+          await doRunWorkflow(effect.id);
+          break;
+        case "attachWorkflow":
+          await doAttachWorkflow(effect.id);
           break;
         case "refreshRouting":
           await refreshRouting();
