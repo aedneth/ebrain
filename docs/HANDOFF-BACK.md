@@ -18,6 +18,15 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 - **Siguiente implementacion:** contratos de Task Profile/perfiles, target OpenCode/OpenRouter con selector probado, y Launch Wizard con preview completo. F6.6.1 queda `[~]`; F6.6.2-6.6.6 y F6.7 siguen pendientes.
 - **Que debe auditar Opus:** que la migracion no deje claims de “mejor modelo”, creditos/suscripciones, argv shell-inyectable, selector falso o bypass del deny-list. Fable verifica el gate F6.6 final junto al gate F6.7.
 
+## Actualizacion 2026-07-15 — F6.6.1 Task Profile cerrado (pendiente auditoria de fase)
+
+- **Construido:** `cli/task-profile.ts` y `config/task-profile-rules.yaml` sustituyen el advisor por tarea, senales, capability y modos compatibles. `cli/advise.ts` solo reexporta/ejecuta ese contrato para compatibilidad.
+- **Retirado:** reglas de carril, modelo, agente, creditos, suscripciones, frontier y costo de sesion. El snapshot de pricing para el panel Routing se mueve a `cli/model-pricing.ts`; sigue siendo estimacion marcada, no billing.
+- **TUI:** Launch guarda `profile`, muestra capability/senales/modos y nunca altera el agente seleccionado manualmente. Se eliminaron confirmaciones que hacian route/sesion por recomendacion.
+- **Tests/verificacion:** `bun test ./cli/` = 161 pass / 0 fail; `bun test ./tui/test/` = 371 pass / 0 fail; `git diff --check` limpio, cero hex TUI fuera de `theme.ts`, `ebrain task-profile --json ...` y `ebrain advise --json ...` verdes. No hubo llamada pagada ni lectura de credenciales.
+- **Benchmark plan:** `docs/BENCHMARK-EVIDENCE-PLAN.md` difiere una integracion de evidencia opt-in post-ship. El gate exige fuente/version/fecha, costo y reproducibilidad; nunca auto-routing.
+- **Siguiente fase:** F6.6.2 perfiles locales y catalogo fechado; luego F6.6.3 target OpenCode/OpenRouter y F6.6.4 wizard.
+
 ## 1. Qué construí
 
 - F6.6E Unified Cost Ledger v2 (Codex maker, 2026-07-15):

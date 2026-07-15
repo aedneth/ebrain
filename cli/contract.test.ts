@@ -643,70 +643,42 @@ describe("6.1.6 sessions new/send/kill --json (mutate envelope + candado --yes)"
   });
 });
 
-// ── 6.1.7 ebrain advise "<tarea>" --json ────────────────────────────────────────────────────
-const AdviseSchema = z.object({
+// ── ADR-005 ebrain task-profile / advise alias --json ──────────────────────────────────────────
+const TaskProfileSchema = z.object({
   task: z.string().min(1),
-  capability: z.enum(["coding", "agentic", "web_design", "long_context", "terminal", "general"]),
-  lane: z.string().min(1),
-  agent: z.string().min(1),
-  model: z.string().min(1),
-  reason: z.string().min(1),
-  est_cost: z.object({ usd: z.number().nullable(), note: z.string() }),
-  alternatives: z.array(z.object({ lane: z.string(), agent: z.string(), model: z.string(), note: z.string() })),
-  frontier: z.boolean(),
+  signals: z.array(z.object({
+    capability: z.enum(["coding", "agentic", "web_design", "long_context", "terminal", "general"]),
+    matched: z.array(z.string()),
+  })),
+  selected_capability: z.enum(["coding", "agentic", "web_design", "long_context", "terminal", "general"]),
+  compatible_targets: z.array(z.enum(["manual-session", "openrouter-one-shot"])).min(1),
+  disclaimer: z.string().min(1),
 });
 
-// Fixture 1 = captura real de `ebrain advise "..." --json` (one-shot barato, no-frontier, 2026-07-13).
-const adviseOneShotFixture = {
+const taskProfileFixture = {
   task: "Summarize this batch of transcripts into a daily digest",
-  capability: "long_context",
-  lane: "one_shot_route",
-  agent: "route",
-  model: "minimax/minimax-m3",
-  reason: "tarea clasificada como capacidad 'long_context' (keywords: summarize, digest, transcript, batch) — señal one-shot (batch, digest, summarize) → carril barato en vez de sesión interactiva — carril 'one_shot_route': one-shot barato vía `ebrain route --cap <capacidad>` — stack OpenRouter capado $10/mo",
-  est_cost: { usd: 0.0027, note: "estimado (3000in/1500out tokens asumidos @ minimax/minimax-m3, pricing docs/model-registry.md 2026-07-11) — NO es billing real" },
-  alternatives: [
-    { lane: "one_shot_route", agent: "route", model: "qwen/qwen3.5-plus-20260420", note: "fallback de la cadena (routing.yaml)" },
-    { lane: "one_shot_route", agent: "route", model: "qwen/qwen3.5-flash-02-23", note: "floor/gratis de la cadena (routing.yaml)" },
-    { lane: "interactive_opencode", agent: "opencode", model: "opencode", note: "si la tarea crece más allá de un one-shot, subí a sesión interactiva" },
-  ],
-  frontier: false,
+  signals: [{ capability: "long_context", matched: ["summarize", "digest", "transcript", "batch"] }],
+  selected_capability: "long_context",
+  compatible_targets: ["manual-session", "openrouter-one-shot"],
+  disclaimer: "Las senales clasifican la tarea; no ordenan modelos ni eligen un agente.",
 };
 
-// Fixture 2 = carril frontier (auditoría/arquitectura) — candado F4/D5: SIEMPRE recomendación, jamás default.
-const adviseFrontierFixture = {
-  task: "Do an architecture audit of the ebrain harness before we ship v1",
-  capability: "general",
-  lane: "claude_audit",
-  agent: "claude",
-  model: "claude-opus (Fable 5 para gates de alto riesgo) — FRONTIER",
-  reason: "señales de auditoría/arquitectura detectadas (architecture, audit) → override duro sobre cualquier capacidad — carril 'claude_audit': auditoría/arquitectura — SOLO RECOMENDACIÓN, exige confirmación explícita antes de lanzar — ⚠ FRONTIER — esto es SOLO una recomendación; requiere confirmación explícita antes de lanzar (candado F4/D5, el advisor NUNCA auto-escala ni auto-lanza).",
-  est_cost: { usd: 0, note: "cubierto por suscripción/crédito existente (claude) — no pasa por el ledger de route.ts" },
-  alternatives: [
-    { lane: "interactive_codex", agent: "codex", model: "codex-cli (modelo nativo OpenAI, créditos $2500 — Tier 0 cerebro/constructor)", note: "más barato pero sin el mismo nivel de rigor maker≠checker — usar solo si el riesgo es bajo" },
-  ],
-  frontier: true,
-};
-
-describe("6.1.7 advise --json", () => {
-  test("fixture one-shot (no-frontier) pasa el schema", () => {
-    expect(() => AdviseSchema.parse(adviseOneShotFixture)).not.toThrow();
+describe("ADR-005 task-profile --json", () => {
+  test("fixture pasa el schema", () => {
+    expect(() => TaskProfileSchema.parse(taskProfileFixture)).not.toThrow();
   });
-  test("fixture frontier pasa el schema Y trae la advertencia de confirmación en 'reason' (candado F4/D5)", () => {
-    const parsed = AdviseSchema.parse(adviseFrontierFixture);
-    expect(parsed.frontier).toBe(true);
-    expect(parsed.reason.toLowerCase()).toContain("confirmaci");
+  test("capability fuera del enum falla", () => {
+    expect(TaskProfileSchema.safeParse({ ...taskProfileFixture, selected_capability: "reasoning" }).success).toBe(false);
   });
-  test("capability fuera del enum → falla", () => {
-    expect(AdviseSchema.safeParse({ ...adviseOneShotFixture, capability: "reasoning" }).success).toBe(false);
+  test("target desconocido falla", () => {
+    expect(TaskProfileSchema.safeParse({ ...taskProfileFixture, compatible_targets: ["codex-best"] }).success).toBe(false);
   });
-  test("frontier no-booleano → falla", () => {
-    expect(AdviseSchema.safeParse({ ...adviseOneShotFixture, frontier: "false" }).success).toBe(false);
+  test("sin signals no es un error: general es una clasificacion explicita", () => {
+    expect(TaskProfileSchema.safeParse({ ...taskProfileFixture, signals: [], selected_capability: "general" }).success).toBe(true);
   });
-  test("alternatives no-array → falla", () => {
-    expect(AdviseSchema.safeParse({ ...adviseOneShotFixture, alternatives: {} }).success).toBe(false);
-  });
-  test("est_cost.usd acepta null (modelo sin pricing verificado) explícitamente, no un 0 inventado", () => {
-    expect(AdviseSchema.safeParse({ ...adviseOneShotFixture, est_cost: { usd: null, note: "pricing no verificado" } }).success).toBe(true);
+  test("el contrato no puede transportar una recomendacion legacy", () => {
+    const parsed = TaskProfileSchema.parse({ ...taskProfileFixture, agent: "codex", model: "x", est_cost: { usd: 0 } });
+    expect(Object.keys(parsed)).not.toContain("agent");
+    expect(Object.keys(parsed)).not.toContain("model");
   });
 });

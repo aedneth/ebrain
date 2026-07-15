@@ -326,39 +326,27 @@ export function parseCost(j: unknown): CostData | null {
   };
 }
 
-export interface AdviceData {
+export interface TaskProfileData {
   task: string;
-  capability: string;
-  lane: string;
-  agent: string;
-  model: string;
-  reason: string;
-  estCost: { usd: number | null; note: string };
-  alternatives: { lane: string; agent: string; model: string; note: string }[];
-  frontier: boolean;
+  signals: { capability: string; matched: string[] }[];
+  selectedCapability: string;
+  compatibleTargets: string[];
+  disclaimer: string;
 }
 
-export function parseAdvice(j: unknown): AdviceData | null {
+export function parseTaskProfile(j: unknown): TaskProfileData | null {
   if (!isObj(j)) return null;
-  const est = isObj(j.est_cost) ? j.est_cost : {};
+  const selected = asStr(j.selected_capability, "general");
+  if (!selected) return null;
   return {
     task: asStr(j.task),
-    capability: asStr(j.capability, "general"),
-    lane: asStr(j.lane),
-    agent: asStr(j.agent),
-    model: asStr(j.model),
-    reason: asStr(j.reason),
-    estCost: {
-      usd: typeof est.usd === "number" ? est.usd : null,
-      note: asStr(est.note),
-    },
-    alternatives: asArr(j.alternatives).filter(isObj).map((a) => ({
-      lane: asStr(a.lane),
-      agent: asStr(a.agent),
-      model: asStr(a.model),
-      note: asStr(a.note),
+    signals: asArr(j.signals).filter(isObj).map((signal) => ({
+      capability: asStr(signal.capability, "general"),
+      matched: asArr(signal.matched).map((keyword) => asStr(keyword)).filter(Boolean),
     })),
-    frontier: asBool(j.frontier),
+    selectedCapability: selected,
+    compatibleTargets: asArr(j.compatible_targets).map((target) => asStr(target)).filter(Boolean),
+    disclaimer: asStr(j.disclaimer),
   };
 }
 

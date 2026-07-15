@@ -101,11 +101,11 @@ const HOME_HINTS: HintEntry[] = [
   { k: "?", label: "help" },
 ];
 
-/** Per-view hints for the Launch panel (F6.4.5) — the básico subset of the mockup's
- * LaunchScreen hints (the full advisor wizard's `c contexto` lands in F6.6.1). */
+/** Per-view hints for the Launch panel. Task Profile classifies explicit signals only;
+ * profile/target selection lands in the user-governed wizard (F6.6.2-6.6.4). */
 const LAUNCH_HINTS: HintEntry[] = [
   { k: "t", label: "task" },
-  { k: "r", label: "advise" },
+  { k: "r", label: "profile" },
   { k: "↑↓←→", label: "agent" },
   { k: "enter", label: "run/launch" },
 ];

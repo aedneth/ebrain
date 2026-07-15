@@ -67,8 +67,7 @@ import type {
   WorkflowSummaryData,
   RoutingData,
   CostData,
-  AdviceData,
-  RouteRunData,
+  TaskProfileData,
   FleetData,
   DoctorData,
   DoctorCheck,
@@ -84,8 +83,7 @@ import {
   fetchFleet,
   fetchDoctor,
   runRemember,
-  fetchAdvice,
-  runRoute,
+  fetchTaskProfile,
 } from "./knowledge/run.js";
 
 // Sessions data plane (F6.4) — REUSED from cli/sessions.ts via the control-plane
@@ -273,8 +271,6 @@ export type Overlay =
   | { kind: "confirmKill"; name: string }
   | { kind: "prompt"; name: string; line: LineState }
   | { kind: "confirmLaunch"; agent: string; cwd: string; reason: string }
-  | { kind: "confirmRoute"; task: string; capability: string; model: string; cost: string }
-  | { kind: "confirmAdvisorLaunch"; agent: string; task: string; reason: string }
   | { kind: "launchTask"; line: LineState }
   | { kind: "remember"; line: LineState }
   /** Read-only drill-in detail (Enter on a memory/check) — a titled, word-wrapped modal. */
@@ -283,16 +279,15 @@ export type Overlay =
 export interface LaunchSlice {
   selected: number;
   task: string;
-  /** Workflow attribution survives attach -> advisor -> confirmed OpenRouter route. */
+  /** Workflow attribution survives attach -> the explicit wizard in F6.6.4. */
   workflowId?: string;
-  advice: AdviceData | null;
-  routeResult: RouteRunData | null;
+  profile: TaskProfileData | null;
   status: LoadStatus | "running";
   error?: string;
 }
 
 export function emptyLaunch(): LaunchSlice {
-  return { selected: 0, task: "", advice: null, routeResult: null, status: "idle" };
+  return { selected: 0, task: "", profile: null, status: "idle" };
 }
 
 function launchOf(state: AppState): LaunchSlice {
@@ -413,10 +408,7 @@ export type AppEffect =
   | { type: "launch"; agent: string }
   /** Launch confirmed through the governor's dialog (an override that gets logged). */
   | { type: "launchConfirmed"; agent: string; cwd: string; reason: string }
-  | { type: "launchWithPrompt"; agent: string; task: string }
-  | { type: "launchWithPromptConfirmed"; agent: string; task: string; reason: string }
-  | { type: "adviseLaunchTask"; task: string }
-  | { type: "routeTask"; task: string; capability: string; workflow?: string }
+  | { type: "profileLaunchTask"; task: string }
   // Knowledge panels (F6.5): each landing refreshes its slice from its subcommand.
   | { type: "refreshStatus" }
   | { type: "refreshMemory" }
@@ -618,45 +610,11 @@ function drillIn(state: AppState): ReduceResult {
   return settle(clear);
 }
 
-function costLabel(usd: number | null): string {
-  return usd == null ? "n/d" : `$${usd.toFixed(6)}`;
-}
-
 function launchEnter(state: AppState): ReduceResult {
   const l = launchOf(state);
   const clear = { ...state, confirmQuit: false };
-  const advice = l.advice;
-  if (!advice) {
-    const it = LAUNCHABLE[l.selected];
-    return it ? settle(clear, { type: "launch", agent: it.agent }) : settle(clear);
-  }
-
-  if (advice.lane === "one_shot_route" || advice.agent === "route") {
-    return settle({
-      ...clear,
-      overlay: {
-        kind: "confirmRoute",
-        task: advice.task,
-        capability: advice.capability,
-        model: advice.model,
-        cost: costLabel(advice.estCost.usd),
-      },
-    });
-  }
-
-  if (advice.frontier) {
-    return settle({
-      ...clear,
-      overlay: {
-        kind: "confirmAdvisorLaunch",
-        agent: advice.agent,
-        task: advice.task,
-        reason: `frontier lane '${advice.lane}' for ${advice.agent}. ${advice.reason}`,
-      },
-    });
-  }
-
-  return settle(clear, { type: "launchWithPrompt", agent: advice.agent, task: advice.task });
+  const it = LAUNCHABLE[l.selected];
+  return it ? settle(clear, { type: "launch", agent: it.agent }) : settle(clear);
 }
 
 /**
@@ -731,45 +689,6 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       return settle(state);
     }
 
-    if (ov.kind === "confirmRoute") {
-      if (key.name === "char" && (key.char === "y" || key.char === "Y")) {
-        const workflow = launchOf(state).workflowId;
-        return {
-          state: { ...state, overlay: null },
-          quit: false,
-          forceRedraw: false,
-          effect: workflow
-            ? { type: "routeTask", task: ov.task, capability: ov.capability, workflow }
-            : { type: "routeTask", task: ov.task, capability: ov.capability },
-        };
-      }
-      if (
-        key.name === "escape" ||
-        (key.name === "char" && (key.char === "n" || key.char === "N" || key.char === "q"))
-      ) {
-        return settle({ ...state, overlay: null });
-      }
-      return settle(state);
-    }
-
-    if (ov.kind === "confirmAdvisorLaunch") {
-      if (key.name === "char" && (key.char === "y" || key.char === "Y")) {
-        return {
-          state: { ...state, overlay: null },
-          quit: false,
-          forceRedraw: false,
-          effect: { type: "launchWithPromptConfirmed", agent: ov.agent, task: ov.task, reason: ov.reason },
-        };
-      }
-      if (
-        key.name === "escape" ||
-        (key.name === "char" && (key.char === "n" || key.char === "N" || key.char === "q"))
-      ) {
-        return settle({ ...state, overlay: null });
-      }
-      return settle(state);
-    }
-
     if (ov.kind === "launchTask") {
       if (key.name === "escape") return settle({ ...state, overlay: null });
       if (key.name === "enter") {
@@ -779,7 +698,7 @@ export function reduce(state: AppState, key: Key): ReduceResult {
           state: { ...state, overlay: null },
           quit: false,
           forceRedraw: false,
-          effect: { type: "adviseLaunchTask", task: text },
+          effect: { type: "profileLaunchTask", task: text },
         };
       }
       const edited = lineApplyKey(ov.line, key);
@@ -863,7 +782,7 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       if (ch === "t") return settle({ ...state, confirmQuit: false, overlay: { kind: "launchTask", line: lineFrom(launchOf(state).task) } });
       if (ch === "r") {
         const task = launchOf(state).task.trim();
-        if (task) return settle({ ...state, confirmQuit: false }, { type: "adviseLaunchTask", task });
+        if (task) return settle({ ...state, confirmQuit: false }, { type: "profileLaunchTask", task });
       }
     }
 
@@ -1006,46 +925,6 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
     return { box, top, left };
   }
 
-  if (overlay.kind === "confirmRoute") {
-    const width = Math.min(80, Math.max(42, cols - 6));
-    const box = confirm(
-      {
-        title: "run OpenRouter route",
-        message: `${overlay.capability} · ${overlay.model} · est. ${overlay.cost}`,
-        danger: false,
-        confirmKey: "y",
-        confirmLabel: "run route",
-        cancelKey: "n",
-        cancelLabel: "cancel",
-        width,
-      },
-      theme,
-    );
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.floor((rows - box.length) / 2));
-    return { box, top, left };
-  }
-
-  if (overlay.kind === "confirmAdvisorLaunch") {
-    const width = Math.min(82, Math.max(44, cols - 6));
-    const box = confirm(
-      {
-        title: "advisor launch",
-        message: overlay.reason,
-        danger: overlay.reason.toLowerCase().includes("frontier"),
-        confirmKey: "y",
-        confirmLabel: `launch ${overlay.agent}`,
-        cancelKey: "n",
-        cancelLabel: "cancel",
-        width,
-      },
-      theme,
-    );
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.floor((rows - box.length) / 2));
-    return { box, top, left };
-  }
-
   if (overlay.kind === "prompt") {
     const width = Math.min(64, Math.max(30, cols - 6));
     const box = buildPromptBox(overlay, width, theme);
@@ -1102,7 +981,7 @@ function buildPromptBox(overlay: Extract<Overlay, { kind: "prompt" }>, width: nu
 
 function buildLaunchTaskBox(overlay: Extract<Overlay, { kind: "launchTask" }>, width: number, theme: Theme): string[] {
   const field = promptBox(
-    { value: overlay.line.text, focus: true, placeholder: "describe the task to route or launch", hint: "enter advise · esc cancel", width: width - 4 },
+    { value: overlay.line.text, focus: true, placeholder: "describe task signals", hint: "enter profile · esc cancel", width: width - 4 },
     theme,
   );
   return panel(
@@ -1536,7 +1415,7 @@ function buildLaunchView(launch: LaunchSlice, rect: Rect, theme: Theme): string[
   const rowsN = Math.ceil(LAUNCHABLE.length / LAUNCH_COLS);
 
   const body: string[] = [];
-  body.push(theme.fg("text.muted") + "t → describe task · enter → run recommendation · r → refresh advice" + reset);
+  body.push(theme.fg("text.muted") + "t → task signals · r → refresh profile · enter → launch selected agent" + reset);
   if (launch.task) {
     body.push(theme.fg("text.secondary") + "task      " + reset + theme.fg("text.primary") + truncate(launch.task, contentW - 10) + reset);
   } else {
@@ -1549,26 +1428,17 @@ function buildLaunchView(launch: LaunchSlice, rect: Rect, theme: Theme): string[
     body.push(spinner({ label: "running OpenRouter route", active: true, frame: 2 }, theme));
   } else if (launch.status === "error") {
     body.push(theme.fg("semantic.error") + "error     " + reset + theme.fg("text.primary") + truncate(launch.error ?? "launch failed", contentW - 10) + reset);
-  } else if (launch.advice) {
-    const a = launch.advice;
+  } else if (launch.profile) {
+    const profile = launch.profile;
     body.push(
-      theme.fg("text.secondary") + "advice    " + reset +
-      badge({ agent: (a.agent as AgentName) || "route" }, theme) + " " +
-      theme.fg("text.primary") + a.lane + reset +
-      theme.fg("text.muted") + " · " + a.capability + " · " + costLabel(a.estCost.usd) + reset,
+      theme.fg("text.secondary") + "capability " + reset +
+      theme.fg("text.primary") + profile.selectedCapability + reset +
+      theme.fg("text.muted") + " · signals only" + reset,
     );
-    body.push(theme.fg("text.secondary") + "model     " + reset + theme.fg("text.primary") + truncate(a.model, contentW - 10) + reset);
-    body.push(theme.fg("text.secondary") + "reason    " + reset + theme.fg("text.muted") + truncate(a.reason, contentW - 10) + reset);
-  }
-
-  if (launch.routeResult) {
-    const rr = launch.routeResult;
-    body.push(
-      theme.fg("semantic.ok") + "route ok  " + reset +
-      theme.fg("text.primary") + truncate(rr.model, Math.max(8, contentW - 34)) + reset +
-      theme.fg("text.muted") + ` · ${rr.tokensIn}+${rr.tokensOut} tok · $${rr.usd.toFixed(6)}${rr.estimated ? "~" : ""}` + reset,
-    );
-    if (rr.content) body.push(theme.fg("text.secondary") + "preview   " + reset + theme.fg("text.muted") + truncate(rr.content.replace(/\s+/g, " "), contentW - 10) + reset);
+    const signals = profile.signals.map((signal) => `${signal.capability}:${signal.matched.join(",")}`).join(" | ") || "none";
+    body.push(theme.fg("text.secondary") + "signals    " + reset + theme.fg("text.muted") + truncate(signals, contentW - 10) + reset);
+    body.push(theme.fg("text.secondary") + "modes      " + reset + theme.fg("text.muted") + truncate(profile.compatibleTargets.join(" · "), contentW - 10) + reset);
+    body.push(theme.fg("text.secondary") + "note       " + reset + theme.fg("text.muted") + truncate(profile.disclaimer, contentW - 10) + reset);
   }
 
   body.push("");
@@ -1596,9 +1466,9 @@ function buildLaunchView(launch: LaunchSlice, rect: Rect, theme: Theme): string[
 
   const selAgent = LAUNCHABLE[selected]!.agent;
   const foot =
-    theme.fg("text.muted") + "without advice: enter → new session " + reset +
+    theme.fg("text.muted") + "enter → new session " + reset +
     theme.fg("text.primary") + selAgent + reset +
-    theme.fg("text.muted") + " · with advice: enter follows the advisor" + reset;
+    theme.fg("text.muted") + " · profile never changes this selection" + reset;
   body.push("", foot);
   return panel(
     { title: "launch · task router", focus: true, width: rect.width, height: rect.height, body },
@@ -2304,21 +2174,9 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       await performLaunch(agent, cwd, null);
     }
 
-    async function doLaunchWithPrompt(agent: string, task: string): Promise<void> {
-      const cwd = callerCwd();
-      const [cls, heavy] = await Promise.all([classOf(agent), countLiveHeavy()]);
-      const g = governLaunch({ launchingClass: cls, liveHeavyCount: heavy, availableMb: readAvailableMb() });
-      if (g.decision === "confirm") {
-        state = { ...state, overlay: { kind: "confirmAdvisorLaunch", agent, task, reason: g.reason } };
-        render();
-        return;
-      }
-      await performLaunch(agent, cwd, null, task);
-    }
-
     /** Actually create the session (via the manifest launch cmd + full harness env).
      * `override` non-null means the user pushed past the governor → log the override. */
-    async function performLaunch(agent: string, cwd: string, override: string | null, initialPrompt?: string): Promise<void> {
+    async function performLaunch(agent: string, cwd: string, override: string | null): Promise<void> {
       if (override) logOverride({ agent, cwd, reason: override });
       const r = await newSession(agent, launchSlug(cwd), { cwd });
       if (!r.ok) {
@@ -2455,7 +2313,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
         tab: "launch",
         focusRegion: 0,
         overlay: null,
-        launch: { ...launch, task: r.data.prompt, workflowId: r.data.id, advice: null, routeResult: null, status: "idle", error: undefined },
+        launch: { ...launch, task: r.data.prompt, workflowId: r.data.id, profile: null, status: "idle", error: undefined },
       };
       render();
     }
@@ -2486,31 +2344,16 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       if (state.tab === "routing") render();
     }
 
-    async function adviseLaunchTask(task: string): Promise<void> {
+    async function profileLaunchTask(task: string): Promise<void> {
       const cur = launchOf(state);
       state = { ...state, launch: { ...cur, task, status: "loading", error: undefined } };
       if (state.tab === "launch") render();
-      const r = await fetchAdvice(task);
+      const r = await fetchTaskProfile(task);
       const latest = launchOf(state);
       if (r.ok) {
-        state = { ...state, launch: { ...latest, task, advice: r.data, routeResult: null, status: "ready", error: undefined } };
+        state = { ...state, launch: { ...latest, task, profile: r.data, status: "ready", error: undefined } };
       } else {
         state = { ...state, launch: { ...latest, task, status: "error", error: r.error } };
-      }
-      if (state.tab === "launch") render();
-    }
-
-    async function runRouteTask(task: string, capability: string, workflow?: string): Promise<void> {
-      const cur = launchOf(state);
-      state = { ...state, launch: { ...cur, status: "running", error: undefined } };
-      if (state.tab === "launch") render();
-      const r = await runRoute(capability, task, { workflow });
-      const latest = launchOf(state);
-      if (r.ok) {
-        state = { ...state, launch: { ...latest, routeResult: r.data, status: "ready", error: undefined } };
-        await refreshRouting();
-      } else {
-        state = { ...state, launch: { ...latest, status: "error", error: r.error } };
       }
       if (state.tab === "launch") render();
     }
@@ -2614,17 +2457,8 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
         case "launchConfirmed":
           await performLaunch(effect.agent, effect.cwd, effect.reason);
           break;
-        case "launchWithPrompt":
-          await doLaunchWithPrompt(effect.agent, effect.task);
-          break;
-        case "launchWithPromptConfirmed":
-          await performLaunch(effect.agent, callerCwd(), effect.reason, effect.task);
-          break;
-        case "adviseLaunchTask":
-          await adviseLaunchTask(effect.task);
-          break;
-        case "routeTask":
-          await runRouteTask(effect.task, effect.capability, effect.workflow);
+        case "profileLaunchTask":
+          await profileLaunchTask(effect.task);
           break;
       }
     }

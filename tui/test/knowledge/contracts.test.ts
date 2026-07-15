@@ -16,7 +16,7 @@ import {
   parseDoctor,
   parseSpend,
   parseRouting,
-  parseAdvice,
+  parseTaskProfile,
   parseRouteRun,
   parseMemory,
   parseWorkflows,
@@ -160,21 +160,18 @@ describe("parseRouting (routing --json)", () => {
   });
 });
 
-describe("parseAdvice / parseRouteRun", () => {
-  test("normalizes advisor output", () => {
-    const d = parseAdvice({
+describe("parseTaskProfile / parseRouteRun", () => {
+  test("normalizes Task Profile output without a recommendation", () => {
+    const d = parseTaskProfile({
       task: "Summarize transcripts",
-      capability: "long_context",
-      lane: "one_shot_route",
-      agent: "route",
-      model: "minimax/minimax-m3",
-      reason: "batch",
-      est_cost: { usd: 0.0027, note: "estimated" },
-      alternatives: [{ lane: "interactive_opencode", agent: "opencode", model: "opencode", note: "session" }],
-      frontier: false,
+      signals: [{ capability: "long_context", matched: ["summarize", "transcript"] }],
+      selected_capability: "long_context",
+      compatible_targets: ["manual-session", "openrouter-one-shot"],
+      disclaimer: "Signals only.",
     })!;
-    expect(d.estCost.usd).toBe(0.0027);
-    expect(d.alternatives[0]!.agent).toBe("opencode");
+    expect(d.selectedCapability).toBe("long_context");
+    expect(d.signals[0]!.matched).toEqual(["summarize", "transcript"]);
+    expect(d.compatibleTargets).toContain("openrouter-one-shot");
   });
 
   test("normalizes route result", () => {

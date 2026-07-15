@@ -65,12 +65,12 @@ Regla de arquitectura: la TUI no lee YAML/JSONL ni secretos directo. Toda superf
 - [x] TUI Cost view dentro de Routing (`5`, `c`): provider, tokens, USD conocido, cap OpenRouter, sesión y workflow.
 - [x] Documento operativo: `COST-LEDGER.md`.
 
-## F6.6.1 — Task Profile, no advisor `[~]`
+## F6.6.1 — Task Profile, no advisor `[x]`
 
-- [~] ADR-005: retirar la semantica de recomendacion, creditos y suscripciones del advisor.
-- [ ] Nuevo contrato `ebrain task-profile --json`: senales explicables/editables y targets compatibles; `ebrain advise` queda alias de compatibilidad sin afirmar ranking.
-- [ ] Eliminar del contrato/UI campos que simulan precio de sesiones o autoridad sobre modelo/agente.
-- **Verify:** fixtures de tareas producen senales deterministas; ninguna salida contiene creditos, suscripciones, `best`/ranking o USD ficticio.
+- [x] ADR-005: retirar la semantica de recomendacion, creditos y suscripciones del advisor.
+- [x] Nuevo contrato `ebrain task-profile --json`: senales explicables/editables y modos compatibles; `ebrain advise` queda alias de compatibilidad sin afirmar ranking.
+- [x] La TUI reemplaza advice por Task Profile: Enter conserva el agente seleccionado manualmente y no dispara route/sesion desde una clasificacion.
+- **Verify:** `cli/advise.test.ts`, `cli/contract.test.ts`, `tui/test/{launch,knowledge/contracts}.test.ts`; CLI 161/0, TUI 371/0; smokes `task-profile` + alias verdes. Ninguna salida incluye creditos, suscripciones, ranking ni USD de sesion.
 
 ## F6.6.2 — Perfiles de ejecucion y catalogo de evidencia `[ ]`
 
@@ -104,3 +104,9 @@ Regla de arquitectura: la TUI no lee YAML/JSONL ni secretos directo. Toda superf
 
 - Opus audita F6.6.1-6.6.5 antes de merge: compatibilidad de argv, no afirmaciones de recomendacion, secretos, deny-list y telemetria.
 - Fable 5 audita el gate final cuando F6.6C-E + F6.6.1-6.6.5 + F6.7 estén listos.
+
+## Diferido post-ship — evidencia de benchmarks
+
+`docs/BENCHMARK-EVIDENCE-PLAN.md` fija la integracion futura de OpenCompass, LiveBench,
+LMArena, SWE-bench y Terminal-Bench: importable, fechada, opt-in y sin auto-routing. No bloquea
+F6.6/F6.7 ni agrega una dependencia pesada al Celeron.

@@ -22,7 +22,7 @@ function launchState(selected = 0): AppState {
     tab: "launch",
     confirmQuit: false,
     cwd: "~/eBrain",
-    launch: { selected, task: "", advice: null, routeResult: null, status: "idle" },
+    launch: { selected, task: "", profile: null, status: "idle" },
   };
 }
 
@@ -33,7 +33,7 @@ describe("buildLaunchView — the agent grid (F6.4.5)", () => {
     expect(frame).toContain("claude");
     expect(frame).toContain("gemini");
     expect(frame).toContain("generic");
-    expect(frame).toContain("without advice: enter");
+    expect(frame).toContain("enter → new session");
   });
 
   test("shows heavy vs light class per agent", () => {
@@ -74,61 +74,33 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     expect(reduce(launchState(1), { name: "enter" }).effect).toEqual({ type: "launch", agent: "codex" });
   });
 
-  test("t opens task composer and enter requests advisor", () => {
+  test("t opens task composer and enter requests a Task Profile", () => {
     const opened = reduce(launchState(), parseKey("t")).state;
     expect(opened.overlay?.kind).toBe("launchTask");
     const typed: AppState = { ...opened, overlay: { kind: "launchTask", line: lineFrom("Summarize batch transcripts") } };
     const submitted = reduce(typed, { name: "enter" });
-    expect(submitted.effect).toEqual({ type: "adviseLaunchTask", task: "Summarize batch transcripts" });
+    expect(submitted.effect).toEqual({ type: "profileLaunchTask", task: "Summarize batch transcripts" });
   });
 
-  test("enter with one-shot advice asks for route confirmation", () => {
+  test("a Task Profile never changes the manually selected agent", () => {
     const st: AppState = {
       ...launchState(),
       launch: {
         selected: 0,
         task: "Summarize batch transcripts",
-        routeResult: null,
         status: "ready",
-        advice: {
+        profile: {
           task: "Summarize batch transcripts",
-          capability: "long_context",
-          lane: "one_shot_route",
-          agent: "route",
-          model: "minimax/minimax-m3",
-          reason: "batch summarize",
-          estCost: { usd: 0.0027, note: "estimated" },
-          alternatives: [],
-          frontier: false,
+          selectedCapability: "long_context",
+          signals: [{ capability: "long_context", matched: ["summarize", "batch"] }],
+          compatibleTargets: ["manual-session", "openrouter-one-shot"],
+          disclaimer: "Signals only.",
         },
       },
     };
     const r = reduce(st, { name: "enter" });
-    expect(r.state.overlay).toEqual({
-      kind: "confirmRoute",
-      task: "Summarize batch transcripts",
-      capability: "long_context",
-      model: "minimax/minimax-m3",
-      cost: "$0.002700",
-    });
-  });
-
-  test("confirm route requires explicit y", () => {
-    const st: AppState = {
-      ...launchState(),
-      overlay: { kind: "confirmRoute", task: "x", capability: "coding", model: "deepseek/deepseek-v4-pro", cost: "$0.001" },
-    };
-    expect(reduce(st, { name: "enter" }).effect).toBeUndefined();
-    expect(reduce(st, parseKey("y")).effect).toEqual({ type: "routeTask", task: "x", capability: "coding" });
-  });
-
-  test("confirmed route preserves an attached workflow id for cost attribution", () => {
-    const st: AppState = {
-      ...launchState(),
-      launch: { ...launchState().launch!, workflowId: "second-brain-sops-dev" },
-      overlay: { kind: "confirmRoute", task: "x", capability: "coding", model: "deepseek/deepseek-v4-pro", cost: "$0.001" },
-    };
-    expect(reduce(st, parseKey("y")).effect).toEqual({ type: "routeTask", task: "x", capability: "coding", workflow: "second-brain-sops-dev" });
+    expect(r.effect).toEqual({ type: "launch", agent: "claude" });
+    expect(r.state.overlay).toBeUndefined();
   });
 
   test("governor override dialog: ONLY y proceeds (launchConfirmed); n/esc/enter do not", () => {

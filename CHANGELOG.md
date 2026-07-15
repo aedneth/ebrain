@@ -4,6 +4,15 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — F6.6.1: Task Profile explicable, sin advisor de modelos
+
+- **Nuevo `ebrain task-profile --json`:** expone tarea, senales keyword, capability seleccionada y modos de ejecucion compatibles. No devuelve agente, modelo, ranking, benchmark, credito, suscripcion ni costo de sesion.
+- **Compatibilidad controlada:** `ebrain advise` ahora es alias del mismo contrato. El pricing de Routing se separa en `cli/model-pricing.ts`; conserva su condicion de estimacion y nunca se usa para facturar una sesion.
+- **TUI Launch:** `t`/`r` cargan Task Profile; Enter mantiene el agente elegido por el usuario. Se eliminan los caminos que lanzaban o ruteaban segun advice.
+- **Benchmark evidence diferido:** `docs/BENCHMARK-EVIDENCE-PLAN.md` define la futura integracion opt-in, fechada y sin auto-routing para OpenCompass, LiveBench, LMArena, SWE-bench y Terminal-Bench.
+
+---
+
 ## 2026-07-15 — ADR-005: pivot a seleccion de modelos gobernada por usuario
 
 - **Se retira la premisa del advisor:** `ebrain advise` no se extendera como autoridad sobre el “mejor modelo”. Las reglas y benchmarks cambian, y los creditos/suscripciones personales no son datos OSS ni costos por tokens.

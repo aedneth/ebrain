@@ -9,7 +9,7 @@
  */
 import { loadRoutingCfg, spendByCapability, type CapSpend } from "./spend.ts";
 import { chainHasFrontier, expandHome, monthKey, monthSpend } from "./route.ts";
-import { estimateRouteCost, PRICING_USD_PER_M } from "./advise.ts";
+import { estimateRouteCost, PRICING_USD_PER_M } from "./model-pricing.ts";
 
 export type ModelRole = "winner" | "fallback" | "floor";
 
