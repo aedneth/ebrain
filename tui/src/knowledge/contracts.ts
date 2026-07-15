@@ -350,6 +350,50 @@ export function parseTaskProfile(j: unknown): TaskProfileData | null {
   };
 }
 
+export interface ProfileSummaryData {
+  id: string;
+  label: string;
+  provider: string;
+  capabilities: string[];
+  models: number;
+  evidence: { source: string; asOf: string };
+}
+export interface ProfilesData { initialized: boolean; profiles: ProfileSummaryData[] }
+
+export function parseProfiles(j: unknown): ProfilesData | null {
+  if (!isObj(j) || typeof j.initialized !== "boolean") return null;
+  return {
+    initialized: j.initialized,
+    profiles: asArr(j.profiles).filter(isObj).map((profile) => {
+      const evidence = isObj(profile.evidence) ? profile.evidence : {};
+      return {
+        id: asStr(profile.id), label: asStr(profile.label), provider: asStr(profile.provider),
+        capabilities: asArr(profile.capabilities).map((capability) => asStr(capability)).filter(Boolean),
+        models: asNum(profile.models), evidence: { source: asStr(evidence.source), asOf: asStr(evidence.as_of) },
+      };
+    }).filter((profile) => Boolean(profile.id)),
+  };
+}
+
+export interface TargetData { id: string; agent: string; provider: string; ramClass: string }
+export function parseTargets(j: unknown): TargetData[] | null {
+  if (!isObj(j)) return null;
+  return asArr(j.targets).filter(isObj).map((target) => ({
+    id: asStr(target.id), agent: asStr(target.agent), provider: asStr(target.provider), ramClass: asStr(target.ram_class, "unknown"),
+  })).filter((target) => Boolean(target.id && target.agent));
+}
+
+export interface TargetPlanData {
+  target: string; agent: string; profile: string; capability: string; model: string;
+  fallbackModels: string[]; cwd: string; ramClass: string; costStatus: string;
+}
+export function parseTargetPlan(j: unknown): TargetPlanData | null {
+  if (!isObj(j)) return null;
+  const target = asStr(j.target); const agent = asStr(j.agent); const profile = asStr(j.profile); const capability = asStr(j.capability); const model = asStr(j.model);
+  if (!target || !agent || !profile || !capability || !model) return null;
+  return { target, agent, profile, capability, model, fallbackModels: asArr(j.fallback_models).map((value) => asStr(value)).filter(Boolean), cwd: asStr(j.cwd), ramClass: asStr(j.ram_class, "unknown"), costStatus: asStr(j.cost_status, "untracked") };
+}
+
 export interface RouteRunData {
   ts: string;
   cap: string;

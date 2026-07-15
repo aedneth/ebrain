@@ -43,6 +43,13 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 - **Costo:** el lanzamiento inicial escribe `untracked` por provider/agente/modelo/sesion/capability porque iniciar un proceso no consume ni reporta tokens. No hubo llamada OpenRouter real en esta validacion.
 - **Verify pendiente de checker:** revisar quoting argv, prefijo `openrouter/`, deny-list que sigue en `newSession`, y que el event `untracked` no se presente como USD. Siguiente fase: F6.6.4 Launch Wizard.
 
+## Actualizacion 2026-07-15 — F6.6.4 Launch Wizard cerrado (pendiente auditoria)
+
+- **Construido:** Launch `w` obtiene perfiles y targets mediante los contratos CLI, permite escogerlos y ajustar capability/cwd, pide `targets plan` y presenta el contexto efectivo antes de launch.
+- **Contexto y controles:** preview declara norms, daemon MCP, memory bus, workflow adjunto, RAM y `untracked`; confirma explicitamente el target y vuelve a confirmar si el gobernador RAM lo exige. El backend mantiene deny-list por `realpath`.
+- **Fix manual reportado:** el grid hacia `launch: {selected}` y descartaba `task`; ahora preserva el slice completo. Regresion cubre flecha -> `r` sin crash.
+- **Auditar:** flujo `w` sin profiles, cwd cliente literal/symlink, confirmaciones `y` exclusivas, y que la TUI no construya argv ni lea archivos de perfil.
+
 ## 1. Qué construí
 
 - F6.6E Unified Cost Ledger v2 (Codex maker, 2026-07-15):

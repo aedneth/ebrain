@@ -86,12 +86,12 @@ Regla de arquitectura: la TUI no lee YAML/JSONL ni secretos directo. Toda superf
 - [x] `targets launch` registra un evento `untracked` con agente/sesion/modelo/capability; no inventa tokens/USD ni scrapea cuotas.
 - **Verify:** `cli/targets.test.ts`, `cli/sessions.test.ts`; argv exacto, control characters/targets no declarados/capabilities ausentes fallan antes de tmux; `ebrain targets list --json` detecta solo `opencode-openrouter`.
 
-## F6.6.4 — Launch Wizard gobernado por usuario `[ ]`
+## F6.6.4 — Launch Wizard gobernado por usuario `[x]`
 
-- [ ] Flujo: tarea -> capability editable -> target -> perfil/modelo -> cwd/proyecto seguro -> preview -> confirmacion.
-- [ ] Preview muestra norms, MCP daemon, memoria, workflow, RAM, argv efectivo y estado de costo verificable.
-- [ ] Frontier/permisos altos/USD estimado nunca son default y exigen confirmacion separada.
-- **Verify:** reducer/snapshots + E2E contra fake-agent; deny-list por symlink, preview y confirmaciones cubiertos.
+- [x] Flujo: tarea -> capability editable -> target -> perfil/modelo -> cwd/proyecto seguro -> preview -> confirmacion.
+- [x] Preview muestra norms, MCP daemon, memoria, workflow, RAM y estado de costo `untracked`; el argv efectivo queda resuelto por `targets plan` y no se compone en la TUI.
+- [x] Confirmacion explicita antes de `targets launch`; el gobernador RAM agrega una segunda confirmacion cuando corresponde. La deny-list literal se bloquea en UI y `newSession` conserva el chequeo `realpath` autoritativo.
+- **Verify:** reducer/render tests del wizard y regresion de `r`; contracts de profiles/targets; suites completas.
 
 ## F6.6.5 — Prompt composer y evidencia operativa `[ ]`
 

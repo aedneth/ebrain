@@ -68,6 +68,10 @@ import type {
   RoutingData,
   CostData,
   TaskProfileData,
+  ProfilesData,
+  TargetData,
+  TargetPlanData,
+  ProfileSummaryData,
   FleetData,
   DoctorData,
   DoctorCheck,
@@ -84,6 +88,9 @@ import {
   fetchDoctor,
   runRemember,
   fetchTaskProfile,
+  fetchProfiles,
+  fetchTargets,
+  fetchTargetPlan,
 } from "./knowledge/run.js";
 
 // Sessions data plane (F6.4) — REUSED from cli/sessions.ts via the control-plane
@@ -94,6 +101,7 @@ import {
   killSession,
   sendToSession,
   newSession,
+  isClientPath,
   hasServer,
   attachTarget,
 } from "./sessions/tmux.js";
@@ -121,6 +129,7 @@ export const MIN_ROWS = 24;
 /** No canonical version source exists in the repo yet (no package.json "version",
  * no VERSION file) — this is a placeholder until F6.3+ wires one up. */
 const EBRAIN_UI_VERSION = "0.1.0-dev";
+const EBRAIN = join(import.meta.dir, "..", "..", "cli", "ebrain");
 
 const BOLD = "\x1b[1m";
 const CTRL_C = "\x03";
@@ -271,6 +280,9 @@ export type Overlay =
   | { kind: "confirmKill"; name: string }
   | { kind: "prompt"; name: string; line: LineState }
   | { kind: "confirmLaunch"; agent: string; cwd: string; reason: string }
+  | { kind: "wizardCwd"; line: LineState }
+  | { kind: "confirmTargetLaunch"; plan: TargetPlanData }
+  | { kind: "confirmTargetGovernor"; plan: TargetPlanData; reason: string }
   | { kind: "launchTask"; line: LineState }
   | { kind: "remember"; line: LineState }
   /** Read-only drill-in detail (Enter on a memory/check) — a titled, word-wrapped modal. */
@@ -282,12 +294,24 @@ export interface LaunchSlice {
   /** Workflow attribution survives attach -> the explicit wizard in F6.6.4. */
   workflowId?: string;
   profile: TaskProfileData | null;
+  wizard: LaunchWizard | null;
   status: LoadStatus | "running";
   error?: string;
 }
 
+export interface LaunchWizard {
+  targets: TargetData[];
+  profiles: ProfilesData;
+  targetSelected: number;
+  profileSelected: number;
+  capability: string;
+  cwd: string;
+  focus: "target" | "profile";
+  plan: TargetPlanData | null;
+}
+
 export function emptyLaunch(): LaunchSlice {
-  return { selected: 0, task: "", profile: null, status: "idle" };
+  return { selected: 0, task: "", profile: null, wizard: null, status: "idle" };
 }
 
 function launchOf(state: AppState): LaunchSlice {
@@ -409,6 +433,10 @@ export type AppEffect =
   /** Launch confirmed through the governor's dialog (an override that gets logged). */
   | { type: "launchConfirmed"; agent: string; cwd: string; reason: string }
   | { type: "profileLaunchTask"; task: string }
+  | { type: "openLaunchWizard" }
+  | { type: "planLaunchWizard" }
+  | { type: "requestTargetLaunch"; plan: TargetPlanData }
+  | { type: "launchTarget"; plan: TargetPlanData; reason?: string }
   // Knowledge panels (F6.5): each landing refreshes its slice from its subcommand.
   | { type: "refreshStatus" }
   | { type: "refreshMemory" }
@@ -617,6 +645,10 @@ function launchEnter(state: AppState): ReduceResult {
   return it ? settle(clear, { type: "launch", agent: it.agent }) : settle(clear);
 }
 
+function wizardOf(launch: LaunchSlice): LaunchWizard | null { return launch.wizard ?? null; }
+function selectedWizardTarget(wizard: LaunchWizard): TargetData | undefined { return wizard.targets[wizard.targetSelected]; }
+function selectedWizardProfile(wizard: LaunchWizard): ProfileSummaryData | undefined { return wizard.profiles.profiles[wizard.profileSelected]; }
+
 /**
  * Apply one key to the current state. Pure — no I/O, no rendering. Mirrors the
  * key-handling switch in FlowClock's runDashboardApp, but as a standalone function
@@ -689,6 +721,32 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       return settle(state);
     }
 
+    if (ov.kind === "wizardCwd") {
+      if (key.name === "escape") return settle({ ...state, overlay: null });
+      if (key.name === "enter") {
+        const cwd = ov.line.text.trim();
+        const launch = launchOf(state);
+        const wizard = wizardOf(launch);
+        if (!cwd || !wizard) return settle({ ...state, overlay: null });
+        if (isClientPath(cwd)) return settle({ ...state, overlay: null, launch: { ...launch, status: "error", error: "cwd de cliente rechazado" } });
+        return settle({ ...state, overlay: null, launch: { ...launch, wizard: { ...wizard, cwd, plan: null }, status: "ready", error: undefined } });
+      }
+      const edited = lineApplyKey(ov.line, key);
+      if (edited.handled) return settle({ ...state, overlay: { kind: "wizardCwd", line: edited.state } });
+      return settle(state);
+    }
+
+    if (ov.kind === "confirmTargetLaunch") {
+      if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "requestTargetLaunch", plan: ov.plan });
+      if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: null });
+      return settle(state);
+    }
+    if (ov.kind === "confirmTargetGovernor") {
+      if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "launchTarget", plan: ov.plan, reason: ov.reason });
+      if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: null });
+      return settle(state);
+    }
+
     if (ov.kind === "launchTask") {
       if (key.name === "escape") return settle({ ...state, overlay: null });
       if (key.name === "enter") {
@@ -743,12 +801,26 @@ export function reduce(state: AppState, key: Key): ReduceResult {
 
   // Launch grid keeps its own 2-D selection model (arrows + enter to launch).
   if (state.tab === "launch") {
+    const launch = launchOf(state);
+    const wizard = wizardOf(launch);
+    if (wizard) {
+      if (key.name === "tab" || key.name === "shifttab") return settle({ ...state, launch: { ...launch, wizard: { ...wizard, focus: wizard.focus === "target" ? "profile" : "target" } } });
+      if (key.name === "up" || key.name === "down") {
+        const delta = key.name === "down" ? 1 : -1;
+        if (wizard.focus === "target") return settle({ ...state, launch: { ...launch, wizard: { ...wizard, targetSelected: clampIndex(wizard.targetSelected + delta, wizard.targets.length), plan: null } } });
+        const index = clampIndex(wizard.profileSelected + delta, wizard.profiles.profiles.length);
+        const profile = wizard.profiles.profiles[index];
+        const capability = profile?.capabilities.includes(wizard.capability) ? wizard.capability : (profile?.capabilities[0] ?? wizard.capability);
+        return settle({ ...state, launch: { ...launch, wizard: { ...wizard, profileSelected: index, capability, plan: null } } });
+      }
+      if (key.name === "enter") return wizard.plan ? settle({ ...state, overlay: { kind: "confirmTargetLaunch", plan: wizard.plan } }) : settle(state, { type: "planLaunchWizard" });
+    }
     if (key.name === "up" || key.name === "down" || key.name === "left" || key.name === "right") {
       const cur = state.launch?.selected ?? 0;
       const delta =
         key.name === "left" ? -1 : key.name === "right" ? 1 : key.name === "up" ? -LAUNCH_COLS : LAUNCH_COLS;
       const selected = Math.min(Math.max(0, cur + delta), LAUNCHABLE.length - 1);
-      return settle({ ...state, confirmQuit: false, launch: { selected } });
+      return settle({ ...state, confirmQuit: false, launch: { ...launch, selected } });
     }
     if (key.name === "enter") return launchEnter(state);
   }
@@ -783,6 +855,16 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       if (ch === "r") {
         const task = launchOf(state).task.trim();
         if (task) return settle({ ...state, confirmQuit: false }, { type: "profileLaunchTask", task });
+      }
+      if (ch === "w") return settle({ ...state, confirmQuit: false }, { type: "openLaunchWizard" });
+      const wizard = wizardOf(launchOf(state));
+      if (wizard && ch === "c") return settle({ ...state, overlay: { kind: "wizardCwd", line: lineFrom(wizard.cwd) } });
+      if (wizard && (ch === "[" || ch === "]")) {
+        const profile = selectedWizardProfile(wizard);
+        const capabilities = profile?.capabilities ?? [];
+        const current = capabilities.indexOf(wizard.capability);
+        const next = capabilities.length ? capabilities[(current + (ch === "]" ? 1 : -1) + capabilities.length) % capabilities.length]! : wizard.capability;
+        return settle({ ...state, launch: { ...launchOf(state), wizard: { ...wizard, capability: next, plan: null } } });
       }
     }
 
@@ -939,6 +1021,19 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
     const left = Math.max(0, Math.floor((cols - width) / 2));
     const top = Math.max(0, Math.min(Math.floor(rows * 0.34), rows - box.length));
     return { box, top, left };
+  }
+
+  if (overlay.kind === "wizardCwd") {
+    const width = Math.min(82, Math.max(36, cols - 6));
+    const box = buildLaunchTaskBox({ kind: "launchTask", line: overlay.line }, width, theme);
+    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+  }
+  if (overlay.kind === "confirmTargetLaunch" || overlay.kind === "confirmTargetGovernor") {
+    const plan = overlay.plan;
+    const governor = overlay.kind === "confirmTargetGovernor";
+    const width = Math.min(84, Math.max(44, cols - 6));
+    const box = confirm({ title: governor ? "RAM governor" : "launch target", message: governor ? overlay.reason : `${plan.target} · ${plan.profile} · ${plan.model} · ${plan.costStatus}`, danger: governor, confirmKey: "y", confirmLabel: governor ? "launch anyway" : "launch", cancelKey: "n", cancelLabel: "cancel", width }, theme);
+    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
   }
 
   if (overlay.kind === "remember") {
@@ -1416,6 +1511,7 @@ function buildLaunchView(launch: LaunchSlice, rect: Rect, theme: Theme): string[
 
   const body: string[] = [];
   body.push(theme.fg("text.muted") + "t → task signals · r → refresh profile · enter → launch selected agent" + reset);
+  body.push(theme.fg("text.muted") + "w → launch wizard" + reset);
   if (launch.task) {
     body.push(theme.fg("text.secondary") + "task      " + reset + theme.fg("text.primary") + truncate(launch.task, contentW - 10) + reset);
   } else {
@@ -1439,6 +1535,22 @@ function buildLaunchView(launch: LaunchSlice, rect: Rect, theme: Theme): string[
     body.push(theme.fg("text.secondary") + "signals    " + reset + theme.fg("text.muted") + truncate(signals, contentW - 10) + reset);
     body.push(theme.fg("text.secondary") + "modes      " + reset + theme.fg("text.muted") + truncate(profile.compatibleTargets.join(" · "), contentW - 10) + reset);
     body.push(theme.fg("text.secondary") + "note       " + reset + theme.fg("text.muted") + truncate(profile.disclaimer, contentW - 10) + reset);
+  }
+  const wizard = launch.wizard;
+  if (wizard) {
+    const target = selectedWizardTarget(wizard);
+    const profile = selectedWizardProfile(wizard);
+    body.push("");
+    body.push(theme.fg("accent.teal") + "launch wizard" + reset + theme.fg("text.muted") + " · up/down select · c cwd · [/ ] capability · enter preview" + reset);
+    body.push(theme.fg("text.secondary") + "target     " + reset + theme.fg(wizard.focus === "target" ? "accent.teal" : "text.primary") + (target?.id ?? "no declared target") + reset);
+    body.push(theme.fg("text.secondary") + "profile    " + reset + theme.fg(wizard.focus === "profile" ? "accent.teal" : "text.primary") + (profile?.label ?? "run profiles init") + reset);
+    body.push(theme.fg("text.secondary") + "capability " + reset + theme.fg("text.primary") + wizard.capability + reset);
+    body.push(theme.fg("text.secondary") + "cwd        " + reset + theme.fg("text.primary") + truncate(wizard.cwd, contentW - 11) + reset);
+    if (wizard.plan) {
+      body.push(theme.fg("text.secondary") + "model      " + reset + theme.fg("text.primary") + truncate(wizard.plan.model, contentW - 11) + reset);
+      body.push(theme.fg("text.secondary") + "context    " + reset + theme.fg("text.muted") + `norms · MCP daemon · memory bus · workflow ${launch.workflowId ?? "none"} · ${wizard.plan.costStatus}` + reset);
+      body.push(theme.fg("text.muted") + "enter → confirm launch" + reset);
+    }
   }
 
   body.push("");
@@ -2358,6 +2470,50 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       if (state.tab === "launch") render();
     }
 
+    async function openLaunchWizard(): Promise<void> {
+      const launch = launchOf(state);
+      state = { ...state, launch: { ...launch, status: "loading", error: undefined } };
+      if (state.tab === "launch") render();
+      const [targets, profiles] = await Promise.all([fetchTargets(), fetchProfiles()]);
+      const current = launchOf(state);
+      if (!targets.ok || !profiles.ok || !profiles.data.initialized || profiles.data.profiles.length === 0 || targets.data.length === 0) {
+        state = { ...state, launch: { ...current, status: "error", error: !targets.ok ? targets.error : !profiles.ok ? profiles.error : "no profiles or declared targets" } };
+      } else {
+        const capability = current.profile?.selectedCapability ?? profiles.data.profiles[0]!.capabilities[0] ?? "general";
+        const first = profiles.data.profiles[0]!;
+        state = { ...state, launch: { ...current, status: "ready", wizard: { targets: targets.data, profiles: profiles.data, targetSelected: 0, profileSelected: 0, capability: first.capabilities.includes(capability) ? capability : first.capabilities[0]!, cwd: callerCwd(), focus: "target", plan: null } } };
+      }
+      if (state.tab === "launch") render();
+    }
+
+    async function planLaunchWizard(): Promise<void> {
+      const launch = launchOf(state); const wizard = wizardOf(launch); const target = wizard && selectedWizardTarget(wizard); const profile = wizard && selectedWizardProfile(wizard);
+      if (!wizard || !target || !profile) return;
+      state = { ...state, launch: { ...launch, status: "loading", error: undefined } };
+      if (state.tab === "launch") render();
+      const result = await fetchTargetPlan({ target: target.id, profile: profile.id, capability: wizard.capability, cwd: wizard.cwd });
+      const current = launchOf(state); const currentWizard = wizardOf(current);
+      state = result.ok && currentWizard ? { ...state, launch: { ...current, status: "ready", wizard: { ...currentWizard, plan: result.data } } } : { ...state, launch: { ...current, status: "error", error: result.ok ? "wizard closed" : result.error } };
+      if (state.tab === "launch") render();
+    }
+
+    async function requestTargetLaunch(plan: TargetPlanData): Promise<void> {
+      const cls = plan.ramClass === "light" ? "light" : "heavy";
+      const g = governLaunch({ launchingClass: cls, liveHeavyCount: await countLiveHeavy(), availableMb: readAvailableMb() });
+      if (g.decision === "confirm") { state = { ...state, overlay: { kind: "confirmTargetGovernor", plan, reason: g.reason } }; render(); return; }
+      await launchTarget(plan);
+    }
+
+    async function launchTarget(plan: TargetPlanData, reason?: string): Promise<void> {
+      if (reason) logOverride({ agent: plan.agent, cwd: plan.cwd, reason });
+      const launch = launchOf(state); state = { ...state, launch: { ...launch, status: "running", error: undefined } }; if (state.tab === "launch") render();
+      const slug = launchSlug(plan.cwd);
+      const proc = Bun.spawn([EBRAIN, "targets", "launch", "--target", plan.target, "--profile", plan.profile, "--cap", plan.capability, "--cwd", plan.cwd, "--slug", slug, "--yes", "--json"], { stdout: "pipe", stderr: "pipe" });
+      const exit = await proc.exited; const current = launchOf(state);
+      state = exit === 0 ? { ...state, launch: { ...current, status: "ready", error: undefined } } : { ...state, launch: { ...current, status: "error", error: "target launch failed" } };
+      await refreshSessions(); if (state.tab === "launch") render();
+    }
+
     /** Fleet + Doctor (6.5.4). `force` (the `r` re-run) refetches even when cached and
      * drives the spinner; a landing skips the fetch if data is already present. */
     async function refreshFleetDoctor(force = false): Promise<void> {
@@ -2460,6 +2616,10 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
         case "profileLaunchTask":
           await profileLaunchTask(effect.task);
           break;
+        case "openLaunchWizard": await openLaunchWizard(); break;
+        case "planLaunchWizard": await planLaunchWizard(); break;
+        case "requestTargetLaunch": await requestTargetLaunch(effect.plan); break;
+        case "launchTarget": await launchTarget(effect.plan, effect.reason); break;
       }
     }
 

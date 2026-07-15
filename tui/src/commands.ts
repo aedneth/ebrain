@@ -106,6 +106,7 @@ const HOME_HINTS: HintEntry[] = [
 const LAUNCH_HINTS: HintEntry[] = [
   { k: "t", label: "task" },
   { k: "r", label: "profile" },
+  { k: "w", label: "wizard" },
   { k: "↑↓←→", label: "agent" },
   { k: "enter", label: "run/launch" },
 ];

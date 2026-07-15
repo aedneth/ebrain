@@ -70,6 +70,13 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     expect(reduce(launchState(5), { name: "right" }).state.launch?.selected).toBe(5); // clamp high
   });
 
+  test("grid navigation preserves the complete launch slice so refresh never crashes", () => {
+    const state = reduce(launchState(0), { name: "right" }).state;
+    expect(state.launch?.task).toBe("");
+    expect(state.launch?.profile).toBeNull();
+    expect(reduce(state, parseKey("r")).effect).toBeUndefined();
+  });
+
   test("enter emits a launch effect for the selected agent", () => {
     expect(reduce(launchState(1), { name: "enter" }).effect).toEqual({ type: "launch", agent: "codex" });
   });
@@ -101,6 +108,25 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     const r = reduce(st, { name: "enter" });
     expect(r.effect).toEqual({ type: "launch", agent: "claude" });
     expect(r.state.overlay).toBeUndefined();
+  });
+
+  test("wizard selects explicit target/profile, previews a plan, and confirms before launch", () => {
+    const st: AppState = {
+      ...launchState(),
+      launch: {
+        ...launchState().launch!,
+        wizard: {
+          targets: [{ id: "opencode-openrouter", agent: "opencode", provider: "openrouter", ramClass: "heavy" }],
+          profiles: { initialized: true, profiles: [{ id: "my-stack", label: "My stack", provider: "openrouter", capabilities: ["coding"], models: 1, evidence: { source: "user", asOf: "d" } }] },
+          targetSelected: 0, profileSelected: 0, capability: "coding", cwd: "/tmp/project", focus: "target", plan: null,
+        },
+      },
+    };
+    expect(reduce(st, { name: "enter" }).effect).toEqual({ type: "planLaunchWizard" });
+    const planned: AppState = { ...st, launch: { ...st.launch!, wizard: { ...st.launch!.wizard!, plan: { target: "opencode-openrouter", agent: "opencode", profile: "my-stack", capability: "coding", model: "deepseek/x", fallbackModels: [], cwd: "/tmp/project", ramClass: "heavy", costStatus: "untracked" } } } };
+    const review = reduce(planned, { name: "enter" });
+    expect(review.state.overlay?.kind).toBe("confirmTargetLaunch");
+    expect(reduce(review.state, parseKey("y")).effect).toEqual({ type: "requestTargetLaunch", plan: planned.launch!.wizard!.plan });
   });
 
   test("governor override dialog: ONLY y proceeds (launchConfirmed); n/esc/enter do not", () => {

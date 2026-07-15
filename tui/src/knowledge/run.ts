@@ -25,6 +25,9 @@ import {
   parseWorkflows,
   parseWorkflowRun,
   parseTaskProfile,
+  parseProfiles,
+  parseTargets,
+  parseTargetPlan,
   parseRouteRun,
   type OverviewData,
   type FleetData,
@@ -36,6 +39,9 @@ import {
   type WorkflowsData,
   type WorkflowRunData,
   type TaskProfileData,
+  type ProfilesData,
+  type TargetData,
+  type TargetPlanData,
   type RouteRunData,
 } from "./contracts.js";
 
@@ -129,6 +135,11 @@ export function runWorkflow(id: string): Promise<KResult<WorkflowRunData>> {
 
 export function fetchTaskProfile(task: string): Promise<KResult<TaskProfileData>> {
   return fetchParsed(["task-profile", task, "--json"], 15000, parseTaskProfile);
+}
+export function fetchProfiles(): Promise<KResult<ProfilesData>> { return fetchParsed(["profiles", "list", "--json"], 15000, parseProfiles); }
+export function fetchTargets(): Promise<KResult<TargetData[]>> { return fetchParsed(["targets", "list", "--json"], 15000, parseTargets); }
+export function fetchTargetPlan(input: { target: string; profile: string; capability: string; cwd: string }): Promise<KResult<TargetPlanData>> {
+  return fetchParsed(["targets", "plan", "--target", input.target, "--profile", input.profile, "--cap", input.capability, "--cwd", input.cwd, "--json"], 15000, parseTargetPlan);
 }
 
 export function runRoute(capability: string, task: string, opts: { workflow?: string } = {}): Promise<KResult<RouteRunData>> {

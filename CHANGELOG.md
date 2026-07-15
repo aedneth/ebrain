@@ -4,6 +4,14 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — F6.6.4: Launch Wizard gobernado por usuario
+
+- **Wizard en Launch:** carga targets/perfiles por CLI JSON, permite seleccionar target/perfil/capability/cwd y materializa `targets plan` antes de cualquier sesion.
+- **Preview y guardrails:** muestra contexto harness/MCP/memoria/workflow, modelo efectivo, RAM y estado `untracked`; confirmacion explicita y segundo gate del gobernador cuando aplica.
+- **Fix de estabilidad:** la navegacion del grid preserva el slice completo Launch; `r` ya no puede perder `task` y sacar la TUI.
+
+---
+
 ## 2026-07-15 — F6.6.3: target OpenCode/OpenRouter con argv declarado
 
 - **`ebrain targets`:** descubre targets declarados en manifests y construye `plan`/`launch` desde un perfil de usuario, sin inferir soporte para otros adapters.
