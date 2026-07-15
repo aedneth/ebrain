@@ -29,22 +29,24 @@ log() { printf '[%s] %s\n' "$(ts)" "$*" | tee -a "$LOG" >&2; }
 
 [ -x "$LAUNCHER" ] || { echo "dream-cycle: falta $LAUNCHER" >&2; exit 127; }
 
-# 1. Guard de lock: MCP serve vivo → diferir (no deadlock).
+# 1. Guard de lock: host daemon vivo → no abrir PGLite directo. En régimen
+# daemon, el write-back chico entra por MCP put_page; el dream local requiere
+# parar el host o moverlo a un worker dedicado.
 if pgrep -f 'cli\.ts serve' >/dev/null 2>&1; then
-  log "dream DIFERIDO — MCP serve activo (lock PGLite). Correr con el MCP idle (sin sesión de agente)."
+  log "dream OMITIDO — daemon HTTP-MCP activo (lock PGLite). No hay sweep local pendiente; usar ventana de mantenimiento con daemon detenido para dream completo."
   exit 0
 fi
 
 # 2. Asegurar subagent tier tool-capable (idempotente; requiere lock-free, ya garantizado arriba).
-cur="$("$LAUNCHER" config get models.tier.subagent 2>/dev/null | tr -d '[:space:]' || true)"
+cur="$(EBRAIN_RUN_LOCAL=1 "$LAUNCHER" config get models.tier.subagent 2>/dev/null | tr -d '[:space:]' || true)"
 if [ "$cur" != "$SUBAGENT_MODEL" ]; then
   log "config: models.tier.subagent '${cur:-<unset>}' → '$SUBAGENT_MODEL'"
-  "$LAUNCHER" config set models.tier.subagent "$SUBAGENT_MODEL" 2>&1 | tee -a "$LOG" >&2 || log "WARN: no pude setear subagent tier"
+  EBRAIN_RUN_LOCAL=1 "$LAUNCHER" config set models.tier.subagent "$SUBAGENT_MODEL" 2>&1 | tee -a "$LOG" >&2 || log "WARN: no pude setear subagent tier"
 fi
 
 # 3. Correr el dream.
 log "dream START ${DRY:-(real)}"
-"$LAUNCHER" dream $DRY --json 2>&1 | tee -a "$LOG" >&2
+EBRAIN_RUN_LOCAL=1 "$LAUNCHER" dream $DRY --json 2>&1 | tee -a "$LOG" >&2
 rc=${PIPESTATUS[0]}
 log "dream END rc=$rc"
 exit "$rc"

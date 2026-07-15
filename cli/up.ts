@@ -172,6 +172,35 @@ function writeJsonObject(path: string, data: Record<string, unknown>): void {
   chmodSync(path, 0o600);
 }
 
+function chmodIfExists(path: string, mode: number): void {
+  if (!existsSync(path)) return;
+  chmodSync(path, mode);
+}
+
+function hardenAgentConfig(agent: OnboardAgent): void {
+  const files: string[] = [];
+  switch (agent) {
+    case "claude":
+      files.push(join(HOME, ".claude.json"));
+      break;
+    case "codex":
+      files.push(join(HOME, ".codex", "config.toml"));
+      break;
+    case "gemini":
+      files.push(join(HOME, ".gemini", "settings.json"));
+      break;
+    case "cursor":
+      files.push(join(HOME, ".cursor", "mcp.json"));
+      break;
+    case "opencode":
+      files.push(join(HOME, ".config", "opencode", "opencode.json"));
+      break;
+  }
+  for (const file of files) {
+    try { chmodIfExists(file, 0o600); } catch { /* best-effort hardening */ }
+  }
+}
+
 export function mergeCursorMcpConfig(current: Record<string, unknown>, token: string, url = mcpUrl(port())): Record<string, unknown> {
   const mcpServers = current.mcpServers && typeof current.mcpServers === "object" && !Array.isArray(current.mcpServers)
     ? current.mcpServers as Record<string, unknown>
@@ -209,6 +238,7 @@ async function onboardOne(agent: OnboardAgent, token: string): Promise<OnboardRe
   if (!(await which(spec.binary))) return { agent, status: "skipped", detail: `${spec.binary} not installed` };
   await removeExisting(agent, token);
   const res = await runAgentCommand(spec, token);
+  if (res.ok) hardenAgentConfig(agent);
   return {
     agent,
     status: res.ok ? "registered" : "failed",

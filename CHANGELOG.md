@@ -4,6 +4,16 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — Cierre findings FASE D: D.5.4 + F-F1 + F-D2 permisos
+
+- **D.5.4 cerrado:** `scripts/ebrain-brain` corre `cli/daemon-preflight.ts` antes de `serve --http`; lista sources con el engine local cuando el lock aún está libre y aplica `assertNoClientSources()` sobre id/name/path. Si aparece `brisas`/`dekko`, el daemon hard-falla antes de bindear HTTP. Test nuevo: `cli/daemon-preflight.test.ts`.
+- **F-F1 cerrado para CLI/write-back:** `ebrain-run` usa un `GBRAIN_HOME` thin-client separado (`~/.config/ebrain/gbrain-thin/.gbrain/config.json`) con `remote_mcp`; el secret OAuth vive en `~/.config/ebrain/remote-client.env` chmod 600 y NO se persiste en el config thin-client. `ebrain-q` lista sources vía MCP, usa `--source-id`, falla ruidoso si el daemon no responde y ya no devuelve vacío silencioso. `remember` y `sessions-federate` hacen write-through por MCP `put_page` al source `agent-memory`; `dream-cycle` ya no promete un sweep local mientras el daemon posee el lock.
+- **Doctor daemon-aware:** `ebrain doctor --json` verifica `sources:isolation` vía MCP cuando el host está UP, en vez de diferir para siempre por lock. Verificado: `sources:isolation ok sources vía daemon MCP = propios/federados; cero cliente`.
+- **F-D2 permisos:** `ebrain onboard` fuerza chmod 600 en configs conocidos de claude/codex/gemini/cursor/opencode sin leerlos; fix vivo aplicado a `~/.gemini/settings.json` y configs asociados. Queda pendiente hardening pre-release de indirection universal: las CLIs instaladas solo exponen bearer-env HTTP en Codex; Claude/Gemini/OpenCode aceptan headers literales para HTTP.
+- **Verify:** `bun test ./cli/` = **142 pass / 0 fail**; `bun test ./tui/test/` = **360 pass / 0 fail**; `ebrain daemon restart` healthy; `ebrain up` = smoke 94 tools + onboard 5/5; `ebrain q "korvex" 2` y query al learning nuevo devuelven resultados bajo daemon; `remote-client.env`, thin config y configs de agents = chmod 600.
+
+---
+
 ## 2026-07-15 — FASE D doble-gate: `[FABLE_AUDIT_PASS]` (segundo checker independiente) — 2 findings nuevos
 
 - **Fable 5 = segundo checker (maker≠checker), veredicto `[FABLE_AUDIT_PASS]`** — confirma el `[AUDIT_PASS]` de Opus con evidencia PROPIA: swarm de **8 clientes MCP concurrentes** (más agresivo que los 6 de Opus) → 8/8 HTTP 200 en **0.163s**, 94 tools exactos, serve=1 sostenido, loopback (`ss`), auth negativa 401 sin/con-bearer-inválido; idempotencia `up`×2/`onboard --all`×2 limpia; suites cli 135/0 + tui 360/0; secret-safety limpio. Reporte: `docs/AUDIT-FABLE-FASE-D.md`.

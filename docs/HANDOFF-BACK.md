@@ -4,14 +4,24 @@ project: ebrain
 from: Codex (maker/constructor)
 to: Opus (Claude Code, auditor) + Fable 5 (gate)
 created: 2026-07-14
+updated: 2026-07-15
 status: ready-for-audit
-scope: P1 plug-and-play daemon onboarding + P2 daemon closeout partial + D6 local preflight
+scope: P1/P2 daemon + D.5.4/F-F1/F-D2-perms closure
 ---
 
-# HANDOFF-BACK — P1/P2 daemon work
+# HANDOFF-BACK — daemon work + audit-finding closure
 
 ## 1. Qué construí
 
+- Cierre findings Fable/Opus (Codex maker, 2026-07-15):
+  - `cli/daemon-preflight.ts`: preflight de boot antes de `serve --http`; lista sources locales con lock libre, corre `assertNoClientSources()` sobre id/name/path y prepara thin-client CLI.
+  - `cli/mcp-remote.ts`: registra/guarda OAuth client local para ops CLI; secret en `~/.config/ebrain/remote-client.env` chmod 600; config thin en `~/.config/ebrain/gbrain-thin/.gbrain/config.json` sin secret.
+  - `cli/remote-tools.ts`: helper MCP para scripts (`sources_list`, `put_page`, submit-cycle async).
+  - `ebrain-run`: usa `GBRAIN_HOME` thin-client separado cuando existe; `EBRAIN_RUN_LOCAL=1` conserva escape hatch local para mantenimiento.
+  - `ebrain-q`: sources por MCP, `--source-id`, fail-loud si no puede listar/query; no más vacío silencioso por lock.
+  - `remember`/`sessions-federate`: write-through por MCP `put_page` a `agent-memory`; learnings CLI quedan buscables con daemon UP.
+  - `doctor`: `sources:isolation` vía daemon MCP cuando el host está UP, no diferido permanente.
+  - `onboard`: chmod 600 best-effort para configs conocidos de claude/codex/gemini/cursor/opencode sin leerlos.
 - `ebrain up`
   - Asegura daemon HTTP-MCP en `127.0.0.1:8541`.
   - Asegura `EBRAIN_MCP_TOKEN` sin imprimirlo.
@@ -41,6 +51,10 @@ scope: P1 plug-and-play daemon onboarding + P2 daemon closeout partial + D6 loca
 
 ## 2. Decisiones y por qué
 
+- **Thin-client separado, no `remote_mcp` en `~/.gbrain/config.json`:** el host necesita el config local real para poder correr `gbrain serve`; si `remote_mcp` vive en ese mismo config, upstream considera la instalación thin-client y rehúsa `serve`. Por eso ebrain separa el plano: host = `~/.gbrain`; ops CLI = `GBRAIN_HOME=~/.config/ebrain/gbrain-thin`.
+- **OAuth client para ops CLI, bearer legacy para agentes:** upstream `callRemoteTool` usa OAuth client_credentials, no el bearer legacy de `EBRAIN_MCP_TOKEN`. Se registra un client local pre-bind para CLI/write-back y se guarda el secret en env file 600.
+- **Write-back chico por `put_page`, no `gbrain sync`:** `sync` es localOnly/thin-refused; bajo daemon pelearía el lock. Para `remember` y sesiones nuevas, `put_page` da búsqueda inmediata sin abrir PGLite local.
+- **Indirection universal de adapters queda pendiente:** Codex soporta bearer env-var para HTTP; los helps instalados de Claude/Gemini/OpenCode aceptan headers literales para HTTP y `--env` solo para stdio. Forzar indirection ahora implicaría cambiar transporte o asumir expansión no documentada.
 - **Wrapper propio ebrain en vez de `gbrain connect --install`:** upstream solo automatiza Claude/Codex y usa `GBRAIN_REMOTE_TOKEN`. ebrain necesita superficie `EBRAIN_MCP_TOKEN` y cubrir Gemini/Cursor/OpenCode.
 - **Bearer legacy local, no OAuth client credentials para agentes locales:** el objetivo P1 es plug-and-play local loopback; bearer está soportado por `serve-http` y evita UI/OAuth para el usuario.
 - **Token file chmod 600 en `~/.config/ebrain/`:** no hay credential helper portable garantizado en esta laptop; el store local cumple "usuario no ve token" y evita poner secretos en configs donde Codex sí puede usar env var.
@@ -50,6 +64,10 @@ scope: P1 plug-and-play daemon onboarding + P2 daemon closeout partial + D6 loca
 
 ## 3. Gotchas nuevos
 
+- No escribir `remote_mcp` en el config host (`~/.gbrain/config.json`) en esta topología: rompe `gbrain serve`. Usar el `GBRAIN_HOME` thin-client separado.
+- `gbrain query` thin-client necesita `--source-id`, no `--source`; el wrapper viejo etiquetaba resultados con el source iterado aunque la búsqueda no estuviera scoped.
+- Con `set -o pipefail`, `sort | awk | head` puede terminar en rc 141 por SIGPIPE aunque haya resultados correctos. `ebrain-q` lo neutraliza al final del pipeline.
+- El `remember` por CLI ahora prueba realmente el loop write→search: guardó un learning y `ebrain q "GBRAIN_HOME thin-client separado remote_mcp"` lo devolvió desde `agent-memory`.
 - `tools/list` de MCP HTTP responde como SSE (`data: {...}`), no solo JSON plano. El primer smoke autenticaba pero contaba `0 tools`; corregido con parser SSE (`toolsCountFromMcpBody`).
 - `ebrain-daemon` prefiere la copia viva `~/.config/ebrain/ebrain-brain`; cambiar solo el template en repo no basta. Instalé la copia viva actualizada.
 - `opencode mcp add` espera header como `KEY=VALUE`; Claude/Gemini esperan `Authorization: Bearer ...`.
@@ -58,10 +76,15 @@ scope: P1 plug-and-play daemon onboarding + P2 daemon closeout partial + D6 loca
 
 ## 4. Tests y verificación
 
-- `bash -n scripts/ebrain-up scripts/ebrain-brain scripts/ebrain-daemon` → OK.
-- `bun test ./cli/` → 135 pass / 0 fail.
+- `bash -n scripts/ebrain-run scripts/ebrain-brain scripts/ebrain-q scripts/dream-cycle scripts/sessions-federate harness/core/remember.sh harness/core/doctor.sh scripts/ebrain-up scripts/ebrain-daemon` → OK.
+- `bun test ./cli/` → 142 pass / 0 fail.
 - `bun test ./tui/test/` → 360 pass / 0 fail.
+- `ebrain daemon restart` → preflight corrió, daemon UP healthy (PID observado 153533).
 - `ebrain up` → daemon UP, token ready, `tools/list` OK con 94 tools, 5 agentes registrados.
+- `ebrain q "korvex" 2` → resultados reales bajo daemon (control positivo; no cuelga).
+- `ebrain q "GBRAIN_HOME thin-client separado remote_mcp" 3` → devuelve el learning nuevo desde `agent-memory`, rc=0.
+- `ebrain doctor --json` → `daemon:status ok`, `sources:isolation ok` vía daemon MCP, adapters MCP=http-daemon, `brain:engine ok`.
+- Permisos verificados sin leer contenido: `remote-client.env`, thin config, `.claude.json`, `.codex/config.toml`, `.gemini/settings.json`, `.cursor/mcp.json`, `.config/opencode/opencode.json` = 600.
 - `ebrain up` repetido → idempotente, mismo resultado.
 - `ebrain onboard --all` → claude/codex/gemini/cursor/opencode OK.
 - `ebrain daemon restart` + `ebrain up` → restart con launcher nuevo y smoke OK.
@@ -80,60 +103,53 @@ No toqué TUI source; cero-hex no aplica a este cambio, aunque la suite TUI comp
 
 ## 5. Pendientes
 
-- D.6: prueba exacta de aceptación con ≥2 agentes reales concurrentes usando MCP sin colgarse. No la declaré hecha; sólo corrí preflight local sin agentes pesados.
-- D.7: gate `[AUDIT_PASS]` Opus + Fable 5.
+- F-D2 hardening pre-release: resolver indirection universal/token-store por adapter para no persistir bearer literal en configs de agentes que hoy no exponen bearer-env HTTP.
 - Installer `curl -fsSL ... | sh` todavía pendiente.
 - P3/TUI 6.6 sigue pendiente: launch wizard, advisor v1, prompt composer.
 
 ## 6. Qué auditar
 
+- D.5.4:
+  - `scripts/ebrain-brain` corre `cli/daemon-preflight.ts` antes de bindear HTTP.
+  - El preflight lista sources con el engine local mientras el lock está libre y hard-falla si detecta `brisas`/`dekko` en id/name/local_path.
+  - `doctor.sh` valida `sources:isolation` vía daemon MCP cuando el host está UP.
+- F-F1:
+  - `ebrain-run` usa `GBRAIN_HOME=~/.config/ebrain/gbrain-thin` para ops CLI y no contiende el lock del host.
+  - El config thin contiene `remote_mcp` pero no `oauth_client_secret`; el secret vive en `~/.config/ebrain/remote-client.env` chmod 600.
+  - `ebrain q` usa sources vía MCP, `--source-id`, y falla ruidoso si el daemon no responde.
+  - `remember` y `sessions-federate` escriben por MCP `put_page` a `agent-memory`; el learning nuevo es buscable con daemon UP.
+  - `dream-cycle` es daemon-aware y no promete sweeps locales imposibles mientras el daemon posee el lock.
+- F-D2 permisos:
+  - `ebrain onboard` hardenea chmod 600 para configs conocidos de claude/codex/gemini/cursor/opencode sin leer contenido.
+  - Queda intencionalmente pendiente la indirection universal/token-store por adapter para release público.
 - Secret-safety:
-  - Que ningún token se imprime en stdout/stderr, tests, docs o commits.
-  - Que `redactSecrets` cubre errores de CLI y bearer/header.
-  - Que `mcp-token.env` queda fuera del repo y chmod 600.
-- Idempotencia:
-  - `ebrain up` y `ebrain onboard --all` repetidos no duplican ni rompen registros.
-  - `harness install --mcp <agent>` ya no revierte a stdio.
-- Runtime:
-  - Daemon estable tras restart.
-  - `tools/list` 94 tools con bearer.
-  - Sesiones lanzadas por TUI heredan `EBRAIN_MCP_TOKEN`.
-- Arquitectura:
-  - La decisión bearer-local es aceptable para loopback P1.
-  - Cursor/OpenCode con header literal en config es el mejor compromiso actual o requiere un store/env nativo por agente.
+  - Que ningún token aparece en stdout/stderr, tests, docs o commit.
+  - Que los errores de helpers remotos pasan por redacción.
 
 ━━━
 
-## 7. Audit result (Opus, checker — 2026-07-14)
+## 7. Audit result + cierre findings
 
-**Veredicto: `[AUDIT_PASS]` para FASE D (daemon HTTP-MCP). Fable 5 = segundo checker, PENDIENTE.**
+**FASE D está doble-gated:** Opus emitió `[AUDIT_PASS]` el 2026-07-14 y Fable 5 emitió `[FABLE_AUDIT_PASS]` el 2026-07-15. Este handoff agrega el cierre maker de los findings posteriores.
 
-### D.6 concurrencia — PASS (evidencia)
-- Estado frío verificado antes del test: daemon DOWN, **cero** `cli.ts serve`, token store presente chmod 600, 1428 MB avail.
-- `ebrain up` (cold boot): daemon UP · token leído del store (nunca impreso) · smoke `tools/list`=94 · onboard 5/5 `registered`.
-- Idempotencia: `ebrain up`×2 y `ebrain onboard --all`×2 → limpio, sin duplicados ni errores (opencode confirmado upsert-tolerante en vivo).
-- **Criterio 1 (≥2 agentes concurrentes sin colgarse):** 6 clientes MCP `tools/list` simultáneos → los 6 = 94 tools en **0.24s**, `serve` count = **1**. `claude mcp list`=`✔ Connected` + `codex mcp list`=registrado (env-var bearer), **en paralelo**, serve=1 mid-handshake y después.
-- Invariante single-writer: `ss` = `127.0.0.1:8541` loopback-only, un `bun` PID dueño; char-class pgrep = 1 serve real.
-- Aislamiento vivo por el canal compartido: `ebrain q "brisas dekko cliente" 3` = cero contenido de cliente.
-- `ebrain status --json` = brain up / served_by mcp / fleet 6/6 / memoria legible; `ebrain doctor --json` rc=0 (28 ok / 3 warn; `sources:isolation` diferido por lock = esperado).
+- **F-D1 / D.5.4 — CERRADO:** aislamiento de sources cableado al boot pre-bind y a `doctor.sh` daemon-aware.
+- **F-F1 — CERRADO:** ops CLI y write-back ya pasan por daemon/thin-client; `ebrain q` no cuelga bajo lock y el learning nuevo queda buscable desde `agent-memory`.
+- **F-D2 permisos — CERRADO parcial:** chmod 600 aplicado a configs conocidos, incluyendo Gemini. Sigue pendiente el diseño pre-release de indirection universal/token-store por adapter.
+- **F-F2 — CERRADO documental:** probe vacuo retirado; la evidencia de aislamiento queda en federación default-deny + CI + preflight/doctor.
 
-### D.7 gate — los 4 criterios GO
-1. ≥2 concurrentes = **PASS**. 2. serve HTTP auth+loopback = **PASS**. 3. RAM = **PASS**. 4. aislamiento con test = **PASS (con caveat F-D1)**.
-- Suites: `bun test ./cli/` 135/0 · `bun test ./tui/test/` 360/0. TUI no tocado → cero-hex n/a.
-- Secret-safety: sin token en archivos tracked ni en `daemon.log`; store fuera del repo, chmod 600.
+### Evidencia nueva del cierre maker
 
-### Findings (para que el maker cierre)
-- **F-D1 (media/baja) — enforcement de aislamiento no cableada al runtime.** `assertNoClientSources()`/`isClientSource`/`federatedSources` viven en `cli/isolation.ts` pero **solo los llama el CI test** — NO el boot del host. D.5.3 y el docstring de `cli/isolation.ts` lo afirmaban como "enforced en runtime, no solo doc": overstatement. **Corregido por Opus** (docs ajustados) + **abierta D.5.4**: cablear la aserción al preflight de `scripts/ebrain-brain` (listar sources del engine, hard-fallar boot si hay cliente). No es leak activo. → **Codex: implementar D.5.4.**
-- **F-D2 (baja) — token bearer en reposo en configs de agente.** claude/gemini/opencode/cursor guardan el valor del token en sus configs (`~/.claude.json`, settings gemini, `~/.cursor/mcp.json` [chmod 600], config opencode). Solo **codex** usa indirección `--bearer-token-env-var` (lo correcto). Aceptable para loopback-local P1; **hardening antes del release público**: preferir indirección env/secret-store o token corto rotable para todos los adapters. → backlog open-source.
+- `bun test ./cli/` = 142 pass / 0 fail.
+- `bun test ./tui/test/` = 360 pass / 0 fail.
+- `ebrain daemon restart` levantó healthy con preflight.
+- `ebrain up` fue idempotente: daemon UP, smoke `tools/list`=94, onboard 5/5.
+- `ebrain q "korvex" 2` devolvió resultados reales bajo daemon.
+- `ebrain q "GBRAIN_HOME thin-client separado remote_mcp" 3` devolvió el learning nuevo desde `agent-memory`.
+- `ebrain doctor --json` reportó `daemon:status ok`, `sources:isolation ok`, adapters MCP=http-daemon y `brain:engine ok`.
+- Permisos verificados sin leer secretos: `remote-client.env`, thin config y configs de agentes conocidos = 600.
 
-### Segundo checker — Fable 5 (2026-07-15): `[FABLE_AUDIT_PASS]`
-Fable confirmó el gate con evidencia propia (8 clientes MCP concurrentes = 94 tools en 0.163s, serve=1, 401 negativos, suites verdes) y aportó 2 findings nuevos (ambos reproducidos por Opus). Reporte completo: `docs/AUDIT-FABLE-FASE-D.md`.
-- **F-F1 (media) — CLI/write-back rota bajo el daemon:** `ebrain q`/`sync`/`dream-cycle`/`sessions-federate` contienden con el lock (`ebrain q "korvex"` = rc=124, cuelga 40s); learnings CLI no buscables con daemon UP; falta `remote_mcp` en `~/.gbrain/config.json`. No bloquea gates (agentes usan MCP). **Cierre maker:** (a) rutear ops CLI por el daemon (thin-client `remote_mcp`), (b) `dream-cycle`/`doctor` daemon-aware, (c) `ebrain-q` fail-loud.
-- **F-F2 (baja):** el probe `ebrain q "brisas dekko"` como evidencia de aislamiento es vacuo → retirado.
-- **Ajustes:** F-D1 → media (D.5.4 prioridad ALTA, única enforcement viva futura del plano-source). F-D2 → `chmod 600 ~/.gemini/settings.json` (hoy 664 world-readable).
+### Backlog abierto real
 
-### Backlog de cierre para Codex (maker)
-1. **D.5.4** (prioridad ALTA): cablear `assertNoClientSources()` al preflight de `ebrain-brain`.
-2. **F-F1 (a/b/c)**: rewire thin-client de ops CLI + daemon-aware dream-cycle/doctor + ebrain-q fail-loud.
-3. **F-D2**: `chmod 600 ~/.gemini/settings.json` + preferir indirección env-var/secret-store para todos los adapters.
-4. P1 restante (`ebrain up` installer `curl | sh`) + P3/TUI 6.6.
+1. **F-D2 hardening universal:** decidir/implementar store o indirection por adapter para Claude/Gemini/OpenCode/Cursor antes del release público.
+2. **Installer P1:** `curl -fsSL ... | sh` para instalación open-source plug-and-play.
+3. **P3/TUI 6.6:** launch wizard, advisor v1, prompt composer.

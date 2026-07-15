@@ -14,6 +14,8 @@ mkdir -p "$SESSIONS"
 . "$HOME/eBrain/harness/core/trust.sh"
 
 count=0; skipped=0; denied=0
+UPDATED_LIST="$(mktemp)"
+trap 'rm -f "$UPDATED_LIST"' EXIT
 while IFS= read -r sdir; do
   repo="$(dirname "$(dirname "$sdir")")"
   slug="$(basename "$repo")"
@@ -32,7 +34,7 @@ while IFS= read -r sdir; do
       if trust_redact_hit "$f"; then
         echo "  ⚠ skip (posible secreto): $f" >&2; skipped=$((skipped+1)); continue
       fi
-      cp "$f" "$dst/$b"; count=$((count+1))
+      cp "$f" "$dst/$b"; printf '%s\t%s\n' "$slug" "$dst/$b" >> "$UPDATED_LIST"; count=$((count+1))
     fi
   done
 done < <(find "$HOME" -maxdepth 6 -type d -path '*/.brain/sessions' 2>/dev/null)
@@ -46,8 +48,20 @@ if [ -d "$MEM/.git" ]; then
   git -C "$MEM" commit -q -m "sessions-federate: sweep $(date -u +%FT%TZ) (+$count)" 2>/dev/null || true
 fi
 
-# sync del source agent-memory a gbrain (estructura + embeddings; volumen chico = costo mínimo)
-RUN="$HOME/.config/ebrain/ebrain-run"
-[ -x "$RUN" ] || RUN="$HOME/.config/ebrain/gbrain-run"
-"$RUN" sync --source agent-memory >/dev/null 2>&1 \
-  && echo "  gbrain sync agent-memory ✓" || echo "  (gbrain sync diferido — source aún no registrado?)"
+# Write-through por MCP al daemon; evita abrir PGLite directo mientras el host está UP.
+EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
+REMOTE="$EBRAIN_HOME/cli/remote-tools.ts"
+BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN_BIN=bun
+synced=0; sync_failed=0
+if [ -s "$UPDATED_LIST" ] && [ -f "$REMOTE" ]; then
+  while IFS=$'\t' read -r slug f; do
+    b="$(basename "$f" .md)"
+    if "$BUN_BIN" run "$REMOTE" put-page --source agent-memory --slug "sessions/$slug/$b" --file "$f" >/dev/null 2>&1; then
+      synced=$((synced+1))
+    else
+      sync_failed=$((sync_failed+1))
+    fi
+  done < "$UPDATED_LIST"
+fi
+[ "$synced" -gt 0 ] && echo "  MCP put_page sessions ✓ ($synced)"
+[ "$sync_failed" -gt 0 ] && echo "  WARN: $sync_failed sesiones quedaron en disco pero no entraron al daemon MCP aún"

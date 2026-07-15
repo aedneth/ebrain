@@ -12,6 +12,17 @@ if [ -f "$ENV_FILE" ]; then
   . "$ENV_FILE"
   set +a
 fi
+THIN_HOME="$HOME/.config/ebrain/gbrain-thin"
+REMOTE_ENV="$HOME/.config/ebrain/remote-client.env"
+if [ "${EBRAIN_RUN_LOCAL:-0}" != "1" ] && [ -f "$THIN_HOME/.gbrain/config.json" ]; then
+  export GBRAIN_HOME="$THIN_HOME"
+  if [ -f "$REMOTE_ENV" ]; then
+    set -a
+    # shellcheck disable=SC1090
+    . "$REMOTE_ENV"
+    set +a
+  fi
+fi
 export GBRAIN_SKILLS_DIR="$HOME/.config/ebrain/skills"
 export GBRAIN_CHAT_MODEL="${GBRAIN_CHAT_MODEL:-openrouter:minimax/minimax-m3}"
 BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"

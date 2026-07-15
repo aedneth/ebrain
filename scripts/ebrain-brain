@@ -19,4 +19,5 @@ BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"
 command -v bun >/dev/null 2>&1 && BUN_BIN=bun
 "$BUN_BIN" run "$HOME/eBrain/cli/up.ts" ensure-token --boot --quiet
 if [ -f "$TOKEN_FILE" ]; then set -a; . "$TOKEN_FILE"; set +a; fi
+"$BUN_BIN" run "$HOME/eBrain/cli/daemon-preflight.ts" --quiet
 exec "$BUN_BIN" run "$HOME/eBrain/vendor/gbrain/src/cli.ts" serve --http --port "$PORT" --bind 127.0.0.1

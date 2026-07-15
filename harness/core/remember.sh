@@ -113,14 +113,16 @@ if [ -d "$MEM/.git" ]; then
   git -C "$MEM" commit -q -m "remember: $AGENT/$SLUG $DATE_TAG" >/dev/null 2>&1 || true
 fi
 
-# sync a gbrain para que sea buscable de inmediato (una página = costo mínimo). --no-sync lo salta.
-RUN="$HOME/.config/ebrain/ebrain-run"
-[ -x "$RUN" ] || RUN="$HOME/.config/ebrain/gbrain-run"
-if [ "$SYNC" = "1" ] && [ -x "$RUN" ]; then
-  if "$RUN" sync --source agent-memory >/dev/null 2>&1; then
-    echo "  sync agent-memory ✓ (buscable en ebrain)"
+# Write-through por MCP al daemon para que sea buscable sin pelear el lock PGLite.
+EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
+REMOTE="$EBRAIN_HOME/cli/remote-tools.ts"
+BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN_BIN=bun
+SLUG_PATH="learnings/$SLUG/${DATE_TAG}-${AGENT}-${HASH}"
+if [ "$SYNC" = "1" ] && [ -f "$REMOTE" ]; then
+  if "$BUN_BIN" run "$REMOTE" put-page --source agent-memory --slug "$SLUG_PATH" --file "$OUT" >/dev/null 2>&1; then
+    echo "  MCP put_page agent-memory ✓ (buscable en ebrain)"
   else
-    echo "  (sync diferido — quedará en el próximo sweep)"
+    echo "  WARN: write-through MCP falló; learning quedó en disco pero aún no es buscable con el daemon arriba"
   fi
 fi
 exit 0

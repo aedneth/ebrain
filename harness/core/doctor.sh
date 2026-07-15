@@ -106,8 +106,22 @@ done
 # ── sources: aislamiento de cliente (security-critical) ──────────────────────
 c_sec "sources (aislamiento de cliente)"
 serve_pid="$(pgrep -f 'cli\.ts serve' 2>/dev/null | head -1 || true)"
-if [ -n "$serve_pid" ]; then
-  c_warn "sources:isolation" "brain servido por MCP (PID $serve_pid) → lock PGLite activo; chequeo directo de sources diferido (corre con MCP abajo, p.ej. cron nocturno)"
+REMOTE_TOOLS="$EBRAIN_HOME/cli/remote-tools.ts"
+BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN_BIN=bun
+if [ -n "$serve_pid" ] && [ -f "$REMOTE_TOOLS" ]; then
+  src_json="$(mktemp)"; src_err="$(mktemp)"
+  if "$BUN_BIN" run "$REMOTE_TOOLS" sources-list --json >"$src_json" 2>"$src_err"; then
+    if jq -e '.sources[] | select(((.id // "") + " " + (.name // "") + " " + (.local_path // "")) | test("brisas|dekko"; "i"))' "$src_json" >/dev/null 2>&1; then
+      c_fail "sources:isolation" "SOURCE DE CLIENTE detectado vía daemon MCP"
+    elif jq -e '.sources[] | select(.id == "second-brain" or .id == "company-brain" or .id == "agent-memory")' "$src_json" >/dev/null 2>&1; then
+      c_ok "sources:isolation" "sources vía daemon MCP = propios/federados; cero cliente"
+    else
+      c_warn "sources:isolation" "daemon MCP respondió, pero no vi sources propios esperados"
+    fi
+  else
+    c_warn "sources:isolation" "no pude leer sources vía daemon MCP: $(head -1 "$src_err")"
+  fi
+  rm -f "$src_json" "$src_err"
 else
   src_out="$(cd /tmp && timeout 60 "$RUN" sources list --timeout=45000 2>&1 || true)"
   if printf '%s' "$src_out" | grep -qiE 'brisas|dekko'; then
