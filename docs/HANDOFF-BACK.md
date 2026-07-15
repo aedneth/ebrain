@@ -11,6 +11,13 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 
 # HANDOFF-BACK — daemon work + audit-finding closure
 
+## Actualizacion 2026-07-15 — ADR-005, pivot de orquestacion pendiente de implementacion
+
+- **Decision aprobada, sin codigo aun:** el advisor determinista de F6.6B no se extiende como recomendador de “mejor modelo”. `docs/adr/ADR-005-user-governed-model-selection.md` fija el reemplazo: Task Profile explicable, perfiles locales elegidos por usuario, targets declarados por adapter y telemetria factual.
+- **Motivo:** los benchmarks/proveedores cambian, los creditos de adapters eran personales y una etiqueta de modelo no equivale a una sesion real con ese modelo. No se usaran cuotas o suscripciones para inferir USD.
+- **Siguiente implementacion:** contratos de Task Profile/perfiles, target OpenCode/OpenRouter con selector probado, y Launch Wizard con preview completo. F6.6.1 queda `[~]`; F6.6.2-6.6.6 y F6.7 siguen pendientes.
+- **Que debe auditar Opus:** que la migracion no deje claims de “mejor modelo”, creditos/suscripciones, argv shell-inyectable, selector falso o bypass del deny-list. Fable verifica el gate F6.6 final junto al gate F6.7.
+
 ## 1. Qué construí
 
 - F6.6E Unified Cost Ledger v2 (Codex maker, 2026-07-15):

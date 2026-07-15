@@ -13,13 +13,13 @@ related: [SPRINT-TUI.md, SPRINT-DAEMON.md, ROUTING.md, model-registry.md]
 Objetivo: que ebrain sea un cockpit diario, no una colección de comandos. El usuario debe poder:
 
 1. describir una tarea;
-2. ver qué carril conviene (`route`, Codex, Cursor, OpenCode, Gemini, Claude audit);
+2. identificar las capacidades de la tarea y elegir de forma explicita su target/perfil;
 3. ver costo/cap/modelos antes de ejecutar;
 4. lanzar el trabajo o correrlo por OpenRouter;
 5. convertir procesos repetidos en workflows/skills accionables;
 6. ver gasto por proveedor/agente/modelo/sesión/workflow.
 
-Regla de arquitectura: la TUI no lee YAML/JSONL ni secretos directo. Toda superficie nueva nace como CLI `--json` contract-tested y la TUI consume ese contrato.
+Regla de arquitectura: la TUI no lee YAML/JSONL ni secretos directo. Toda superficie nueva nace como CLI `--json` contract-tested y la TUI consume ese contrato. ADR-005 prohíbe presentar un modelo como "mejor" por reglas o benchmarks cambiantes: el usuario gobierna perfiles y la UI muestra evidencia fechada, no veredictos.
 
 ## F6.6A — OpenRouter stack visible y operable `[x]`
 
@@ -28,7 +28,7 @@ Regla de arquitectura: la TUI no lee YAML/JSONL ni secretos directo. Toda superf
 - [x] Tests: `cli/routing.test.ts`, `cli/contract.test.ts`, `tui/test/knowledge/contracts.test.ts`, `tui/test/knowledge/panels.test.ts`.
 - Verify vivo: `ebrain routing --json` muestra 7 capabilities (`coding`, `agentic`, `web_design`, `reasoning`, `long_context`, `terminal`, `general`) con slugs reales del stack chino.
 
-## F6.6B — Launch task router `[x]`
+## F6.6B — Launch task router `[x]` (supersedido por ADR-005)
 
 - [x] Launch conserva el grid manual de agentes.
 - [x] `t` abre composer de tarea; Enter pide `ebrain advise --json`.
@@ -37,6 +37,10 @@ Regla de arquitectura: la TUI no lee YAML/JSONL ni secretos directo. Toda superf
 - [x] Enter con advice de sesión lanza el agente recomendado y envía el prompt inicial a la sesión tmux.
 - [x] Frontier sigue confirm-only.
 - Tests: `tui/test/launch.test.ts`.
+
+> Registro historico: F6.6B hizo visible el routing y el costo, pero el advisor determinista no es
+> un contrato OSS valido. F6.6.1-6.6.4 lo sustituye por Task Profile + perfiles gobernados por el
+> usuario; no se agregan reglas de "mejor modelo" sobre esta base.
 
 ## F6.6C — Workflow/Skill memory `[x]`
 
@@ -61,7 +65,42 @@ Regla de arquitectura: la TUI no lee YAML/JSONL ni secretos directo. Toda superf
 - [x] TUI Cost view dentro de Routing (`5`, `c`): provider, tokens, USD conocido, cap OpenRouter, sesión y workflow.
 - [x] Documento operativo: `COST-LEDGER.md`.
 
+## F6.6.1 — Task Profile, no advisor `[~]`
+
+- [~] ADR-005: retirar la semantica de recomendacion, creditos y suscripciones del advisor.
+- [ ] Nuevo contrato `ebrain task-profile --json`: senales explicables/editables y targets compatibles; `ebrain advise` queda alias de compatibilidad sin afirmar ranking.
+- [ ] Eliminar del contrato/UI campos que simulan precio de sesiones o autoridad sobre modelo/agente.
+- **Verify:** fixtures de tareas producen senales deterministas; ninguna salida contiene creditos, suscripciones, `best`/ranking o USD ficticio.
+
+## F6.6.2 — Perfiles de ejecucion y catalogo de evidencia `[ ]`
+
+- [ ] Nuevo contrato `ebrain profiles {list,show,validate} --json` y store local sin secretos, con permisos privados.
+- [ ] Perfil = modelos/orden/fallback/limites elegidos por el usuario; catalogo = metadata con fuente y `as_of`, sin auto-seleccion.
+- [ ] Migracion conservadora: el stack chino existente queda como perfil local heredado, no como default universal; onboarding documenta configuracion plug-and-play.
+- **Verify:** contract tests, permisos 700/600, IDs/modelos no permitidos fallan antes de ejecutar y el perfil heredado preserva la cadena actual.
+
+## F6.6.3 — Targets agenciales reales `[ ]`
+
+- [ ] Extender manifests con capacidad declarativa de selector de modelo, provider y argv estructurado.
+- [ ] Primer target: sesion OpenCode/OpenRouter con `--model provider/model`; otros adapters solo se habilitan despues de comprobar su CLI.
+- [ ] Registrar atribucion de agente/sesion/perfil/modelo para telemetria de tokens; no scrapea paneles ni cuotas.
+- **Verify:** E2E fake-agent valida argv y contexto; modelo no soportado o target sin selector falla antes de tmux.
+
+## F6.6.4 — Launch Wizard gobernado por usuario `[ ]`
+
+- [ ] Flujo: tarea -> capability editable -> target -> perfil/modelo -> cwd/proyecto seguro -> preview -> confirmacion.
+- [ ] Preview muestra norms, MCP daemon, memoria, workflow, RAM, argv efectivo y estado de costo verificable.
+- [ ] Frontier/permisos altos/USD estimado nunca son default y exigen confirmacion separada.
+- **Verify:** reducer/snapshots + E2E contra fake-agent; deny-list por symlink, preview y confirmaciones cubiertos.
+
+## F6.6.5 — Prompt composer y evidencia operativa `[ ]`
+
+- [ ] Composer multiline -> sesion target -> preview de pane -> confirmacion -> `sessions send` exacto.
+- [ ] Historial local factual de lanzamientos, sin prompt ni secretos; no aprende ni cambia perfiles automaticamente.
+- [ ] Esquema opcional de benchmark/evidencia con fuente, fecha, version y tarea; solo informativo.
+- **Verify:** fake-agent recibe bytes exactos; schema rechaza evidencia sin procedencia/fecha y el historial no contiene prompts.
+
 ## Gates
 
-- Opus audita F6.6A/B antes de merge.
-- Fable 5 audita el gate final cuando F6.6C-E + F6.7 estén listos.
+- Opus audita F6.6.1-6.6.5 antes de merge: compatibilidad de argv, no afirmaciones de recomendacion, secretos, deny-list y telemetria.
+- Fable 5 audita el gate final cuando F6.6C-E + F6.6.1-6.6.5 + F6.7 estén listos.

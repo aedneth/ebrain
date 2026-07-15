@@ -4,6 +4,14 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — ADR-005: pivot a seleccion de modelos gobernada por usuario
+
+- **Se retira la premisa del advisor:** `ebrain advise` no se extendera como autoridad sobre el “mejor modelo”. Las reglas y benchmarks cambian, y los creditos/suscripciones personales no son datos OSS ni costos por tokens.
+- **Arquitectura aprobada:** Task Profile explicable, perfiles de ejecucion elegidos por usuario, targets declarados por adapter y telemetria factual. Los benchmarks son evidencia con fuente/fecha/version, nunca auto-routing.
+- **Ruta F6.6 replanificada:** OpenCode/OpenRouter sera el primer target agencial con selector de modelo real; el wizard mostrara cwd, contexto, modelo/perfil y estado de costo antes de confirmar. Ver `docs/adr/ADR-005-user-governed-model-selection.md` y `docs/SPRINT-ORCHESTRATION.md`.
+
+---
+
 ## 2026-07-15 — F6.6E: ledger de tokens/costo verificable multi-provider
 
 - **`ebrain cost --json`:** normaliza el spend ledger de OpenRouter y eventos locales de adapters en cortes por provider, agente, modelo, sesión y workflow. Expone tokens de entrada/salida, USD real, USD estimado y estado `metered`/`token-only`/`untracked`.
