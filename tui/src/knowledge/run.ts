@@ -20,6 +20,7 @@ import {
   parseDoctor,
   parseSpend,
   parseRouting,
+  parseCost,
   parseMemory,
   parseWorkflows,
   parseWorkflowRun,
@@ -30,6 +31,7 @@ import {
   type DoctorData,
   type SpendData,
   type RoutingData,
+  type CostData,
   type MemoryData,
   type WorkflowsData,
   type WorkflowRunData,
@@ -112,6 +114,9 @@ export function fetchSpend(): Promise<KResult<SpendData>> {
 export function fetchRouting(): Promise<KResult<RoutingData>> {
   return fetchParsed(["routing", "--json"], 15000, parseRouting);
 }
+export function fetchCost(): Promise<KResult<CostData>> {
+  return fetchParsed(["cost", "--json"], 15000, parseCost);
+}
 export function fetchMemory(limit = 8): Promise<KResult<MemoryData>> {
   return fetchParsed(["memory", "recent", "--json", "--limit", String(limit)], 15000, parseMemory);
 }
@@ -126,8 +131,11 @@ export function fetchAdvice(task: string): Promise<KResult<AdviceData>> {
   return fetchParsed(["advise", task, "--json"], 15000, parseAdvice);
 }
 
-export function runRoute(capability: string, task: string): Promise<KResult<RouteRunData>> {
-  return fetchParsed(["route", "--json", "--cap", capability, task], 120000, parseRouteRun);
+export function runRoute(capability: string, task: string, opts: { workflow?: string } = {}): Promise<KResult<RouteRunData>> {
+  const args = ["route", "--json", "--cap", capability];
+  if (opts.workflow) args.push("--workflow", opts.workflow);
+  args.push(task);
+  return fetchParsed(args, 120000, parseRouteRun);
 }
 
 /**

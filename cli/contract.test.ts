@@ -358,6 +358,89 @@ describe("6.6C workflows --json", () => {
   });
 });
 
+// ── 6.6E ebrain cost --json ─────────────────────────────────────────────────
+const CostKindSchema = z.enum(["actual", "estimated", "token-only", "untracked"]);
+const CostBreakdownSchema = z.object({
+  key: z.string().min(1),
+  usd: z.number().nonnegative(),
+  actual_usd: z.number().nonnegative(),
+  estimated_usd: z.number().nonnegative(),
+  events: z.number().int().nonnegative(),
+  tokens_in: z.number().int().nonnegative(),
+  tokens_out: z.number().int().nonnegative(),
+  untracked_events: z.number().int().nonnegative(),
+  token_only_events: z.number().int().nonnegative(),
+});
+const CostProviderSchema = CostBreakdownSchema.extend({
+  provider: z.string().min(1),
+  status: z.enum(["metered", "token-only", "untracked"]),
+});
+const CostEventSchema = z.object({
+  schema_version: z.literal(2),
+  ts: z.string().min(1),
+  provider: z.string().min(1),
+  agent: z.string().nullable(),
+  model: z.string().nullable(),
+  session: z.string().nullable(),
+  workflow: z.string().nullable(),
+  capability: z.string().nullable(),
+  tokens_in: z.number().int().nonnegative().nullable(),
+  tokens_out: z.number().int().nonnegative().nullable(),
+  usd: z.number().nonnegative().nullable(),
+  cost_kind: CostKindSchema,
+  source: z.enum(["route", "adapter"]),
+});
+const CostSchema = z.object({
+  schema_version: z.literal(2),
+  month: z.string().regex(/^\d{4}-\d{2}$/),
+  budget: z.object({ monthly_usd: z.number().positive(), hard_stop: z.boolean(), scope: z.literal("openrouter") }),
+  openrouter_mtd: z.number().nonnegative(),
+  known_mtd: z.number().nonnegative(),
+  remaining_openrouter: z.number(),
+  providers: z.array(CostProviderSchema),
+  agents: z.array(CostBreakdownSchema),
+  models: z.array(CostBreakdownSchema),
+  sessions: z.array(CostBreakdownSchema),
+  workflows: z.array(CostBreakdownSchema),
+  entries: z.array(CostEventSchema),
+  untracked_providers: z.array(z.string()),
+});
+const costBreakdownFixture = {
+  key: "openrouter", usd: 0.0012, actual_usd: 0.001, estimated_usd: 0.0002,
+  events: 2, tokens_in: 150, tokens_out: 80, untracked_events: 0, token_only_events: 0,
+};
+const costFixture = {
+  schema_version: 2,
+  month: "2026-07",
+  budget: { monthly_usd: 10, hard_stop: true, scope: "openrouter" },
+  openrouter_mtd: 0.0012,
+  known_mtd: 0.0014,
+  remaining_openrouter: 9.9988,
+  providers: [
+    { ...costBreakdownFixture, provider: "openrouter", status: "metered" },
+    { ...costBreakdownFixture, key: "gemini", provider: "gemini", status: "token-only", usd: 0, actual_usd: 0, estimated_usd: 0, events: 1, tokens_in: 40, tokens_out: 20, token_only_events: 1 },
+  ],
+  agents: [costBreakdownFixture], models: [costBreakdownFixture], sessions: [], workflows: [],
+  entries: [{ schema_version: 2, ts: "2026-07-15T00:00:00.000Z", provider: "openrouter", agent: "route", model: "deepseek/deepseek-v4-pro", session: null, workflow: "second-brain-sops-dev", capability: "coding", tokens_in: 100, tokens_out: 50, usd: 0.001, cost_kind: "actual", source: "route" }],
+  untracked_providers: ["claude", "cursor"],
+};
+
+describe("6.6E cost --json", () => {
+  test("fixture pasa el schema: USD real/estimado separado de token-only", () => {
+    expect(() => CostSchema.parse(costFixture)).not.toThrow();
+  });
+  test("fixture token-only conserva USD=0 y conteo separado", () => {
+    const gemini = costFixture.providers[1]!;
+    expect(gemini.status).toBe("token-only");
+    expect(gemini.usd).toBe(0);
+    expect(gemini.token_only_events).toBe(1);
+  });
+  test("kind desconocido falla", () => {
+    const broken = { ...costFixture, entries: [{ ...costFixture.entries[0], cost_kind: "subscription" }] };
+    expect(CostSchema.safeParse(broken).success).toBe(false);
+  });
+});
+
 // ── 6.1.4 ebrain fleet --json ────────────────────────────────────────────────
 const FleetSchema = z.object({
   agents: z.array(z.object({

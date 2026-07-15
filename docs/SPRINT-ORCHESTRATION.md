@@ -52,13 +52,14 @@ Regla de arquitectura: la TUI no lee YAML/JSONL ni secretos directo. Toda superf
 - [x] Proponer workflows repetidos, nunca escribir skills sin confirmación.
 - [x] Integrar con skills federadas existentes (`list_skills`/`get_skill`) y `ebrain remember`.
 
-## F6.6E — Unified cost ledger v2 `[ ]`
+## F6.6E — Unified cost ledger v2 `[x]`
 
-- [ ] `ebrain cost --json`: ledger unificado por provider/agent/model/session/workflow.
-- [ ] OpenRouter: costo real desde `usage.cost` + tokens.
-- [ ] OpenAI/Gemini: token/cost adapters donde exista API o conteo local.
-- [ ] Claude/Cursor/OpenCode subscriptions: marcar como `subscription`/`untracked` hasta tener fuente fiable.
-- [ ] TUI Cost view: proveedor, modelo, agente, cap, costo por sesión y por workflow.
+- [x] `ebrain cost --json`: ledger unificado por provider/agent/model/session/workflow.
+- [x] OpenRouter: costo real desde `usage.cost` + tokens; fallback queda marcado `estimated`.
+- [x] OpenAI/Gemini: adapter sidecar de tokens/costo explícito; sin precio queda `token-only`, nunca USD inventado.
+- [x] Claude/Cursor/OpenCode: `untracked` hasta que un adapter exponga tokens/costo verificables. No se calcula gasto de suscripción.
+- [x] TUI Cost view dentro de Routing (`5`, `c`): provider, tokens, USD conocido, cap OpenRouter, sesión y workflow.
+- [x] Documento operativo: `COST-LEDGER.md`.
 
 ## Gates
 

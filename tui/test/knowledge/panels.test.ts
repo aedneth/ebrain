@@ -156,6 +156,47 @@ describe("Routing panel (6.6A)", () => {
   });
 });
 
+describe("Cost panel (6.6E)", () => {
+  const cost = {
+    month: "2026-07",
+    budget: { monthlyUsd: 10, hardStop: true, scope: "openrouter" },
+    openrouterMtd: 0.001,
+    knownMtd: 0.0012,
+    remainingOpenrouter: 9.999,
+    providers: [
+      { key: "openrouter", provider: "openrouter", status: "metered" as const, usd: 0.001, actualUsd: 0.001, estimatedUsd: 0, events: 1, tokensIn: 100, tokensOut: 50, untrackedEvents: 0, tokenOnlyEvents: 0 },
+      { key: "gemini", provider: "gemini", status: "token-only" as const, usd: 0, actualUsd: 0, estimatedUsd: 0, events: 1, tokensIn: 30, tokensOut: 10, untrackedEvents: 0, tokenOnlyEvents: 1 },
+    ],
+    agents: [{ key: "route", usd: 0.001, actualUsd: 0.001, estimatedUsd: 0, events: 1, tokensIn: 100, tokensOut: 50, untrackedEvents: 0, tokenOnlyEvents: 0 }],
+    models: [{ key: "deepseek/deepseek-v4-pro", usd: 0.001, actualUsd: 0.001, estimatedUsd: 0, events: 1, tokensIn: 100, tokensOut: 50, untrackedEvents: 0, tokenOnlyEvents: 0 }],
+    sessions: [{ key: "ebr-codex-build", usd: 0.001, actualUsd: 0.001, estimatedUsd: 0, events: 1, tokensIn: 100, tokensOut: 50, untrackedEvents: 0, tokenOnlyEvents: 0 }],
+    workflows: [{ key: "second-brain-sops-dev", usd: 0.001, actualUsd: 0.001, estimatedUsd: 0, events: 1, tokensIn: 100, tokensOut: 50, untrackedEvents: 0, tokenOnlyEvents: 0 }],
+    untrackedProviders: ["claude"],
+  };
+
+  it("renders model-provider token metrics and workflow/session attribution without subscription spend", () => {
+    const t = frameText(base("routing", {
+      routing: { data: null, cost, mode: "cost", selected: 0, costSelected: 0, status: "ready" },
+    }));
+    expect(t).toContain("cost ledger");
+    expect(t).toContain("openrouter");
+    expect(t).toContain("token-only");
+    expect(t).toContain("models + agents");
+    expect(t).toContain("deepseek/deepsee");
+    expect(t).toContain("workflows");
+    expect(t).toContain("second-brain-sops-dev");
+    expect(t).toContain("ebr-codex-build");
+  });
+
+  it("routing c toggles to cost mode and arrows select providers", () => {
+    const s = base("routing", { routing: { data: null, cost, mode: "routing", selected: 0, costSelected: 0, status: "ready" } });
+    const toggled = reduce(s, { name: "char", char: "c" });
+    expect(toggled.state.routing!.mode).toBe("cost");
+    expect(toggled.effect?.type).toBe("refreshRouting");
+    expect(reduce(toggled.state, { name: "down" }).state.routing!.costSelected).toBe(1);
+  });
+});
+
 // ── Fleet/Doctor (6.5.4) ──────────────────────────────────────────────────────
 describe("Doctor panel (6.5.4)", () => {
   const state = base("doctor", {

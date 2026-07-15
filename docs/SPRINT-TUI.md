@@ -95,7 +95,7 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
 - [ ] 6.6.4 Fixture de **10 tareas canónicas** (mix real: fix bug korvex-web, batch resúmenes, diseño web, auditoría arquitectura, scrape, refactor largo, one-shot regex, doc técnico, UI component, video/multimodal) → asserts de carril esperado. **Verify:** 10/10 (criterio #5 completo).
 - [ ] 6.6.5 **GATE F6.6**. `[AUDIT_PASS]`.
 - [x] 6.6C/D **Workflows/skills + learning loop:** contrato `ebrain workflows`, panel Memory (browse/materialize/attach), captura de candidatos y skillify con `--yes`; ver `docs/SPRINT-ORCHESTRATION.md` y `WORKFLOW-LEARNING-LOOP.md`.
-- [ ] 6.6E **Cost ledger v2:** ver `docs/SPRINT-ORCHESTRATION.md`.
+- [x] 6.6E **Cost ledger v2:** `ebrain cost --json` normaliza tokens/USD por provider/agente/modelo/sesión/workflow; Routing `c` abre la vista Cost. No se infiere costo de suscripciones; ver `COST-LEDGER.md`.
 
 ## FASE 6.7 — Hardening + ship
 

@@ -6,13 +6,20 @@ to: Opus (Claude Code, auditor) + Fable 5 (gate)
 created: 2026-07-14
 updated: 2026-07-15
 status: ready-for-audit
-scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-D orchestration UX + workflow learning loop
+scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX + workflow/cost loop
 ---
 
 # HANDOFF-BACK — daemon work + audit-finding closure
 
 ## 1. Qué construí
 
+- F6.6E Unified Cost Ledger v2 (Codex maker, 2026-07-15):
+  - Nuevo `cli/cost.ts` y `ebrain cost --json`: normaliza el ledger legacy de `route.ts` y un sidecar local para adapters en cortes por provider, agente, modelo, sesion y workflow.
+  - Estados explicitos: `metered` (USD de uso real/estimado), `token-only` (tokens sin precio verificable) y `untracked` (sin telemetria). No hay costo de suscripcion ni conversion de cuotas a USD por ejecucion.
+  - `ebrain cost record ... --yes` permite que adapters OpenAI/Gemini registren tokens/costo explicito en `~/.config/ebrain/cost.jsonl` (dir 700, archivo 600). `actual`/`estimated` exige USD; `token-only`/`untracked` lo prohibe.
+  - `ebrain route` acepta atribucion opcional `--agent`, `--session`, `--workflow`; el flujo Memory workflow -> Launch -> route preserva el ID del workflow en el evento OpenRouter.
+  - Routing TUI (`5`) alterna con `c` al Cost Ledger: provider, estado, tokens, USD conocido, modelos+agentes, workflows y sesiones.
+  - Nuevo `docs/COST-LEDGER.md` con el contrato, fuentes, permisos y limites.
 - F6.6C/D Workflow/Skill memory (Codex maker, 2026-07-15):
   - Nuevo `cli/workflows.ts` y superficie `ebrain workflows {ingest,list,search,show,run,capture,skillify} --json`.
   - `ingest` descubre SOPs/workflows en roots locales de Second Brain y Company Brain, persiste registros versionados en `~/.config/ebrain/workflows` (directorio 700, registros 600) y redacta contenido antes de guardarlo/materializarlo.
@@ -71,6 +78,9 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-D orchestration UX 
 
 ## 2. Decisiones y por qué
 
+- **Tokens primero; suscripcion nunca se monetiza:** el dato util para Eduardo es consumo por modelo. Si un provider no emite precio verificable, ebrain conserva tokens como `token-only` o declara `untracked`; no reparte una cuota mensual como gasto ficticio.
+- **Cap con scope explicito:** `routing.yaml` protege OpenRouter. `known_mtd` puede sumar USD verificable de otros adapters, pero no se presenta como si compartiera el cap OpenRouter.
+- **Sidecar opt-in para adapters:** OpenAI/Gemini u otros writers pueden entregar tokens/costo sin que ebrain scrapee paneles, lea secretos o dependa de formatos inestables. La escritura exige `--yes` y campos identificadores restringidos.
 - **Workflow store local redactado, no vault ni repo:** los SOPs de Eduardo permanecen privados; ebrain versiona su representacion local para la experiencia diaria, con hash/version y permisos restrictivos, sin convertir el vault en artefacto open-source.
 - **Materializar antes de actuar:** Enter y `workflows run` devuelven texto revisable. El traspaso a Launch es una segunda accion y ejecutar un route o sesion sigue sus propios candados. Esto mantiene workflows como memoria operable, no autonomia implicita.
 - **Skillify con `--yes`, assets/scripts manuales:** un candidato repetido no es evidencia suficiente para publicar automatizacion. La conversion a skill requiere aprobacion humana y la curacion de artefactos adicionales permanece deliberada.
@@ -89,6 +99,9 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-D orchestration UX 
 
 ## 3. Gotchas nuevos
 
+- `token-only` y `untracked` deben tener USD nulo: permitir USD en esos estados vuelve ambiguo si el costo es verificado. El writer los rechaza; `actual`/`estimated` exige USD.
+- La atribucion no puede inferirse de un prompt. `--workflow` viaja explicitamente desde el workflow adjuntado en Launch; tareas manuales siguen sin workflow en el ledger.
+- El cost view no agrega una septima tab: vive dentro de Routing para preservar el mapa `1-6`; `c` alterna routing/cost y cada refresh trae ambos contratos.
 - `workflows` tiene roots hermanos del mismo brain; no usar solo `source + relative path` como identidad. Incluir scope del root evita que `workflows/release.md` y `sops/release.md` se pisen.
 - El parser de flags no puede excluir `rest[-1 + 1]`: sin `--limit`/`--min-count` eso descarta el primer posicional. `parseArgs()` ahora construye posicionales de forma explicita y hay regresion para `run`, `skillify` y search multi-word.
 - El store y los prompts deben pasar por `scrubSecrets` incluso si el input es Markdown local: una ruta confiable no garantiza contenido seguro de volver a publicar por MCP.
@@ -108,6 +121,11 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-D orchestration UX 
 
 ## 4. Tests y verificación
 
+- F6.6E:
+  - `bun test ./cli/` → 178 pass / 0 fail.
+  - `bun test ./tui/test/` → 373 pass / 0 fail.
+  - Focal: `bun test ./cli/cost.test.ts ./cli/contract.test.ts ./cli/route.test.ts ./tui/test/launch.test.ts ./tui/test/knowledge/contracts.test.ts ./tui/test/knowledge/panels.test.ts` → 123 pass / 0 fail.
+  - Smoke aislado con `EBRAIN_COST_LOG` temporal: evento Gemini `token-only` = 120 input + 40 output, USD 0; `ebrain cost --json` conserva los tokens, no altera el ledger real y mantiene OpenRouter como `metered`.
 - F6.6C/D:
   - `bun test ./cli/` → 169 pass / 0 fail.
   - `bun test ./tui/test/` → 369 pass / 0 fail.
@@ -171,13 +189,19 @@ TUI source sí fue tocado en F6.6A/B; cero-hex aplicó y salió limpio.
 ## 5. Pendientes
 
 - Auditoría Opus del corte F6.6A/B antes de considerar merge de UX.
-- F6.6E: cost ledger v2 por proveedor/agente/modelo/sesión/workflow.
+- Gate externo: Opus debe auditar F6.6C-E; Fable 5 debe correr el gate final al cerrar tambien F6.7.
 - Auditoría Opus + Fable del cierre F-D2 bridge: revisar `cli/mcp-bridge.ts`, `cli/up.ts`, configs command-only y secreto fuera de repo.
 - Installer `curl -fsSL ... | sh` todavía pendiente.
 - P3/TUI 6.6 sigue pendiente: launch wizard, advisor v1, prompt composer.
 
 ## 6. Qué auditar
 
+- F6.6E:
+  - `cli/cost.ts` solo lee JSONL/config de routing; nunca secretos, dashboards ni prompts. Los eventos `token-only`/`untracked` no llevan USD y `actual`/`estimated` lo requieren.
+  - El cap se calcula unicamente sobre `openrouter_mtd`; `known_mtd` no debe mostrarse como cap multi-provider.
+  - `cost record` exige `--yes`, crea directorio 700/archivo 600 y no acepta texto libre.
+  - `route.ts` conserva compatibilidad y agrega metadata opcional; workflow attribution llega desde Memory -> Launch -> confirm route.
+  - `tui/src/knowledge/run.ts` obtiene `cost --json`; la vista `c` no lee JSONL/config directo y muestra tokens por provider/model/agent junto a workflow/sesion.
 - F6.6C/D:
   - `cli/workflows.ts` nunca escribe ni imprime secretos; `workflowFromMarkdown`, capture y skillify trabajan sobre contenido redactado.
   - `ingest` rechaza paths de cliente y los IDs scoped no colisionan entre roots hermanos.

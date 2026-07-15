@@ -4,6 +4,16 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — F6.6E: ledger de tokens/costo verificable multi-provider
+
+- **`ebrain cost --json`:** normaliza el spend ledger de OpenRouter y eventos locales de adapters en cortes por provider, agente, modelo, sesión y workflow. Expone tokens de entrada/salida, USD real, USD estimado y estado `metered`/`token-only`/`untracked`.
+- **Sin costo de suscripción:** Claude, Cursor, OpenCode y cualquier adapter sin telemetría quedan `untracked`; cuando hay tokens sin precio, quedan `token-only`. ebrain nunca convierte una cuota mensual en gasto ficticio por ejecución.
+- **Atribución end-to-end:** `ebrain route` acepta `--agent`, `--session` y `--workflow`; adjuntar un workflow a Launch conserva su ID si termina en una ruta OpenRouter.
+- **TUI:** Routing (`5`) alterna a Cost Ledger con `c`, mostrando provider, tokens, USD conocido y atribución por workflow/sesión.
+- **Documentación:** nuevo `docs/COST-LEDGER.md` fija fuentes, permisos, sidecar y límites.
+
+---
+
 ## 2026-07-15 — F6.6C/D: workflow memory versionada + learning loop con aprobacion
 
 - **`ebrain workflows`:** nuevo contrato JSON para `ingest`, `list`, `search`, `show`, `run`, `capture` y `skillify`. Descubre SOPs/workflows privados en runtime, guarda solo una representacion redactada y versionada en `~/.config/ebrain/workflows` (`700`/`600`), y nunca agrega ese contenido al repo.

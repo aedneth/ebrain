@@ -4,7 +4,7 @@
  * candado frontier, y parseo/suma de spend.jsonl por mes. `bun test cli/route.test.ts`.
  */
 import { test, expect } from "bun:test";
-import { classify, capExceeded, chainHasFrontier, monthKey, monthSpend, expandHome, applyFloor, FRONTIER } from "./route.ts";
+import { classify, capExceeded, chainHasFrontier, monthKey, monthSpend, expandHome, applyFloor, FRONTIER, parseRouteArgs } from "./route.ts";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -29,6 +29,17 @@ test("classify: sin keywords → general (default seguro)", () => {
 test("classify: empate al tope → general (spec: ambiguo→general, no la 1ra del yaml)", () => {
   // "script"(coding) vs "cli"(terminal): 1-1 → empate → general
   expect(classify("un script para el cli", { classify: CLASSIFY })).toBe("general");
+});
+
+test("parseRouteArgs preserves optional cost attribution outside the prompt", () => {
+  const parsed = parseRouteArgs([
+    "--cap", "coding", "--agent", "codex", "--session", "ebr-codex-build", "--workflow", "second-brain-sops-dev", "fix parser", "--json",
+  ]);
+  expect(parsed.cap).toBe("coding");
+  expect(parsed.agent).toBe("codex");
+  expect(parsed.session).toBe("ebr-codex-build");
+  expect(parsed.workflow).toBe("second-brain-sops-dev");
+  expect(parsed.prompt).toBe("fix parser");
 });
 
 test("applyFloor: :floor a slugs limpios; :free/suffixed intactos; off = sin cambio", () => {

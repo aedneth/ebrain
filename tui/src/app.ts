@@ -66,6 +66,7 @@ import type {
   WorkflowsData,
   WorkflowSummaryData,
   RoutingData,
+  CostData,
   AdviceData,
   RouteRunData,
   FleetData,
@@ -79,6 +80,7 @@ import {
   fetchWorkflows,
   runWorkflow,
   fetchRouting,
+  fetchCost,
   fetchFleet,
   fetchDoctor,
   runRemember,
@@ -213,7 +215,10 @@ export interface MemorySlice {
 /** Routing panel (routing --json): by-capability spend + OpenRouter chains (6.6A). */
 export interface RoutingSlice {
   data: RoutingData | null;
+  cost: CostData | null;
+  mode: "routing" | "cost";
   selected: number;
+  costSelected: number;
   status: LoadStatus;
   error?: string;
 }
@@ -240,7 +245,7 @@ export function emptyMemory(): MemorySlice {
   return { data: null, workflows: null, selected: 0, workflowSelected: 0, logSelected: 0, status: "idle" };
 }
 export function emptyRouting(): RoutingSlice {
-  return { data: null, selected: 0, status: "idle" };
+  return { data: null, cost: null, mode: "routing", selected: 0, costSelected: 0, status: "idle" };
 }
 export function emptyDoctor(): DoctorSlice {
   return { fleet: null, doctor: null, selected: 0, fleetSelected: 0, status: "idle", running: false, spinnerFrame: 0, atLabel: null };
@@ -278,6 +283,8 @@ export type Overlay =
 export interface LaunchSlice {
   selected: number;
   task: string;
+  /** Workflow attribution survives attach -> advisor -> confirmed OpenRouter route. */
+  workflowId?: string;
   advice: AdviceData | null;
   routeResult: RouteRunData | null;
   status: LoadStatus | "running";
@@ -409,7 +416,7 @@ export type AppEffect =
   | { type: "launchWithPrompt"; agent: string; task: string }
   | { type: "launchWithPromptConfirmed"; agent: string; task: string; reason: string }
   | { type: "adviseLaunchTask"; task: string }
-  | { type: "routeTask"; task: string; capability: string }
+  | { type: "routeTask"; task: string; capability: string; workflow?: string }
   // Knowledge panels (F6.5): each landing refreshes its slice from its subcommand.
   | { type: "refreshStatus" }
   | { type: "refreshMemory" }
@@ -548,6 +555,11 @@ function moveSelection(state: AppState, delta: number): ReduceResult {
 
   if (state.tab === "routing") {
     const r = routingOf(state);
+    if (r.mode === "cost") {
+      const n = r.cost?.providers.length ?? 0;
+      if (n === 0) return settle(clear);
+      return settle({ ...clear, routing: { ...r, costSelected: clampIndex(r.costSelected + delta, n) } });
+    }
     const n = r.data?.capabilities.length ?? 0;
     if (n === 0) return settle(clear);
     return settle({ ...clear, routing: { ...r, selected: clampIndex(r.selected + delta, n) } });
@@ -721,11 +733,14 @@ export function reduce(state: AppState, key: Key): ReduceResult {
 
     if (ov.kind === "confirmRoute") {
       if (key.name === "char" && (key.char === "y" || key.char === "Y")) {
+        const workflow = launchOf(state).workflowId;
         return {
           state: { ...state, overlay: null },
           quit: false,
           forceRedraw: false,
-          effect: { type: "routeTask", task: ov.task, capability: ov.capability },
+          effect: workflow
+            ? { type: "routeTask", task: ov.task, capability: ov.capability, workflow }
+            : { type: "routeTask", task: ov.task, capability: ov.capability },
         };
       }
       if (
@@ -873,6 +888,11 @@ export function reduce(state: AppState, key: Key): ReduceResult {
     if (state.tab === "memory" && ch === "a" && focusedRegion(state) === "workflows") {
       const w = memoryOf(state).workflows?.workflows[memoryOf(state).workflowSelected];
       if (w) return settle({ ...state, confirmQuit: false }, { type: "attachWorkflow", id: w.id });
+    }
+    if (state.tab === "routing" && ch === "c") {
+      const r = routingOf(state);
+      const mode = r.mode === "routing" ? "cost" : "routing";
+      return settle({ ...state, confirmQuit: false, routing: { ...r, mode } }, { type: "refreshRouting" });
     }
     // Doctor panel: r re-runs the diagnostics in place (async spinner, never blocks).
     if (state.tab === "doctor" && ch === "r") {
@@ -1750,10 +1770,102 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
 // routing.yaml/spend.jsonl directly.
 // ---------------------------------------------------------------------------
 
+function costStatusLabel(status: "metered" | "token-only" | "untracked"): string {
+  return status === "metered" ? "metered" : status === "token-only" ? "token-only" : "untracked";
+}
+
+function costBreakdownRows(rows: { key: string; usd: number; events: number; tokensIn: number; tokensOut: number; tokenOnlyEvents: number; untrackedEvents: number }[], width: number, theme: Theme): string[] {
+  if (rows.length === 0) return [theme.fg("text.secondary") + "no attributed events" + theme.reset];
+  return rows.slice(0, Math.max(1, Math.floor(width / 8))).map((row) => {
+    const status = row.usd > 0 ? `$${row.usd.toFixed(4)}` : row.tokenOnlyEvents > 0 ? `${row.tokensIn + row.tokensOut} tok` : "untracked";
+    const leftW = Math.max(8, width - 14);
+    return theme.fg("text.secondary") + padTo(truncate(row.key, leftW), leftW) + theme.reset +
+      theme.fg("text.muted") + padTo(status, 14, "right") + theme.reset;
+  });
+}
+
+/** Cost ledger subview inside Routing: known metered USD, token-only and untracked data
+ * stay visually distinct. It consumes only `ebrain cost --json`. */
+export function buildCostView(c: CostData, selectedIndex: number, rect: Rect, theme: Theme): string[] {
+  const cols = rect.width;
+  const height = rect.height;
+  const rightW = Math.min(42, Math.max(28, Math.floor(cols * 0.36)));
+  const [leftRect, rightRect] = splitH({ top: 0, left: 0, width: cols, height }, [{ flex: 1 }, rightW], 2);
+  const selected = clampIndex(selectedIndex, Math.max(1, c.providers.length));
+  const providerRows = c.providers.map((provider) => ({
+    provider: provider.provider,
+    status: costStatusLabel(provider.status),
+    usd: provider.usd > 0 ? "$" + provider.usd.toFixed(4) : "--",
+    tokens: `${provider.tokensIn}+${provider.tokensOut}`,
+  }));
+  const leftBody = table(
+    {
+      columns: [
+        { key: "provider", label: "provider", width: 15 },
+        { key: "status", label: "mode", width: 13 },
+        { key: "usd", label: "known", width: 10, align: "right" },
+        { key: "tokens", label: "tokens", width: 12, align: "right" },
+      ],
+      rows: providerRows,
+      selected,
+    },
+    theme,
+  );
+  leftBody.push("");
+  leftBody.push(theme.fg("text.muted") + "known all  " + theme.reset + theme.fg("text.primary") + `$${c.knownMtd.toFixed(4)}` + theme.reset);
+  leftBody.push(theme.fg("text.muted") + "OpenRouter  " + theme.reset + spendTone(c.openrouterMtd, c.budget.monthlyUsd, theme) + `$${c.openrouterMtd.toFixed(4)}` + theme.reset + theme.fg("text.muted") + ` / $${c.budget.monthlyUsd.toFixed(2)}` + theme.reset);
+  leftBody.push(theme.fg("text.muted") + `cap scope: ${c.budget.scope}; token-only/untracked are not USD` + theme.reset);
+  const leftPanel = panel(
+    { title: `cost ledger · ${c.month}`, focus: true, width: leftRect.width, height, body: leftBody },
+    theme,
+  );
+
+  const [modelRect, workflowRect, sessionRect] = splitV(rightRect, [{ flex: 1 }, { flex: 1 }, { flex: 1 }], 1);
+  const modelAgentRows = [
+    ...c.models.map((row) => ({ ...row, key: `model · ${row.key}` })),
+    ...c.agents.map((row) => ({ ...row, key: `agent · ${row.key}` })),
+  ];
+  const modelPanel = panel(
+    { title: `models + agents · ${modelAgentRows.length}`, width: modelRect.width, height: modelRect.height, body: costBreakdownRows(modelAgentRows, Math.max(8, modelRect.width - 4), theme) },
+    theme,
+  );
+  const workflowPanel = panel(
+    { title: `workflows · ${c.workflows.length}`, width: workflowRect.width, height: workflowRect.height, body: costBreakdownRows(c.workflows, Math.max(8, workflowRect.width - 4), theme) },
+    theme,
+  );
+  const sessionPanel = panel(
+    { title: `sessions · ${c.sessions.length}`, width: sessionRect.width, height: sessionRect.height, body: costBreakdownRows(c.sessions, Math.max(8, sessionRect.width - 4), theme) },
+    theme,
+  );
+  const gap = " ".repeat(Math.max(0, cols - leftRect.width - rightRect.width));
+  const out: string[] = [];
+  for (let i = 0; i < height; i++) {
+    const workflowStart = modelRect.height + 1;
+    const sessionStart = workflowStart + workflowRect.height + 1;
+    const right = i < modelRect.height
+      ? modelPanel[i] ?? ""
+      : i === modelRect.height || i === workflowStart + workflowRect.height
+        ? " ".repeat(rightRect.width)
+        : i < sessionStart
+          ? workflowPanel[i - workflowStart] ?? ""
+          : sessionPanel[i - sessionStart] ?? "";
+    out.push((leftPanel[i] ?? "") + gap + right);
+  }
+  return out;
+}
+
 export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): string[] {
   const cols = rect.width;
   const height = rect.height;
   if (height <= 0) return [];
+
+  if (r.mode === "cost") {
+    if (!r.cost) {
+      const msg = r.status === "error" ? `error: ${r.error ?? "querying cost"}` : "loading cost ledger…";
+      return buildCenteredMessagePanel("cost", msg, rect, theme);
+    }
+    return buildCostView(r.cost, r.costSelected, rect, theme);
+  }
 
   if (!r.data) {
     const msg = r.status === "error" ? `error: ${r.error ?? "querying spend"}` : "loading spend…";
@@ -2343,7 +2455,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
         tab: "launch",
         focusRegion: 0,
         overlay: null,
-        launch: { ...launch, task: r.data.prompt, advice: null, routeResult: null, status: "idle", error: undefined },
+        launch: { ...launch, task: r.data.prompt, workflowId: r.data.id, advice: null, routeResult: null, status: "idle", error: undefined },
       };
       render();
     }
@@ -2352,10 +2464,22 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       const cur = routingOf(state);
       state = { ...state, routing: { ...cur, status: cur.data ? cur.status : "loading" } };
       if (state.tab === "routing") render();
-      const r = await fetchRouting();
+      const [r, cost] = await Promise.all([fetchRouting(), fetchCost()]);
       const rt = routingOf(state);
       if (r.ok) {
-        state = { ...state, routing: { ...rt, data: r.data, selected: Math.min(rt.selected, Math.max(0, r.data.capabilities.length - 1)), status: "ready", error: undefined } };
+        const nextCost = cost.ok ? cost.data : rt.cost;
+        state = {
+          ...state,
+          routing: {
+            ...rt,
+            data: r.data,
+            cost: nextCost,
+            selected: Math.min(rt.selected, Math.max(0, r.data.capabilities.length - 1)),
+            costSelected: Math.min(rt.costSelected, Math.max(0, (nextCost?.providers.length ?? 0) - 1)),
+            status: "ready",
+            error: cost.ok ? undefined : `cost: ${cost.error}`,
+          },
+        };
       } else {
         state = { ...state, routing: { ...rt, status: "error", error: r.error } };
       }
@@ -2376,11 +2500,11 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       if (state.tab === "launch") render();
     }
 
-    async function runRouteTask(task: string, capability: string): Promise<void> {
+    async function runRouteTask(task: string, capability: string, workflow?: string): Promise<void> {
       const cur = launchOf(state);
       state = { ...state, launch: { ...cur, status: "running", error: undefined } };
       if (state.tab === "launch") render();
-      const r = await runRoute(capability, task);
+      const r = await runRoute(capability, task, { workflow });
       const latest = launchOf(state);
       if (r.ok) {
         state = { ...state, launch: { ...latest, routeResult: r.data, status: "ready", error: undefined } };
@@ -2500,7 +2624,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
           await adviseLaunchTask(effect.task);
           break;
         case "routeTask":
-          await runRouteTask(effect.task, effect.capability);
+          await runRouteTask(effect.task, effect.capability, effect.workflow);
           break;
       }
     }

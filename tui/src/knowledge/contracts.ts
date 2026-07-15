@@ -244,6 +244,88 @@ export function parseRouting(j: unknown): RoutingData | null {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Unified cost ledger (cost --json) — known USD separated from token-only usage
+// ---------------------------------------------------------------------------
+
+export type CostProviderStatus = "metered" | "token-only" | "untracked";
+
+export interface CostBreakdownData {
+  key: string;
+  usd: number;
+  actualUsd: number;
+  estimatedUsd: number;
+  events: number;
+  tokensIn: number;
+  tokensOut: number;
+  untrackedEvents: number;
+  tokenOnlyEvents: number;
+}
+
+export interface CostProviderData extends CostBreakdownData {
+  provider: string;
+  status: CostProviderStatus;
+}
+
+export interface CostData {
+  month: string;
+  budget: { monthlyUsd: number; hardStop: boolean; scope: string };
+  openrouterMtd: number;
+  knownMtd: number;
+  remainingOpenrouter: number;
+  providers: CostProviderData[];
+  agents: CostBreakdownData[];
+  models: CostBreakdownData[];
+  sessions: CostBreakdownData[];
+  workflows: CostBreakdownData[];
+  untrackedProviders: string[];
+}
+
+function asCostStatus(value: unknown): CostProviderStatus {
+  return value === "metered" || value === "token-only" ? value : "untracked";
+}
+
+function parseCostBreakdown(value: unknown): CostBreakdownData | null {
+  if (!isObj(value)) return null;
+  const key = asStr(value.key);
+  if (!key) return null;
+  return {
+    key,
+    usd: asNum(value.usd),
+    actualUsd: asNum(value.actual_usd),
+    estimatedUsd: asNum(value.estimated_usd),
+    events: asNum(value.events),
+    tokensIn: asNum(value.tokens_in),
+    tokensOut: asNum(value.tokens_out),
+    untrackedEvents: asNum(value.untracked_events),
+    tokenOnlyEvents: asNum(value.token_only_events),
+  };
+}
+
+export function parseCost(j: unknown): CostData | null {
+  if (!isObj(j)) return null;
+  const budget = isObj(j.budget) ? j.budget : {};
+  const providers: CostProviderData[] = asArr(j.providers).filter(isObj).map((provider) => {
+    const parsed = parseCostBreakdown(provider);
+    if (!parsed) return null;
+    return { ...parsed, provider: asStr(provider.provider, parsed.key), status: asCostStatus(provider.status) };
+  }).filter((provider): provider is CostProviderData => provider !== null);
+  const list = (value: unknown) => asArr(value).map(parseCostBreakdown).filter((row): row is CostBreakdownData => row !== null);
+  return {
+    month: asStr(j.month),
+    budget: { monthlyUsd: asNum(budget.monthly_usd, 10), hardStop: asBool(budget.hard_stop), scope: asStr(budget.scope, "openrouter") },
+    openrouterMtd: asNum(j.openrouter_mtd),
+    knownMtd: asNum(j.known_mtd),
+    remainingOpenrouter: asNum(j.remaining_openrouter),
+    providers,
+    agents: list(j.agents),
+    models: list(j.models),
+    sessions: list(j.sessions),
+    workflows: list(j.workflows),
+    untrackedProviders: asArr(j.untracked_providers).map((provider) => asStr(provider)).filter(Boolean),
+  };
+}
+
 export interface AdviceData {
   task: string;
   capability: string;

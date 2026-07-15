@@ -66,11 +66,14 @@ async function loadCfg(): Promise<Cfg> {
   return (Bun as unknown as { YAML: { parse: (s: string) => Cfg } }).YAML.parse(await f.text());
 }
 
-function parseArgs(argv: string[]) {
+export function parseRouteArgs(argv: string[]) {
   let cap: string | null = null;
   let dryRun = false;
   let json = false;
   let floor = false;
+  let agent: string | null = null;
+  let session: string | null = null;
+  let workflow: string | null = null;
   const rest: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -78,9 +81,18 @@ function parseArgs(argv: string[]) {
     else if (a === "--dry-run") dryRun = true;
     else if (a === "--json") json = true;
     else if (a === "--floor") floor = true;   // fuerza el provider más barato (batch/jobs)
+    else if (a === "--agent") agent = argv[++i] ?? null;
+    else if (a === "--session") session = argv[++i] ?? null;
+    else if (a === "--workflow") workflow = argv[++i] ?? null;
     else rest.push(a);
   }
-  return { cap, dryRun, json, floor, prompt: rest.join(" ").trim() };
+  return { cap, dryRun, json, floor, agent, session, workflow, prompt: rest.join(" ").trim() };
+}
+
+function safeCostLabel(value: string | null, flag: string): string | null {
+  if (value == null) return null;
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._/:@-]{0,160}$/.test(value)) die(`${flag} inválido para atribución de costo`, 2);
+  return value;
 }
 
 // :floor a cada slug sin sufijo (los :free / ya-suffixed se dejan intactos).
@@ -130,7 +142,7 @@ async function appendSpend(logPath: string, rec: unknown) {
 }
 
 async function main() {
-  const { cap, dryRun, json, floor, prompt } = parseArgs(process.argv.slice(2));
+  const { cap, dryRun, json, floor, agent, session, workflow, prompt } = parseRouteArgs(process.argv.slice(2));
   const cfg = await loadCfg();
 
   const capability = cap ?? classify(prompt, cfg);
@@ -138,6 +150,9 @@ async function main() {
   if (!chain) die(`capacidad desconocida: ${capability} (válidas: ${Object.keys(cfg.capabilities).join(", ")})`);
 
   const models = applyFloor(chain.models, floor);
+  const costAgent = safeCostLabel(agent, "--agent");
+  const costSession = safeCostLabel(session, "--session");
+  const costWorkflow = safeCostLabel(workflow, "--workflow");
 
   // Doble candado frontier (config + hardcode)
   if (chainHasFrontier(models)) die(`modelo frontier en la cadena '${capability}' — prohibido por diseño`);
@@ -216,7 +231,10 @@ async function main() {
 
   const rec = {
     ts: new Date().toISOString(), src: "route", cap: capability, model: modelUsed,
-    tokens_in: tin, tokens_out: tout, usd, ...(estimated ? { usd_estimated: true } : {}),
+    agent: costAgent ?? "route", tokens_in: tin, tokens_out: tout, usd,
+    ...(costSession ? { session: costSession } : {}),
+    ...(costWorkflow ? { workflow: costWorkflow } : {}),
+    ...(estimated ? { usd_estimated: true } : {}),
   };
   await appendSpend(logPath, rec);
 

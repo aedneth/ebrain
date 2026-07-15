@@ -122,6 +122,15 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     expect(reduce(st, parseKey("y")).effect).toEqual({ type: "routeTask", task: "x", capability: "coding" });
   });
 
+  test("confirmed route preserves an attached workflow id for cost attribution", () => {
+    const st: AppState = {
+      ...launchState(),
+      launch: { ...launchState().launch!, workflowId: "second-brain-sops-dev" },
+      overlay: { kind: "confirmRoute", task: "x", capability: "coding", model: "deepseek/deepseek-v4-pro", cost: "$0.001" },
+    };
+    expect(reduce(st, parseKey("y")).effect).toEqual({ type: "routeTask", task: "x", capability: "coding", workflow: "second-brain-sops-dev" });
+  });
+
   test("governor override dialog: ONLY y proceeds (launchConfirmed); n/esc/enter do not", () => {
     const st: AppState = {
       ...launchState(0),

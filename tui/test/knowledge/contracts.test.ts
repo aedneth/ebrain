@@ -21,6 +21,7 @@ import {
   parseMemory,
   parseWorkflows,
   parseWorkflowRun,
+  parseCost,
 } from "../../src/knowledge/contracts.ts";
 
 describe("parseStatus (status --json)", () => {
@@ -259,5 +260,27 @@ describe("parseWorkflows (workflows list/run --json)", () => {
     expect(d.prompt).toContain("Use ebrain workflow");
     expect(d.checklist).toHaveLength(2);
     expect(parseWorkflowRun({ id: "x", title: "x" })).toBeNull();
+  });
+});
+
+describe("parseCost (cost --json)", () => {
+  test("normalizes known USD separately from token-only provider usage", () => {
+    const d = parseCost({
+      schema_version: 2,
+      month: "2026-07",
+      budget: { monthly_usd: 10, hard_stop: true, scope: "openrouter" },
+      openrouter_mtd: 0.001,
+      known_mtd: 0.0012,
+      remaining_openrouter: 9.999,
+      providers: [
+        { key: "openrouter", provider: "openrouter", status: "metered", usd: 0.001, actual_usd: 0.001, estimated_usd: 0, events: 1, tokens_in: 100, tokens_out: 50, untracked_events: 0, token_only_events: 0 },
+        { key: "gemini", provider: "gemini", status: "token-only", usd: 0, actual_usd: 0, estimated_usd: 0, events: 1, tokens_in: 30, tokens_out: 10, untracked_events: 0, token_only_events: 1 },
+      ],
+      agents: [], models: [], sessions: [], workflows: [], untracked_providers: ["claude"], entries: [],
+    })!;
+    expect(d.providers[0]!.actualUsd).toBe(0.001);
+    expect(d.providers[1]!.status).toBe("token-only");
+    expect(d.providers[1]!.tokensIn + d.providers[1]!.tokensOut).toBe(40);
+    expect(d.untrackedProviders).toEqual(["claude"]);
   });
 });

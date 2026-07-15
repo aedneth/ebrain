@@ -119,7 +119,10 @@ const MEMORY_HINTS: HintEntry[] = [
   { k: "a", label: "attach workflow" },
   { k: "r", label: "remember" },
 ];
-const ROUTING_HINTS: HintEntry[] = [{ k: "↑↓", label: "caps" }];
+const ROUTING_HINTS: HintEntry[] = [
+  { k: "↑↓", label: "navigate" },
+  { k: "c", label: "cost ledger" },
+];
 const DOCTOR_HINTS: HintEntry[] = [
   { k: "r", label: "re-run" },
   { k: "tab", label: "focus box" },
