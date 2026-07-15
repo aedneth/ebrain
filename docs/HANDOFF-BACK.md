@@ -58,6 +58,13 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 - **Evidencia de benchmarks:** `cli/benchmark-evidence.ts` es un parser estricto opcional: exige fuente, fecha ISO, version, task scope, modelo y metricas; prohíbe campos desconocidos, `winner`, secretos y politica de routing. No se conecta a la selección de modelos. `docs/BENCHMARK-EVIDENCE-SCHEMA.md` explica el formato.
 - **Auditar:** exactitud del payload por `sendToSession`, cancelacion distinta de `y`, que ningún draft llegue a sesiones/costos/logs, y que el schema no permita campos desconocidos ni derive defaults/rankings.
 
+## Actualizacion 2026-07-15 — F6.6.6 fixtures canónicos cerrado (pendiente auditoria final)
+
+- **Construido:** `cli/task-profile.fixtures.ts` contiene diez tareas representativas que cubren las seis capabilities. `task-profile.fixtures.test.ts` verifica para cada una la capability, las señales detectadas y los dos modos compatibles; también fija que el contrato no adquiera campos de agent/model/winner/rank/cost.
+- **Decisión:** los fixtures son regresión de reglas locales, no benchmarks ni ejemplos de modelos. No nombran provider, modelo, precio o ganador. `docs/CANONICAL-TASK-FIXTURES.md` describe ese límite para contribuidores OSS.
+- **Gotchas:** el matching actual es literal por substring: `script` aparece dentro de `TypeScript`, por lo que esa señal debe ser esperada; `tools` no dispara el keyword exacto `tool-call`. No se cambió el clasificador durante esta tarea, solo se documentó y cubrió su conducta vigente.
+- **Auditar con GPT-5.6-sol al cierre:** que los diez fixtures no introduzcan ranking implícito, que cubran todas las capabilities sin duplicar IDs, y que cambiar reglas rompa la expectativa explicable correspondiente.
+
 ## 1. Qué construí
 
 - F6.6E Unified Cost Ledger v2 (Codex maker, 2026-07-15):

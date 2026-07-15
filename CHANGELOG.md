@@ -4,6 +4,14 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — F6.6.6: fixtures canónicos de Task Profile
+
+- **Cobertura sin recomendador:** diez tareas versionadas ejercen las seis capacidades y comprueban exclusivamente señales explicables, capability y modos compatibles.
+- **Sin ranking implícito:** los fixtures no contienen providers, modelos, precios, agentes ni ganadores; el test rechaza que esos campos entren al contrato Task Profile.
+- **Reglas literales visibles:** queda cubierto que `script` también hace match dentro de `TypeScript` y que `tool` no equivale a `tool-call`.
+
+---
+
 ## 2026-07-15 — F6.6.5: composer exacto + evidencia de benchmarks descriptiva
 
 - **Prompt seguro y deliberado:** `p` en Sessions abre un composer multilinea; paste y Alt+Enter conservan saltos de linea. Enter abre preview y solo `y` manda los bytes exactos. Los drafts no se persisten ni se incorporan al ledger/historial.
