@@ -4,6 +4,16 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — FASE D doble-gate: `[FABLE_AUDIT_PASS]` (segundo checker independiente) — 2 findings nuevos
+
+- **Fable 5 = segundo checker (maker≠checker), veredicto `[FABLE_AUDIT_PASS]`** — confirma el `[AUDIT_PASS]` de Opus con evidencia PROPIA: swarm de **8 clientes MCP concurrentes** (más agresivo que los 6 de Opus) → 8/8 HTTP 200 en **0.163s**, 94 tools exactos, serve=1 sostenido, loopback (`ss`), auth negativa 401 sin/con-bearer-inválido; idempotencia `up`×2/`onboard --all`×2 limpia; suites cli 135/0 + tui 360/0; secret-safety limpio. Reporte: `docs/AUDIT-FABLE-FASE-D.md`.
+- **F-F1 (media, NUEVO · confirmado por Opus) — superficie CLI/write-back rota bajo el daemon:** `ebrain q`/`sync`/`dream-cycle`/`sessions-federate` abren PGLite directo y contienden con el lock → `ebrain q "korvex"` = **rc=124 (cuelga 40s)**; los learnings escritos por CLI no se embeben ni son buscables con el daemon UP. Root cause: falta `remote_mcp` en `~/.gbrain/config.json` (rewire thin-client de ops CLI no hecho). **NO bloquea los gates** (el canal MCP de agentes funciona; inject-context usa MCP). Cierre obligatorio (maker): rutear ops CLI por el daemon + `dream-cycle`/`doctor` daemon-aware + `ebrain-q` fail-loud.
+- **F-F2 (baja, NUEVO) — evidencia vacua:** el probe `ebrain q "brisas dekko cliente"` que maker y Opus citaron como aislamiento-vivo no probaba nada (vacío para todo, por F-F1). Retirado; el aislamiento se sostiene por federación default-deny + CI test.
+- **Ajustes:** F-D1 sube a severidad **media** (2 de 3 capas compensatorias dormidas bajo el daemon → D.5.4 prioridad ALTA). F-D2: `~/.gemini/settings.json` en **664 world-readable** con bearer → fix `chmod 600` (las demás configs = 600).
+- **Sin cambio de código de producto**; solo docs de auditoría (`docs/AUDIT-FABLE-FASE-D.md`, `docs/SPRINT-DAEMON.md`, `docs/HANDOFF-BACK.md`) + este CHANGELOG. Backlog de cierre para Codex: **D.5.4** (prioridad alta) + **F-F1 (a/b/c)** + chmod gemini.
+
+---
+
 ## 2026-07-14 — FASE D CERRADA: `[AUDIT_PASS]` Opus (D.6 concurrencia PASS + D.7 gate) — daemon HTTP-MCP compartido
 
 - **D.6 = PASS (auditoría Opus, checker).** Desde estado frío (daemon DOWN, cero `cli.ts serve`), `ebrain up` levantó el host loopback, leyó el token sin imprimirlo, smoke `tools/list`=94, onboard 5/5. **Prueba de concurrencia (criterio 1 del ADR-004):** 6 clientes MCP `tools/list` simultáneos → los 6 = 94 tools en **0.24s** con **UN solo** `cli.ts serve --http`; `claude mcp list`=`✔ Connected` + `codex mcp list`=registrado (env-var bearer) **en paralelo**, serve count=1 durante/después. `ss` = bind `127.0.0.1:8541` loopback-only. Resuelve de raíz el "MCP nunca carga" (lock single-writer): N clientes MCP servidos por UN dueño del lock, sin colgarse.

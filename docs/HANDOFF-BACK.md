@@ -126,6 +126,14 @@ No toqué TUI source; cero-hex no aplica a este cambio, aunque la suite TUI comp
 - **F-D1 (media/baja) — enforcement de aislamiento no cableada al runtime.** `assertNoClientSources()`/`isClientSource`/`federatedSources` viven en `cli/isolation.ts` pero **solo los llama el CI test** — NO el boot del host. D.5.3 y el docstring de `cli/isolation.ts` lo afirmaban como "enforced en runtime, no solo doc": overstatement. **Corregido por Opus** (docs ajustados) + **abierta D.5.4**: cablear la aserción al preflight de `scripts/ebrain-brain` (listar sources del engine, hard-fallar boot si hay cliente). No es leak activo. → **Codex: implementar D.5.4.**
 - **F-D2 (baja) — token bearer en reposo en configs de agente.** claude/gemini/opencode/cursor guardan el valor del token en sus configs (`~/.claude.json`, settings gemini, `~/.cursor/mcp.json` [chmod 600], config opencode). Solo **codex** usa indirección `--bearer-token-env-var` (lo correcto). Aceptable para loopback-local P1; **hardening antes del release público**: preferir indirección env/secret-store o token corto rotable para todos los adapters. → backlog open-source.
 
-### Pendiente tras esta auditoría
-- **Fable 5** corre como segundo checker sobre FASE D (lo dispara Eduardo).
-- Codex: **D.5.4** (F-D1) + P1 restante (`ebrain up` installer `curl | sh`) + P3/TUI 6.6.
+### Segundo checker — Fable 5 (2026-07-15): `[FABLE_AUDIT_PASS]`
+Fable confirmó el gate con evidencia propia (8 clientes MCP concurrentes = 94 tools en 0.163s, serve=1, 401 negativos, suites verdes) y aportó 2 findings nuevos (ambos reproducidos por Opus). Reporte completo: `docs/AUDIT-FABLE-FASE-D.md`.
+- **F-F1 (media) — CLI/write-back rota bajo el daemon:** `ebrain q`/`sync`/`dream-cycle`/`sessions-federate` contienden con el lock (`ebrain q "korvex"` = rc=124, cuelga 40s); learnings CLI no buscables con daemon UP; falta `remote_mcp` en `~/.gbrain/config.json`. No bloquea gates (agentes usan MCP). **Cierre maker:** (a) rutear ops CLI por el daemon (thin-client `remote_mcp`), (b) `dream-cycle`/`doctor` daemon-aware, (c) `ebrain-q` fail-loud.
+- **F-F2 (baja):** el probe `ebrain q "brisas dekko"` como evidencia de aislamiento es vacuo → retirado.
+- **Ajustes:** F-D1 → media (D.5.4 prioridad ALTA, única enforcement viva futura del plano-source). F-D2 → `chmod 600 ~/.gemini/settings.json` (hoy 664 world-readable).
+
+### Backlog de cierre para Codex (maker)
+1. **D.5.4** (prioridad ALTA): cablear `assertNoClientSources()` al preflight de `ebrain-brain`.
+2. **F-F1 (a/b/c)**: rewire thin-client de ops CLI + daemon-aware dream-cycle/doctor + ebrain-q fail-loud.
+3. **F-D2**: `chmod 600 ~/.gemini/settings.json` + preferir indirección env-var/secret-store para todos los adapters.
+4. P1 restante (`ebrain up` installer `curl | sh`) + P3/TUI 6.6.
