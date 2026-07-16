@@ -26,6 +26,22 @@ export function isClientSource(name: string): boolean {
   return CLIENT_DENYLIST.some((d) => n.includes(d.toLowerCase()));
 }
 
+export interface SourceIdentity {
+  id?: unknown;
+  name?: unknown;
+  path?: unknown;
+}
+
+/**
+ * Runtime source filtering must inspect every identity field supplied by gbrain. A source can
+ * have an innocent id while its display name or local path identifies a denied client repo.
+ */
+export function isClientSourceRecord(source: SourceIdentity): boolean {
+  return [source.id, source.name, source.path]
+    .filter((value): value is string => typeof value === "string")
+    .some((value) => isClientSource(value) || isClientPath(value));
+}
+
 /**
  * Filtro de discovery de sources como fn pura: de la salida cruda de `sources list`,
  * quedarse SOLO con los federados, no-'default', no-cliente. Mismo criterio que el

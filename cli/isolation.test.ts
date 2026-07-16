@@ -15,6 +15,7 @@ import {
   CLIENT_DENYLIST,
   isClientPath,
   isClientSource,
+  isClientSourceRecord,
   federatedSources,
   assertNoClientSources,
 } from "./isolation.ts";
@@ -81,6 +82,17 @@ describe("D.5 gate — plano-source: ningún repo de cliente es un source federa
     expect(got).toEqual(["second-brain", "company-brain", "agent-memory"]);
     expect(got).not.toContain("default");
     expect(got).not.toContain("brisas-del-golfo");
+  });
+
+  test("isClientSourceRecord deniega por CUALQUIER campo de identidad (id, name o local_path)", () => {
+    // G56-F5: un source con id inocente puede delatarse por su display name o su local_path.
+    expect(isClientSourceRecord({ id: "clean" })).toBe(false);
+    expect(isClientSourceRecord({ id: "brisas-del-golfo" })).toBe(true);            // por id
+    expect(isClientSourceRecord({ id: "cust-1", name: "DEKKO client" })).toBe(true); // por name
+    expect(isClientSourceRecord({ id: "cust-2", path: "/home/e/repos/brisas-del-golfo" })).toBe(true); // por path
+    expect(isClientSourceRecord({ id: "cust-3", path: "/home/e/work/dekko/src" })).toBe(true); // subpath
+    // campos no-string se ignoran sin romper:
+    expect(isClientSourceRecord({ id: 123, name: null, path: undefined })).toBe(false);
   });
 
   test("assertNoClientSources: verde con sources limpios, TIRA si un cliente se cuela", () => {

@@ -1,71 +1,9 @@
 #!/usr/bin/env bash
-# ebrain-q — cross-source fan-out query (overlay sobre gbrain).
-# gbrain pin a25209b no soporta all_sources/__all__ para brains multi-source
-# (v1 limitation). Este wrapper consulta cada source federado del knowledge
-# layer y mergea por score — el "cross-source instantáneo" que Eduardo pide.
-#
-# Uso:  ebrain-q "<pregunta>" [topN] [--json]     (topN por defecto 10)
+# Thin executable entrypoint; structured parsing and isolation live in cli/query.ts.
 set -euo pipefail
 
-RUN="$HOME/.config/ebrain/ebrain-run"
-[ -x "$RUN" ] || RUN="$HOME/.config/ebrain/gbrain-run"
 EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
-# Keep the positional query compatible while allowing a stable TUI contract.
-JSON=0
-ARGS=()
-for arg in "$@"; do
-  [ "$arg" = "--json" ] && { JSON=1; continue; }
-  ARGS+=("$arg")
-done
-Q="${ARGS[0]:-}"
-TOP="${ARGS[1]:-10}"
-[ -z "$Q" ] && { echo "uso: ebrain-q \"<pregunta>\" [topN]"; exit 2; }
 BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"
 command -v bun >/dev/null 2>&1 && BUN_BIN=bun
-TMP="$(mktemp)"
 
-# Sources del knowledge layer a cruzar (federados, no 'default', no cliente).
-SRC_JSON="$(mktemp)"
-ERR="$(mktemp)"
-trap 'rm -f "$TMP" "$SRC_JSON" "$ERR"' EXIT
-if ! "$BUN_BIN" run "$EBRAIN_HOME/cli/remote-tools.ts" sources-list --json >"$SRC_JSON" 2>"$ERR"; then
-  echo "ebrain-q: no pude listar sources vía daemon MCP: $(head -1 "$ERR")" >&2
-  exit 1
-fi
-mapfile -t SOURCES < <(
-  jq -r '.sources[] | select(.federated == true and .id != "default") | .id' "$SRC_JSON" \
-    | grep -vE 'brisas|dekko' || true
-)
-if [ "${#SOURCES[@]}" -eq 0 ]; then
-  echo "ebrain-q: no hay sources federados disponibles; no devuelvo vacío silencioso." >&2
-  exit 1
-fi
-
-# Recolecta: SCORE \t SOURCE \t SLUG \t SNIPPET  (score numérico limpio para ordenar)
-FAIL=0
-for src in "${SOURCES[@]}"; do
-  if ! OUT="$("$RUN" query "$Q" --source-id "$src" --no-expand 2>"$ERR")"; then
-    echo "ebrain-q: query falló para source '$src': $(head -1 "$ERR")" >&2
-    FAIL=1
-    continue
-  fi
-  while IFS= read -r line; do
-        [[ "$line" =~ ^\[[0-9] ]] || continue
-        score="${line%%]*}"; score="${score#[}"          # 0.8873
-        rest="${line#*] }"                                # slug -- snippet
-        slug="${rest%% --*}"
-        snippet="${rest#"$slug -- "}"
-        printf '%s\t%s\t%s\t%s\n' "$score" "$src" "$slug" "$snippet"
-      done <<< "$OUT" >> "$TMP"
-done
-[ "$FAIL" = 1 ] && exit 1
-
-# Orden global por score desc, dedup por slug, top N, formato legible.
-if [ "$JSON" = 1 ]; then
-  sort -t$'\t' -k1,1 -rn "$TMP" \
-    | awk -F'\t' -v top="$TOP" '!seen[$3]++ && ++count <= top { print }' \
-    | jq -Rn --arg query "$Q" '[inputs | split("\t") | select(length >= 4) | {score: (.[0] | tonumber), source: .[1], slug: .[2], snippet: .[3]}] | {query: $query, results: .}'
-else
-  sort -t$'\t' -k1,1 -rn "$TMP" \
-    | awk -F'\t' -v top="$TOP" '!seen[$3]++ && ++count <= top { printf "%-14s [%s] %s -- %s\n", $2, $1, $3, $4 }' || true
-fi
+exec "$BUN_BIN" run "$EBRAIN_HOME/cli/query.ts" "$@"

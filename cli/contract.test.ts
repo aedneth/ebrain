@@ -358,6 +358,47 @@ describe("6.6C workflows --json", () => {
   });
 });
 
+// ── G56-F5 ebrain q --json ──────────────────────────────────────────────────
+const QueryResultSchema = z.object({
+  score: z.number(),
+  source: z.string().min(1),
+  slug: z.string().min(1),
+  snippet: z.string(),
+});
+const QueryResponseSchema = z.object({
+  schema_version: z.literal(1),
+  query: z.string().min(1),
+  results: z.array(QueryResultSchema),
+  partial: z.boolean(),
+  failures: z.array(z.object({ source: z.string().min(1), message: z.string() })),
+});
+const queryFixture = {
+  schema_version: 1,
+  query: "korvex pricing",
+  results: [
+    { score: 0.91, source: "company-brain", slug: "company/pricing", snippet: "Modelo C pricing." },
+    { score: 0.74, source: "second-brain", slug: "korvex/pricing", snippet: "contrast with data." },
+  ],
+  partial: true,
+  failures: [{ source: "agent-memory", message: "query returned an invalid payload" }],
+};
+
+describe("G56-F5 q --json", () => {
+  test("fixture pasa el schema (schema_version/query/results/partial/failures)", () => {
+    expect(() => QueryResponseSchema.parse(queryFixture)).not.toThrow();
+  });
+  test("schema_version debe ser literalmente 1", () => {
+    expect(QueryResponseSchema.safeParse({ ...queryFixture, schema_version: 2 }).success).toBe(false);
+  });
+  test("partial debe ser boolean y cada failure trae source+message", () => {
+    expect(QueryResponseSchema.safeParse({ ...queryFixture, partial: "yes" }).success).toBe(false);
+    expect(QueryResponseSchema.safeParse({ ...queryFixture, failures: [{ source: "x" }] }).success).toBe(false);
+  });
+  test("results vacío con partial:false es válido (sin hits, sin fallos)", () => {
+    expect(QueryResponseSchema.safeParse({ schema_version: 1, query: "x", results: [], partial: false, failures: [] }).success).toBe(true);
+  });
+});
+
 // ── 6.6E ebrain cost --json ─────────────────────────────────────────────────
 const CostKindSchema = z.enum(["actual", "estimated", "token-only", "untracked"]);
 const CostBreakdownSchema = z.object({

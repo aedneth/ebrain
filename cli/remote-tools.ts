@@ -30,7 +30,7 @@ function prepareThinClientEnv(): void {
   }
 }
 
-async function callTool<T>(name: string, args: Record<string, unknown> = {}, timeoutMs = 30_000): Promise<T> {
+export async function callTool<T>(name: string, args: Record<string, unknown> = {}, timeoutMs = 30_000): Promise<T> {
   prepareThinClientEnv();
   const { loadConfig } = await import("../vendor/gbrain/src/core/config.ts");
   const { callRemoteTool, unpackToolResult } = await import("../vendor/gbrain/src/core/mcp-client.ts");
