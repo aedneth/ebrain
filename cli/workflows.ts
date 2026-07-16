@@ -16,8 +16,8 @@
  *   ebrain workflows capture --json
  *   ebrain workflows skillify <id> --yes --json
  */
-import { chmodSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "fs";
-import { basename, join, relative, resolve, sep } from "path";
+import { chmodSync, existsSync, mkdirSync, readdirSync, realpathSync, statSync, writeFileSync } from "fs";
+import { basename, isAbsolute, join, relative, resolve, sep } from "path";
 import { createHash } from "crypto";
 import { homedir } from "os";
 import { isClientPath, scrubSecrets } from "./sessions.ts";
@@ -210,6 +210,33 @@ function fileAllowed(path: string): boolean {
   }
 }
 
+/** Canonicalize a path (resolving every symlink). Returns null when it can't be resolved. */
+function canonicalPath(path: string): string | null {
+  try {
+    return realpathSync(path);
+  } catch {
+    return null;
+  }
+}
+
+/** True when `child` is `parent` itself or nested inside it. Both should already be canonical. */
+function isInsideRoot(parent: string, child: string): boolean {
+  if (child === parent) return true;
+  const rel = relative(parent, child);
+  return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
+}
+
+/**
+ * A stored source_path is denied when its textual form OR its canonical (symlink-resolved)
+ * form lands under a client repo. Guards a hand-crafted store from materializing a skill
+ * that reaches denied client content — the second half of G56-F1.
+ */
+function sourcePathDenied(sourcePath: string): boolean {
+  if (isClientPath(sourcePath)) return true;
+  const real = canonicalPath(sourcePath);
+  return real !== null && isClientPath(real);
+}
+
 export function defaultSourceRoots(home = HOME): SourceRoot[] {
   const env = process.env.EBRAIN_WORKFLOW_SOURCES;
   if (env) {
@@ -229,22 +256,49 @@ export function defaultSourceRoots(home = HOME): SourceRoot[] {
 }
 
 export function discoverMarkdown(root: SourceRoot): string[] {
-  if (!existsSync(root.dir) || isClientPath(root.dir)) return [];
+  // Fail closed on a denied textual root before touching the filesystem.
+  if (isClientPath(root.dir)) return [];
+  // Canonicalize the root: a symlinked root resolving into a client repo is denied fail-closed,
+  // and a missing/offline root simply yields nothing (never an error).
+  const canonicalRoot = canonicalPath(root.dir);
+  if (!canonicalRoot || isClientPath(canonicalRoot)) return [];
+  try {
+    if (!statSync(canonicalRoot).isDirectory()) return [];
+  } catch {
+    return [];
+  }
   const out: string[] = [];
   const walk = (dir: string) => {
-    for (const ent of readdirSync(dir, { withFileTypes: true })) {
+    let entries: ReturnType<typeof readdirSync>;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const ent of entries) {
       const p = join(dir, ent.name);
       if (isClientPath(p)) continue;
+      if (ent.isSymbolicLink()) {
+        // Never trust or recurse through a symlink: resolve it and accept ONLY a real file that
+        // stays inside the canonical root and passes the allow-list. Symlinked directories are
+        // skipped entirely (no traversal), closing the G56-F1 symlink-escape vector.
+        const real = canonicalPath(p);
+        if (real && !isClientPath(real) && isInsideRoot(canonicalRoot, real) && fileAllowed(real)) out.push(real);
+        continue;
+      }
       if (ent.isDirectory()) {
         if (ent.name.startsWith(".") || ent.name === "node_modules" || ent.name === "vendor") continue;
         walk(p);
-      } else if (fileAllowed(p)) {
-        out.push(p);
+      } else if (ent.isFile()) {
+        // A regular file under the canonical root is already canonical; the containment + deny
+        // re-check are belt-and-suspenders against a mid-tree symlink we might have followed.
+        const real = canonicalPath(p) ?? p;
+        if (!isClientPath(real) && isInsideRoot(canonicalRoot, real) && fileAllowed(real)) out.push(real);
       }
     }
   };
-  walk(root.dir);
-  return out.sort();
+  walk(canonicalRoot);
+  return [...new Set(out)].sort();
 }
 
 export async function workflowFromMarkdown(root: SourceRoot, file: string, existing?: WorkflowRecord, now = nowIso()): Promise<WorkflowRecord> {
@@ -266,7 +320,8 @@ export async function workflowFromMarkdown(root: SourceRoot, file: string, exist
     id: existing?.id ?? relId(root, file),
     title,
     source: root.source,
-    source_path: file,
+    // Persist the canonical (symlink-resolved) path so a later skillify can re-validate it (G56-F1).
+    source_path: canonicalPath(file) ?? file,
     content_hash: hash,
     version: existing ? existing.version + (changed ? 1 : 0) : 1,
     updated_at: existing && !changed ? existing.updated_at : now,
@@ -300,7 +355,7 @@ export async function loadWorkflows(storeDir = DEFAULT_STORE_DIR): Promise<Workf
   for (const ent of readdirSync(storeDir, { withFileTypes: true })) {
     if (!ent.isFile() || !ent.name.endsWith(".workflow.json")) continue;
     const rec = await readWorkflow(join(storeDir, ent.name));
-    if (rec && !isClientPath(rec.source_path)) out.push(rec);
+    if (rec && !sourcePathDenied(rec.source_path)) out.push(rec);
   }
   return out.sort((a, b) => a.title.localeCompare(b.title));
 }
@@ -334,9 +389,15 @@ export async function ingestWorkflows(opts: IngestOptions = {}): Promise<{ inges
   const workflows: WorkflowSummary[] = [];
   let changed = 0;
   for (const root of roots) {
-    for (const file of discoverMarkdown(root)) {
-      const id = relId(root, file);
-      const rec = await workflowFromMarkdown(root, file, existing.get(id), opts.now ?? nowIso());
+    // Canonicalize the root once so ids (relId) and stored source_paths agree with the canonical
+    // files discoverMarkdown returns, and a symlinked/denied root is skipped fail-closed (G56-F1).
+    if (isClientPath(root.dir)) continue;
+    const canonicalDir = canonicalPath(root.dir);
+    if (!canonicalDir || isClientPath(canonicalDir)) continue;
+    const croot: SourceRoot = { ...root, dir: canonicalDir };
+    for (const file of discoverMarkdown(croot)) {
+      const id = relId(croot, file);
+      const rec = await workflowFromMarkdown(croot, file, existing.get(id), opts.now ?? nowIso());
       if (!existing.get(id) || existing.get(id)!.content_hash !== rec.content_hash) changed += 1;
       writeWorkflow(storeDir, rec);
       workflows.push(summarizeWorkflow(rec));
@@ -378,7 +439,7 @@ export async function searchWorkflows(query: string, storeDir = DEFAULT_STORE_DI
 
 export async function findWorkflow(id: string, storeDir = DEFAULT_STORE_DIR): Promise<WorkflowRecord | null> {
   const direct = await readWorkflow(recordPath(storeDir, id));
-  if (direct) return direct;
+  if (direct && !sourcePathDenied(direct.source_path)) return direct;
   return (await loadWorkflows(storeDir)).find((w) => w.id === id || slugify(w.title) === slugify(id)) ?? null;
 }
 
@@ -481,11 +542,13 @@ export async function skillifyWorkflow(id: string, opts: SkillifyOptions = {}): 
   const storeDir = opts.storeDir ?? DEFAULT_STORE_DIR;
   const skillsDir = opts.skillsDir ?? DEFAULT_SKILLS_DIR;
   const w = await findWorkflow(id, storeDir);
-  if (!w) return { ok: false, error: { type: "not-found", message: `workflow no encontrado: ${id}` } };
+  if (!w) return { ok: false, error: { type: "not-found", message: `workflow not found: ${id}` } };
+  // Defense in depth: never materialize a skill from a record that resolves into a client repo (G56-F1).
+  if (sourcePathDenied(w.source_path)) return { ok: false, error: { type: "not-found", message: `workflow not found: ${id}` } };
   const outDir = join(skillsDir, w.id);
   const outPath = join(outDir, "SKILL.md");
   if (!opts.yes) {
-    return { ok: false, error: { type: "confirm-required", message: "skillify escribe un SKILL.md local; repetí con --yes para aprobar" }, would: { path: outPath } };
+    return { ok: false, error: { type: "confirm-required", message: "skillify writes a local SKILL.md; repeat with --yes to approve" }, would: { path: outPath } };
   }
   mkdirSync(outDir, { recursive: true, mode: 0o700 });
   chmodSync(outDir, 0o700);
@@ -541,7 +604,7 @@ async function main(): Promise<void> {
 
   if (a.sub === "search") {
     const query = a.query.trim();
-    if (!query) die("uso: ebrain workflows search \"query\" [--json]", 2);
+    if (!query) die("usage: ebrain workflows search \"query\" [--json]", 2);
     const payload = await searchWorkflows(query, DEFAULT_STORE_DIR, a.limit);
     printJsonOrText(a.json, payload, () => {
       for (const w of payload.workflows) console.log(`${w.score}\t${w.id}\t${w.title}`);
@@ -550,7 +613,7 @@ async function main(): Promise<void> {
   }
 
   if (a.sub === "show" || a.sub === "run" || a.sub === "skillify") {
-    if (!a.id) die(`uso: ebrain workflows ${a.sub} <id> [--json]`, 2);
+    if (!a.id) die(`usage: ebrain workflows ${a.sub} <id> [--json]`, 2);
     if (a.sub === "skillify") {
       const payload = await skillifyWorkflow(a.id, { yes: a.yes });
       if (!payload.ok && !a.json) {
@@ -562,7 +625,7 @@ async function main(): Promise<void> {
       return;
     }
     const w = await findWorkflow(a.id);
-    if (!w) die(`workflow no encontrado: ${a.id}`, 1);
+    if (!w) die(`workflow not found: ${a.id}`, 1);
     const payload = a.sub === "show" ? { workflow: w } : materializeRun(w);
     printJsonOrText(a.json, payload, () => {
       if (a.sub === "show") console.log(`# ${w.title}\n\n${w.summary}\n\n${w.body}`);
@@ -579,7 +642,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  die(`ebrain workflows: subcomando desconocido '${a.sub}'`, 2);
+  die(`ebrain workflows: unknown subcommand '${a.sub}'`, 2);
 }
 
 if (import.meta.main) main().catch((e) => die(String(e?.message ?? e)));

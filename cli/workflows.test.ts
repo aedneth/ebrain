@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import {
@@ -188,6 +188,103 @@ describe("workflow contract", () => {
     expect(candidates[0].count).toBe(2);
     expect(candidates[0].snippets.join("\n")).not.toContain("secret");
     expect(candidates[0].snippets.join("\n")).toContain("[REDACTED]");
+  });
+
+  // ── G56-F1 — client-repo deny-list must survive symlinks (realpath canonicalization) ──
+  test("F1: a denied root reached through an innocent-named symlink ingests nothing", async () => {
+    const base = tmp();
+    const store = tmp();
+    try {
+      const client = join(base, "brisas-del-golfo");
+      mkdirSync(client);
+      writeFileSync(join(client, "client-sop.md"), sampleMarkdown("Client SOP"));
+      const link = join(base, "innocent-name");
+      symlinkSync(client, link);
+      const res = await ingestWorkflows({ storeDir: store, sourceRoots: [{ source: "local", dir: link }] });
+      expect(res.ingested).toBe(0);
+    } finally {
+      cleanup(base);
+      cleanup(store);
+    }
+  });
+
+  test("F1: a denied file reached through a symlink inside a safe root is skipped, safe files survive", async () => {
+    const base = tmp();
+    const safe = join(base, "safe");
+    const store = tmp();
+    try {
+      mkdirSync(safe);
+      writeFileSync(join(safe, "ok.md"), sampleMarkdown("Safe Workflow"));
+      const client = join(base, "dekko");
+      mkdirSync(client);
+      writeFileSync(join(client, "client.md"), sampleMarkdown("Client Workflow"));
+      symlinkSync(join(client, "client.md"), join(safe, "sneaky.md"));
+      const res = await ingestWorkflows({ storeDir: store, sourceRoots: [{ source: "local", dir: safe }] });
+      expect(res.ingested).toBe(1);
+      expect(res.workflows[0].title).toBe("Safe Workflow");
+    } finally {
+      cleanup(base);
+      cleanup(store);
+    }
+  });
+
+  test("F1: a symlink resolving outside the accepted root is skipped", async () => {
+    const base = tmp();
+    const safe = join(base, "safe");
+    const outside = join(base, "outside");
+    const store = tmp();
+    try {
+      mkdirSync(safe);
+      mkdirSync(outside);
+      writeFileSync(join(safe, "ok.md"), sampleMarkdown("Safe Workflow"));
+      writeFileSync(join(outside, "external.md"), sampleMarkdown("External Workflow"));
+      symlinkSync(join(outside, "external.md"), join(safe, "escape.md"));
+      const res = await ingestWorkflows({ storeDir: store, sourceRoots: [{ source: "local", dir: safe }] });
+      expect(res.ingested).toBe(1);
+      expect(res.workflows.map((w) => w.title)).toEqual(["Safe Workflow"]);
+    } finally {
+      cleanup(base);
+      cleanup(store);
+      cleanup(outside);
+    }
+  });
+
+  test("F1: skillify refuses a store record whose source_path resolves into a denied repo and writes no SKILL.md", async () => {
+    const base = tmp();
+    const store = tmp();
+    const skills = tmp();
+    try {
+      const client = join(base, "brisas-del-golfo");
+      mkdirSync(client);
+      const clientFile = join(client, "sop.md");
+      writeFileSync(clientFile, sampleMarkdown("Client SOP"));
+      const link = join(base, "looks-safe.md");
+      symlinkSync(clientFile, link);
+      const crafted: WorkflowRecord = {
+        schema_version: 1,
+        id: "crafted",
+        title: "Crafted",
+        source: "local",
+        source_path: link,
+        content_hash: "a".repeat(64),
+        version: 1,
+        updated_at: "2026-07-16T00:00:00.000Z",
+        trigger: "trigger",
+        summary: "summary",
+        tags: ["workflow"],
+        steps: [],
+        gates: [],
+        body: "body",
+      };
+      writeFileSync(join(store, "crafted.workflow.json"), JSON.stringify(crafted, null, 2) + "\n");
+      const res = await skillifyWorkflow("crafted", { storeDir: store, skillsDir: skills, yes: true });
+      expect(res.ok).toBe(false);
+      expect(existsSync(join(skills, "crafted", "SKILL.md"))).toBe(false);
+    } finally {
+      cleanup(base);
+      cleanup(store);
+      cleanup(skills);
+    }
   });
 
   test("skillify requires explicit approval and writes SKILL.md only with --yes", async () => {
