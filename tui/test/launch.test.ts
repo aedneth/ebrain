@@ -144,6 +144,12 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     expect(reduce(st, { name: "tab" }).state.launch?.wizard?.focus).toBe("profile");
   });
 
+  test("first-use profile initialization is explicit: only y invokes the migration effect", () => {
+    const st: AppState = { ...launchState(), overlay: { kind: "confirmProfilesInit" } };
+    expect(reduce(st, parseKey("y")).effect).toEqual({ type: "initializeProfiles" });
+    expect(reduce(st, parseKey("n")).effect).toBeUndefined();
+  });
+
   test("governor override dialog: ONLY y proceeds (launchConfirmed); n/esc/enter do not", () => {
     const st: AppState = {
       ...launchState(0),

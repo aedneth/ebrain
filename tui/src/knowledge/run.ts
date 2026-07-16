@@ -137,6 +137,10 @@ export function fetchTaskProfile(task: string): Promise<KResult<TaskProfileData>
   return fetchParsed(["task-profile", task, "--json"], 15000, parseTaskProfile);
 }
 export function fetchProfiles(): Promise<KResult<ProfilesData>> { return fetchParsed(["profiles", "list", "--json"], 15000, parseProfiles); }
+/** Explicit first-use migration of the user's existing local routing into a profile. */
+export function initializeProfiles(): Promise<KResult<ProfilesData>> {
+  return fetchParsed(["profiles", "init", "--yes", "--json"], 15000, parseProfiles);
+}
 export function fetchTargets(): Promise<KResult<TargetData[]>> { return fetchParsed(["targets", "list", "--json"], 15000, parseTargets); }
 export function fetchTargetPlan(input: { target: string; profile: string; capability: string; cwd: string }): Promise<KResult<TargetPlanData>> {
   return fetchParsed(["targets", "plan", "--target", input.target, "--profile", input.profile, "--cap", input.capability, "--cwd", input.cwd, "--json"], 15000, parseTargetPlan);

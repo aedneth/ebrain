@@ -4,6 +4,13 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — Launch first-use setup and English TUI docs
+
+- **No terminal detour:** Launch now offers explicit in-TUI initialization of the local execution profile; only `y` migrates existing routing, then the wizard reloads.
+- **English surface:** Launch errors, setup modal, user documentation, runbook entry and keybinding guide use English as the default UI language.
+
+---
+
 ## 2026-07-15 — F6.7.2: perf TUI medida y distribución decidida
 
 - **Celeron:** boot previo 0.08-0.10 s, RSS activo observado 47 MiB, CPU idle ~0.6% y peek 1 Hz ~1.8% de un core.

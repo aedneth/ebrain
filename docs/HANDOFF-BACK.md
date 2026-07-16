@@ -77,6 +77,13 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 - **Decisión D8:** no se compila con `bun build --compile` en esta release. El boot ya está muy por debajo de 1.5 s y el RSS bajo 100 MiB; un binario agregaría mantenimiento sin beneficio medido. Reconsiderar solo ante regresión o requisito de distribución standalone.
 - **Rastro:** `docs/f6-success-criteria.md` inicia la matriz de 8 criterios con evidencia de maker; no es una aprobación del gate.
 
+## Actualizacion 2026-07-15 — Wizard first-use + F6.7.3 docs cerrado (pendiente auditoria final)
+
+- **UX:** `w` ya no manda al usuario a una terminal para `profiles init`. Si no existe store local, muestra un dialogo en inglés que explica la migración y solo `y` ejecuta `ebrain profiles init --yes --json`; tras éxito recarga y abre el wizard. No llama proveedores ni guarda credenciales.
+- **Idioma:** los textos nuevos y la ruta visible del wizard están en inglés; el cwd rechazado también se presenta en inglés. Los errores textuales devueltos por subcomandos legacy siguen siendo su propia salida hasta una futura localización total del CLI.
+- **Docs F6.7.3:** `tui/README.md` cubre navegación, composer, signals, profiles, wizard y ledger; `docs/runbook.md` incluye entrada TUI. `?` permanece autogenerado desde el registry y los controles contextuales se ven en la hint bar.
+- **Auditar:** confirmar que `n`/Esc no escriben profiles, que `y` es el único camino de inicialización, que la salida CLI de error no se trate como éxito y que documentación/hints concuerden con reducer/registry.
+
 ## 1. Qué construí
 
 - F6.6E Unified Cost Ledger v2 (Codex maker, 2026-07-15):

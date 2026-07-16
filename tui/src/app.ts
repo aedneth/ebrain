@@ -90,6 +90,7 @@ import {
   runRemember,
   fetchTaskProfile,
   fetchProfiles,
+  initializeProfiles,
   fetchTargets,
   fetchTargetPlan,
 } from "./knowledge/run.js";
@@ -291,6 +292,7 @@ export type Overlay =
   | { kind: "wizardCwd"; line: LineState }
   | { kind: "confirmTargetLaunch"; plan: TargetPlanData }
   | { kind: "confirmTargetGovernor"; plan: TargetPlanData; reason: string }
+  | { kind: "confirmProfilesInit" }
   | { kind: "launchTask"; line: LineState }
   | { kind: "remember"; line: LineState }
   /** Read-only drill-in detail (Enter on a memory/check) — a titled, word-wrapped modal. */
@@ -442,6 +444,7 @@ export type AppEffect =
   | { type: "launchConfirmed"; agent: string; cwd: string; reason: string }
   | { type: "profileLaunchTask"; task: string }
   | { type: "openLaunchWizard" }
+  | { type: "initializeProfiles" }
   | { type: "planLaunchWizard" }
   | { type: "requestTargetLaunch"; plan: TargetPlanData }
   | { type: "launchTarget"; plan: TargetPlanData; reason?: string }
@@ -736,7 +739,7 @@ export function reduce(state: AppState, key: Key): ReduceResult {
         const launch = launchOf(state);
         const wizard = wizardOf(launch);
         if (!cwd || !wizard) return settle({ ...state, overlay: null });
-        if (isClientPath(cwd)) return settle({ ...state, overlay: null, launch: { ...launch, status: "error", error: "cwd de cliente rechazado" } });
+        if (isClientPath(cwd)) return settle({ ...state, overlay: null, launch: { ...launch, status: "error", error: "client repository cwd rejected" } });
         return settle({ ...state, overlay: null, launch: { ...launch, wizard: { ...wizard, cwd, plan: null }, status: "ready", error: undefined } });
       }
       const edited = lineApplyKey(ov.line, key);
@@ -751,6 +754,11 @@ export function reduce(state: AppState, key: Key): ReduceResult {
     }
     if (ov.kind === "confirmTargetGovernor") {
       if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "launchTarget", plan: ov.plan, reason: ov.reason });
+      if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: null });
+      return settle(state);
+    }
+    if (ov.kind === "confirmProfilesInit") {
+      if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "initializeProfiles" });
       if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: null });
       return settle(state);
     }
@@ -1055,6 +1063,11 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
     const governor = overlay.kind === "confirmTargetGovernor";
     const width = Math.min(84, Math.max(44, cols - 6));
     const box = confirm({ title: governor ? "RAM governor" : "launch target", message: governor ? overlay.reason : `${plan.target} · ${plan.profile} · ${plan.model} · ${plan.costStatus}`, danger: governor, confirmKey: "y", confirmLabel: governor ? "launch anyway" : "launch", cancelKey: "n", cancelLabel: "cancel", width }, theme);
+    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+  }
+  if (overlay.kind === "confirmProfilesInit") {
+    const width = Math.min(84, Math.max(44, cols - 6));
+    const box = confirm({ title: "Initialize execution profile", message: "Create a local profile from existing ebrain routing? No provider call or credential is stored.", danger: false, confirmKey: "y", confirmLabel: "initialize", cancelKey: "n", cancelLabel: "cancel", width }, theme);
     return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
   }
 
@@ -2527,9 +2540,14 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       const [targets, profiles] = await Promise.all([fetchTargets(), fetchProfiles()]);
       const current = launchOf(state);
       if (!targets.ok || !profiles.ok || !profiles.data.initialized || profiles.data.profiles.length === 0 || targets.data.length === 0) {
+        if (targets.ok && profiles.ok && !profiles.data.initialized) {
+          state = { ...state, overlay: { kind: "confirmProfilesInit" }, launch: { ...current, status: "ready", error: undefined } };
+          if (state.tab === "launch") render();
+          return;
+        }
         const error = !targets.ok ? targets.error : !profiles.ok ? profiles.error :
-          !profiles.data.initialized || profiles.data.profiles.length === 0
-            ? "OpenRouter wizard needs a local execution profile: run 'ebrain profiles init --yes', then press w again"
+          profiles.data.profiles.length === 0
+            ? "No execution profiles are available. Create one in Profiles before launching."
             : "no adapter declares an OpenRouter target";
         state = { ...state, launch: { ...current, status: "error", error } };
       } else {
@@ -2538,6 +2556,20 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
         state = { ...state, launch: { ...current, status: "ready", wizard: { targets: targets.data, profiles: profiles.data, targetSelected: 0, profileSelected: 0, capability: first.capabilities.includes(capability) ? capability : first.capabilities[0]!, cwd: callerCwd(), focus: "target", plan: null } } };
       }
       if (state.tab === "launch") render();
+    }
+
+    async function initializeLaunchProfiles(): Promise<void> {
+      const launch = launchOf(state);
+      state = { ...state, launch: { ...launch, status: "loading", error: undefined } };
+      if (state.tab === "launch") render();
+      const result = await initializeProfiles();
+      if (!result.ok) {
+        const current = launchOf(state);
+        state = { ...state, launch: { ...current, status: "error", error: result.error } };
+        if (state.tab === "launch") render();
+        return;
+      }
+      await openLaunchWizard();
     }
 
     async function planLaunchWizard(): Promise<void> {
@@ -2671,6 +2703,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
           await profileLaunchTask(effect.task);
           break;
         case "openLaunchWizard": await openLaunchWizard(); break;
+        case "initializeProfiles": await initializeLaunchProfiles(); break;
         case "planLaunchWizard": await planLaunchWizard(); break;
         case "requestTargetLaunch": await requestTargetLaunch(effect.plan); break;
         case "launchTarget": await launchTarget(effect.plan, effect.reason); break;

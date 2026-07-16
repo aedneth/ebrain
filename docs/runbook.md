@@ -1,5 +1,12 @@
 # runbook — ebrain (operación)
 
+## TUI
+
+`ebrain ui` is the daily terminal control plane. It requires an 80x24 terminal; use `?` for
+the global command registry and view-specific hints in the bottom bar. Sessions, prompts, and
+Launch plans require explicit confirmation before they mutate state. See `tui/README.md` for
+the complete English keybinding and first-use OpenRouter wizard flow.
+
 ## Cómo correr gbrain (SIEMPRE vía el launcher)
 
 ```bash
