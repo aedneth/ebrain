@@ -11,6 +11,12 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 
 # HANDOFF-BACK — daemon work + audit-finding closure
 
+> **Current authoritative continuation (2026-07-16):**
+> [`HANDOFF-CLAUDE-F6-CORRECTIONS.md`](HANDOFF-CLAUDE-F6-CORRECTIONS.md) is the
+> active maker handoff for the F6 audit correction and OSS release. The historical
+> entries below describe the work that preceded the GPT-5.6-sol `[AUDIT_FAIL]`; do
+> not treat their old completion claims as current gate status.
+
 ## Actualizacion 2026-07-15 — ADR-005, pivot de orquestacion pendiente de implementacion
 
 - **Decision aprobada, sin codigo aun:** el advisor determinista de F6.6B no se extiende como recomendador de “mejor modelo”. `docs/adr/ADR-005-user-governed-model-selection.md` fija el reemplazo: Task Profile explicable, perfiles locales elegidos por usuario, targets declarados por adapter y telemetria factual.

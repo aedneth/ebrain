@@ -4,6 +4,14 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-16 - F6 correction handoff prepared for independent maker and checker
+
+- **Authoritative continuation:** added `docs/HANDOFF-CLAUDE-F6-CORRECTIONS.md`, which maps every GPT-5.6-sol finding to implementation, regression, release and final-gate work without declaring the audit passed.
+- **Claude kickoff:** replaced the obsolete bootstrap-era prompt with the current maker brief in `docs/KICKOFF-PROMPT.md`; it explicitly requires spawning an independent Fable 5 agent after maker verification.
+- **WIP disclosure:** the handoff records the uncommitted structured `ebrain q` adapter start as untested work, so the next maker validates or replaces it before commit.
+
+---
+
 ## 2026-07-15 — GPT-5.6-sol F6 audit: gate failed
 
 - **Independent verdict:** F6.6/F6.7 are not accepted at `dd55592`; `docs/AUDIT-GPT-5.6-SOL-F6.md` records eight implementation findings and two release/gate blockers with reproductions.
