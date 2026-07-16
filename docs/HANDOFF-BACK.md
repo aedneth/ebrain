@@ -96,6 +96,12 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 - **Cobertura:** `docs/TUI-CLI-COVERAGE.md` clasifica subcomandos integrados y administración explícita. El objetivo es integrar flujos diarios seguros, no convertir la TUI en shell con botones para `daemon`, `onboard`, harness o federación sin guardrails.
 - **Auditar:** revisar el parsing de la salida upstream de query, el esquema JSON vacío/error, el timeout de 30 s y que una búsqueda no exponga secretos ni sources cliente.
 
+## Actualizacion 2026-07-15 — F6 retro y paquete humano cerrados
+
+- **Retro OSS:** `docs/F6-RETRO.md` captura decisiones y lecciones sin copiar contenido del vault privado. Los aprendizajes reutilizables ya se guardaron individualmente en el bus con `ebrain remember`.
+- **Checklist:** `docs/human-checklist.md` tiene F6a-e: visual, write-back real, wizard first-use, un día de daily driver y entrega del paquete a GPT-5.6-sol.
+- **Estado:** no quedan fases de implementación F6. El único pendiente técnico es 6.7.6: auditoría independiente GPT-5.6-sol y ejecución humana de F6a-e. No hay `[AUDIT_PASS]` de maker.
+
 ## 1. Qué construí
 
 - F6.6E Unified Cost Ledger v2 (Codex maker, 2026-07-15):

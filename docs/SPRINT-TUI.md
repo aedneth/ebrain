@@ -105,9 +105,9 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
 - [x] 6.7.2 Perf en el Celeron: `docs/f6-success-criteria.md` registra boot 0.08-0.10 s, RSS F6.3 43 MiB y pico F6.7 Sessions 47 MiB; CPU idle ~0.6% y peek 1 Hz ~1.8% de un core (muestra local de 5 s). D8 decidido **no**: `bun build --compile` no aporta beneficio medido y agrega carga de release. **Verify:** criterio #1 con evidencia de maker; aceptación final pendiente de GPT-5.6-sol.
 - [x] 6.7.3 Docs: `tui/README.md` documenta los keybindings reales por vista, el composer, signals y el wizard first-use; `docs/runbook.md` enlaza la operación TUI. `?` sigue siendo la ayuda generada desde `COMMANDS` y la hint bar expone controles contextuales. **Verify:** docs en inglés y coherentes con `commands.ts`/reducer.
 - [x] 6.7.4 `docs/f6-success-criteria.md`: **8/8 criterios con evidencia** (formato F5), actualizado para ADR-005: las diez tareas validan señales/modos, no un ganador. Cada fila distingue evidencia automática de los dos pasos humanos inevitables (write-back Claude y round-trip cross-agent). **Verify:** tabla completa; aceptación final pendiente de GPT-5.6-sol.
-- [ ] 6.7.5 Retro → lecciones a `05-knowledge/permanent-notes/` del vault + `ebrain remember` por cada lección reusable. **Verify:** nota commiteada.
-- [ ] 6.7.6 CHANGELOG ebrain + vault, commits finales, **GATE F6.7 — auditoría Fable 5 final del programa**. `[AUDIT_PASS]`.
-- [ ] 6.7.7 Checklist humano F6 (append a `docs/human-checklist.md`): aceptación visual vs mockups, decisión ADR-004 si quedó DEFER, y primer día real de uso como daily driver con notas de fricción.
+- [x] 6.7.5 Retro → `docs/F6-RETRO.md` (artefacto OSS versionado) + learnings durable en `ebrain remember`; el vault privado no se replica en este repo. **Verify:** nota commiteada.
+- [~] 6.7.6 CHANGELOG ebrain actualizado por cada corte; commits finales listos. **GATE F6.7 — auditoría GPT-5.6-sol final del programa** pendiente, maker≠checker.
+- [x] 6.7.7 Checklist humano F6 (append a `docs/human-checklist.md`): aceptación visual vs mockups, write-back real, wizard first-use, daily driver y paquete de auditoría.
 
 ━━━
 

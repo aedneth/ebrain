@@ -4,6 +4,13 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — F6 ship artifacts prepared
+
+- **Retro and checklist:** added the OSS F6 retro and human acceptance steps for visual review, real write-back, first-use wizard, daily-driver use and the independent audit package.
+- **Gate discipline:** F6.7 remains pending GPT-5.6-sol; no maker self-approval is recorded.
+
+---
+
 ## 2026-07-15 — Cross-source memory search in the TUI
 
 - **`ebrain q --json`:** cross-source fan-out now has a stable result contract with query, source, score, slug and snippet.
