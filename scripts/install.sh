@@ -1,0 +1,123 @@
+#!/bin/sh
+# eBrain installer — plug-and-play. Public entrypoint for:
+#   curl -fsSL https://raw.githubusercontent.com/aedneth/ebrain/main/scripts/install.sh | sh
+#
+# Installs Bun if missing, clones/updates eBrain, pins the gbrain engine, installs deps,
+# links `ebrain` into your PATH, and runs `ebrain up`. Idempotent and safe to re-run.
+#
+# It NEVER prints secret values, NEVER sources a foreign dotenv, and does NOT install agent
+# CLIs or call any provider. Test/CI overrides (env vars): EBRAIN_HOME, EBRAIN_REPO, EBRAIN_REF,
+# GBRAIN_REPO, GBRAIN_REF, EBRAIN_BIN_DIR, EBRAIN_SKIP_GBRAIN=1, EBRAIN_SKIP_UP=1 (test only).
+set -eu
+
+EBRAIN_REPO="${EBRAIN_REPO:-https://github.com/aedneth/ebrain.git}"
+EBRAIN_REF="${EBRAIN_REF:-main}"
+EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
+GBRAIN_REPO="${GBRAIN_REPO:-https://github.com/garrytan/gbrain.git}"
+# Pinned engine commit (v0.42.58.0). See docs/SPRINT.md §0.1.5 and docs/ARCHITECTURE.md.
+GBRAIN_REF="${GBRAIN_REF:-a25209bbb2bacf1b88e06fd5282b27f1bf4a3e7a}"
+EBRAIN_BIN_DIR="${EBRAIN_BIN_DIR:-$HOME/.local/bin}"
+
+FROM_SOURCE=0
+LAUNCHER_NAME="ebrain"
+
+usage() {
+  cat <<'EOF'
+eBrain installer
+
+Usage: install.sh [--from-source] [--name <bin-name>]
+
+  --from-source   Use an existing checkout at $EBRAIN_HOME instead of cloning.
+  --name <name>   Install the launcher under a custom name (default: ebrain).
+  -h, --help      Show this help.
+EOF
+}
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --from-source) FROM_SOURCE=1 ;;
+    --name) shift; [ $# -gt 0 ] || { echo "install.sh: --name requires a value" >&2; exit 2; }; LAUNCHER_NAME="$1" ;;
+    --name=*) LAUNCHER_NAME="${1#--name=}" ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "install.sh: unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+say() { printf '\033[1m==>\033[0m %s\n' "$*"; }
+log() { printf '    %s\n' "$*"; }
+die() { printf 'install.sh: %s\n' "$*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+# 1. Bun (installed only if missing; never overwrites an existing install)
+if ! have bun && [ -x "$HOME/.bun/bin/bun" ]; then PATH="$HOME/.bun/bin:$PATH"; fi
+if ! have bun; then
+  say "Installing Bun"
+  curl -fsSL https://bun.sh/install | bash
+  PATH="$HOME/.bun/bin:$PATH"
+fi
+have bun || die "bun is required and could not be installed (see https://bun.sh)"
+have git || die "git is required"
+
+# 2. eBrain source
+if [ "$FROM_SOURCE" -eq 1 ]; then
+  [ -d "$EBRAIN_HOME/cli" ] || die "--from-source expects an existing checkout at $EBRAIN_HOME"
+  say "Using existing checkout at $EBRAIN_HOME"
+elif [ -d "$EBRAIN_HOME/.git" ]; then
+  say "Updating eBrain at $EBRAIN_HOME"
+  git -C "$EBRAIN_HOME" fetch --quiet origin "$EBRAIN_REF" 2>/dev/null || git -C "$EBRAIN_HOME" fetch --quiet origin || true
+  git -C "$EBRAIN_HOME" checkout --quiet "$EBRAIN_REF" 2>/dev/null || true
+  git -C "$EBRAIN_HOME" pull --quiet --ff-only 2>/dev/null || true
+else
+  say "Cloning eBrain into $EBRAIN_HOME"
+  mkdir -p "$(dirname "$EBRAIN_HOME")"
+  git clone --quiet "$EBRAIN_REPO" "$EBRAIN_HOME"
+  git -C "$EBRAIN_HOME" checkout --quiet "$EBRAIN_REF" 2>/dev/null || true
+fi
+[ -f "$EBRAIN_HOME/cli/ebrain" ] || die "eBrain checkout is missing cli/ebrain at $EBRAIN_HOME"
+
+# 3. gbrain engine (pinned; lives in the gitignored vendor/ dir)
+if [ "${EBRAIN_SKIP_GBRAIN:-0}" = "1" ]; then
+  log "skipping gbrain engine (EBRAIN_SKIP_GBRAIN=1)"
+else
+  GBRAIN_DIR="$EBRAIN_HOME/vendor/gbrain"
+  if [ -d "$GBRAIN_DIR/.git" ]; then
+    say "Pinning gbrain engine @ ${GBRAIN_REF%%[!0-9a-f]*}"
+    git -C "$GBRAIN_DIR" fetch --quiet origin 2>/dev/null || true
+  else
+    say "Cloning gbrain engine (pinned)"
+    mkdir -p "$EBRAIN_HOME/vendor"
+    git clone --quiet "$GBRAIN_REPO" "$GBRAIN_DIR"
+  fi
+  git -C "$GBRAIN_DIR" checkout --quiet "$GBRAIN_REF" || die "could not pin gbrain @ $GBRAIN_REF"
+fi
+
+# 4. Dependencies (reproducible; falls back if the lockfile is ahead of the checkout)
+say "Installing dependencies"
+( cd "$EBRAIN_HOME" && { bun install --frozen-lockfile 2>/dev/null || bun install; } )
+
+# 5. Launcher on PATH (idempotent: always rewritten to the canonical dispatcher)
+say "Linking '$LAUNCHER_NAME' into $EBRAIN_BIN_DIR"
+mkdir -p "$EBRAIN_BIN_DIR"
+LAUNCHER="$EBRAIN_BIN_DIR/$LAUNCHER_NAME"
+cat > "$LAUNCHER" <<EOF
+#!/usr/bin/env bash
+# launcher: eBrain CLI -> canonical dispatcher in the repo. Managed by install.sh.
+exec bash "\${EBRAIN_HOME:-$EBRAIN_HOME}/cli/ebrain" "\$@"
+EOF
+chmod +x "$LAUNCHER"
+
+# 6. Bring the shared brain up (user default; skipped only for isolated tests)
+if [ "${EBRAIN_SKIP_UP:-0}" = "1" ]; then
+  log "skipping 'ebrain up' (EBRAIN_SKIP_UP=1)"
+else
+  say "Bringing the shared brain up"
+  EBRAIN_HOME="$EBRAIN_HOME" "$LAUNCHER" up || die "'ebrain up' failed; run '$LAUNCHER_NAME doctor' to diagnose"
+fi
+
+say "eBrain is ready."
+log "Try:  $LAUNCHER_NAME q \"what did we set up?\""
+case ":$PATH:" in
+  *":$EBRAIN_BIN_DIR:"*) : ;;
+  *) log "Add $EBRAIN_BIN_DIR to your PATH to use '$LAUNCHER_NAME' directly." ;;
+esac
