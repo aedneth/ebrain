@@ -354,3 +354,22 @@ TUI source sí fue tocado en F6.6A/B; cero-hex aplicó y salió limpio.
 1. **Checker gate:** Opus + Fable deben auditar el cierre maker F-D2 bridge antes de merge.
 2. **Installer P1:** `curl -fsSL ... | sh` para instalación open-source plug-and-play.
 3. **P3/TUI 6.6:** launch wizard, advisor v1, prompt composer.
+
+## 8. Independent GPT-5.6-sol audit - 2026-07-15
+
+**Verdict:** `[AUDIT_FAIL]` at maker commit `dd55592`. Full evidence and required closure are in
+`docs/AUDIT-GPT-5.6-SOL-F6.md`.
+
+- **High:** workflow source roots can bypass the client-repository deny-list through an innocent
+  symlink; the Launch Wizard starts a model-selected session but drops the reviewed task/workflow.
+- **Medium:** Memory search opens/navigates recent learnings instead of displayed search results;
+  search snippets are not scrubbed; `q --json` lacks a stable contract/isolation test; visible error
+  paths and Task Profile are not English-only; profile provenance accepts empty/duplicate records;
+  Routing presents undated static pricing.
+- **Release:** installer, license, CI/package metadata and public OSS README remain incomplete;
+  human F6a-e acceptance is still open.
+- **Independent verification:** CLI 177/0, TUI 381/0, zero-hex clean, daemon healthy, bridge 94
+  tools, doctor 29 ok / 2 warn / 0 fail, relevant local secret/config files mode 0600.
+- **Next owner:** a distinct maker must close G56-F1..F8 and release blockers atomically. GPT-5.6-sol
+  then re-runs focused regressions, full suites and the final gate; this checker does not
+  self-approve its own fixes.

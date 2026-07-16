@@ -4,6 +4,14 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — GPT-5.6-sol F6 audit: gate failed
+
+- **Independent verdict:** F6.6/F6.7 are not accepted at `dd55592`; `docs/AUDIT-GPT-5.6-SOL-F6.md` records eight implementation findings and two release/gate blockers with reproductions.
+- **Green baseline:** CLI 177/0, TUI 381/0, daemon healthy, bridge 94 tools, doctor 29 ok / 2 warn / 0 fail and zero-hex clean.
+- **Maker handoff:** client-path symlink isolation, Launch task delivery, Memory search correctness/scrubbing, q contract isolation, English UI, profile provenance and dated pricing require a separate maker correction before re-audit.
+
+---
+
 ## 2026-07-15 — F6 ship artifacts prepared
 
 - **Retro and checklist:** added the OSS F6 retro and human acceptance steps for visual review, real write-back, first-use wizard, daily-driver use and the independent audit package.
