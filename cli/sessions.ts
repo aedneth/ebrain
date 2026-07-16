@@ -109,7 +109,7 @@ export function scrubSecrets(text: string): string {
 }
 
 // ── tmux wrapper (errores tipados — no-server / not-found nunca crashean) ──
-export type TmuxErrorType = "tmux-not-installed" | "no-server" | "not-found" | "deny-client" | "confirm-required" | "bad-agent" | "exists" | "other";
+export type TmuxErrorType = "tmux-not-installed" | "no-server" | "not-found" | "deny-client" | "confirm-required" | "bad-agent" | "exists" | "prompt-send" | "other";
 export interface TmuxError { type: TmuxErrorType; message: string }
 
 async function tmuxRaw(args: string[]): Promise<{ code: number; stdout: string; stderr: string } | { spawnError: string }> {

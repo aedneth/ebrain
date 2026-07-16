@@ -10,7 +10,7 @@ import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { appendAdapterEvent, makeAdapterEvent } from "./cost.ts";
 import { readProfileStore, type ExecutionProfile } from "./profiles.ts";
-import { newSession, type Result } from "./sessions.ts";
+import { newSession, sendToSession, type NewSessionInfo, type Result, type TmuxError } from "./sessions.ts";
 
 const HOME = homedir();
 const EBRAIN_HOME = process.env.EBRAIN_HOME || join(HOME, "eBrain");
@@ -90,14 +90,14 @@ export async function listExecutionTargets(adaptersDir = ADAPTERS_DIR): Promise<
 }
 
 export function buildLaunchPlan(target: ExecutionTarget, profile: ExecutionProfile, capability: string, cwd: string): LaunchPlan {
-  if (profile.provider !== target.provider) throw new Error(`perfil ${profile.id} no es compatible con target ${target.id}`);
-  if (!SAFE_ID.test(capability)) throw new Error("capability invalida");
+  if (profile.provider !== target.provider) throw new Error(`profile ${profile.id} is not compatible with target ${target.id}`);
+  if (!SAFE_ID.test(capability)) throw new Error("invalid capability");
   const models = profile.capabilities[capability];
-  if (!models?.length) throw new Error(`perfil ${profile.id} no define modelos para ${capability}`);
-  if (!models.every((model) => SAFE_ID.test(model))) throw new Error("perfil contiene modelo invalido");
+  if (!models?.length) throw new Error(`profile ${profile.id} defines no models for ${capability}`);
+  if (!models.every((model) => SAFE_ID.test(model))) throw new Error("profile contains an invalid model");
   const model = models[0]!;
   const selected = `${target.model_prefix}${model}`;
-  if (!safeArg(selected)) throw new Error("modelo para argv invalido");
+  if (!safeArg(selected)) throw new Error("invalid model for argv");
   return {
     target: target.id,
     agent: target.agent,
@@ -115,20 +115,45 @@ export function buildLaunchPlan(target: ExecutionTarget, profile: ExecutionProfi
 
 export async function resolveLaunchPlan(input: { targetId: string; profileId: string; capability: string; cwd: string }, adaptersDir = ADAPTERS_DIR): Promise<LaunchPlan> {
   const [targets, store] = await Promise.all([listExecutionTargets(adaptersDir), readProfileStore()]);
-  if (!store) throw new Error("no existe un store de perfiles; corre 'ebrain profiles init --yes'");
+  if (!store) throw new Error("no profile store exists; run 'ebrain profiles init --yes'");
   const target = targets.find((candidate) => candidate.id === input.targetId);
-  if (!target) throw new Error(`target no encontrado o sin soporte declarado: ${input.targetId}`);
+  if (!target) throw new Error(`target not found or without declared support: ${input.targetId}`);
   const profile = store.profiles.find((candidate) => candidate.id === input.profileId);
-  if (!profile) throw new Error(`perfil no encontrado: ${input.profileId}`);
+  if (!profile) throw new Error(`profile not found: ${input.profileId}`);
   return buildLaunchPlan(target, profile, input.capability, input.cwd);
 }
 
-/** Launch a pre-reviewed plan. Starting a process is not token usage, so the initial ledger
- * event is explicitly untracked; later adapter telemetry can add token-only or metered events. */
-export async function launchPlan(plan: LaunchPlan, slug: string, opts: { workflow?: string } = {}): Promise<Result<{ session: { name: string; agent: string; slug: string; cwd: string } }>> {
-  const started = await newSession(plan.agent, slug, { cwd: plan.cwd, launchArgv: plan.argv });
+/**
+ * Outcome of launching a plan (G56-F2). On a prompt-delivery failure the session is RETAINED and
+ * carried back so the caller can refresh Sessions and surface a recoverable error — the task prompt
+ * is never echoed into the result.
+ */
+export type LaunchResult =
+  | { ok: true; session: NewSessionInfo; delivered: boolean }
+  | { ok: false; error: TmuxError; session?: NewSessionInfo };
+
+export interface LaunchDeps {
+  startSession: typeof newSession;
+  deliver: typeof sendToSession;
+  recordEvent: typeof appendAdapterEvent;
+}
+const DEFAULT_LAUNCH_DEPS: LaunchDeps = { startSession: newSession, deliver: sendToSession, recordEvent: appendAdapterEvent };
+
+/**
+ * Launch a pre-reviewed plan and deliver the reviewed task (G56-F2). Starting a process is not token
+ * usage, so the initial ledger event is explicitly untracked (with workflow attribution); later
+ * adapter telemetry can add token-only or metered events. The prompt, when present, is delivered as
+ * exact bytes over `sendToSession` AFTER session creation; a delivery failure keeps the session.
+ */
+export async function launchPlan(
+  plan: LaunchPlan,
+  slug: string,
+  opts: { workflow?: string; prompt?: string } = {},
+  deps: LaunchDeps = DEFAULT_LAUNCH_DEPS,
+): Promise<LaunchResult> {
+  const started = await deps.startSession(plan.agent, slug, { cwd: plan.cwd, launchArgv: plan.argv });
   if (!started.ok) return started;
-  await appendAdapterEvent(makeAdapterEvent({
+  await deps.recordEvent(makeAdapterEvent({
     provider: plan.provider,
     agent: plan.agent,
     model: plan.model,
@@ -137,7 +162,18 @@ export async function launchPlan(plan: LaunchPlan, slug: string, opts: { workflo
     capability: plan.capability,
     kind: "untracked",
   }));
-  return started;
+  if (opts.prompt) {
+    const sent = await deps.deliver(started.session.name, opts.prompt, true);
+    if (!sent.ok) {
+      // Retain the session; return a structured, recoverable prompt-send failure. Never echo the prompt.
+      return {
+        ok: false,
+        error: { type: "prompt-send", message: `session '${started.session.name}' started but the task could not be delivered; the session is retained` },
+        session: started.session,
+      };
+    }
+  }
+  return { ok: true, session: started.session, delivered: opts.prompt ? true : false };
 }
 
 function parseArgs(argv: string[]): { command: string; rest: string[]; json: boolean; yes: boolean } {
@@ -161,7 +197,7 @@ async function main(): Promise<void> {
   const profileId = valueOf(args.rest, "--profile");
   const capability = valueOf(args.rest, "--cap");
   const cwd = valueOf(args.rest, "--cwd") ?? process.env.EBRAIN_CALLER_CWD ?? process.cwd();
-  if (!targetId || !profileId || !capability) die("uso: ebrain targets <plan|launch> --target ID --profile ID --cap CAP [--cwd DIR] [--slug SLUG] [--yes] [--json]");
+  if (!targetId || !profileId || !capability) die("usage: ebrain targets <plan|launch> --target ID --profile ID --cap CAP [--cwd DIR] [--slug SLUG] [--workflow ID] [--prompt-stdin] [--yes] [--json]");
   const plan = await resolveLaunchPlan({ targetId, profileId, capability, cwd });
   if (args.command === "plan") {
     print(plan);
@@ -169,17 +205,28 @@ async function main(): Promise<void> {
   }
   if (args.command === "launch") {
     if (!args.yes) {
-      print({ ok: false, error: { type: "confirm-required", message: "targets launch crea una sesion; repite con --yes" }, would: plan });
+      print({ ok: false, error: { type: "confirm-required", message: "targets launch starts a session; repeat with --yes" }, would: plan });
       process.exit(2);
     }
     const slug = valueOf(args.rest, "--slug");
-    if (!slug || !/^[a-zA-Z0-9_-]+$/.test(slug)) die("launch requiere --slug seguro", 2);
-    const result = await launchPlan(plan, slug);
+    if (!slug || !/^[a-zA-Z0-9_-]+$/.test(slug)) die("launch requires a safe --slug", 2);
+    const workflow = valueOf(args.rest, "--workflow");
+    if (workflow && !SAFE_ID.test(workflow)) die("invalid --workflow id", 2);
+    // The reviewed task arrives over stdin (never argv/logs) so the prompt is not exposed on the
+    // command line or in process listings (G56-F2). sendToSession appends the submit Enter, so a
+    // single trailing newline is dropped here to avoid a spurious early submit.
+    let prompt: string | undefined;
+    if (args.rest.includes("--prompt-stdin")) {
+      const raw = await Bun.readableStreamToText(Bun.stdin.stream());
+      prompt = raw.replace(/\r?\n$/, "");
+      if (!prompt) die("--prompt-stdin was set but stdin was empty", 2);
+    }
+    const result = await launchPlan(plan, slug, { workflow: workflow ?? undefined, prompt });
     print(result);
     if (!result.ok) process.exit(2);
     return;
   }
-  die("uso: ebrain targets <list|plan|launch> ...");
+  die("usage: ebrain targets <list|plan|launch> ...");
 }
 
 if (import.meta.main) main().catch((error) => die(error instanceof Error ? error.message : String(error)));
