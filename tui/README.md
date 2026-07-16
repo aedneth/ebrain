@@ -19,9 +19,12 @@ in tmux and the data views consume the same contract-tested ebrain CLI commands.
 - **First OpenRouter use:** the wizard offers to initialize a local execution profile from the
   existing ebrain routing. Only `y` writes it; no provider call or credential is stored. Then
   select target, profile, capability, and cwd before previewing the exact launch plan.
-- **Memory (`4`):** `a` attaches a materialized workflow to Launch; `r` stores a durable learning.
+- **Memory (`4`):** `s` searches shared memory through `ebrain q --json`; `a` attaches a materialized workflow to Launch; `r` stores a durable learning.
 - **Routing (`5`):** `c` switches to the factual token/USD ledger. It never allocates subscription cost.
 - **Doctor (`6`):** `r` refreshes health checks.
 
 Execution profiles are user-owned local model orderings with provenance. Task signals classify
 text into capabilities only; they do not recommend a provider, benchmark winner, or model.
+
+See `docs/TUI-CLI-COVERAGE.md` for the boundary between daily TUI controls and explicit CLI
+administration commands.

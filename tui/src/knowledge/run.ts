@@ -28,6 +28,7 @@ import {
   parseProfiles,
   parseTargets,
   parseTargetPlan,
+  parseSearch,
   parseRouteRun,
   type OverviewData,
   type FleetData,
@@ -43,6 +44,7 @@ import {
   type TargetData,
   type TargetPlanData,
   type RouteRunData,
+  type SearchData,
 } from "./contracts.js";
 
 /** The repo's dispatcher: tui/src/knowledge/ -> ../../../cli/ebrain. */
@@ -125,6 +127,9 @@ export function fetchCost(): Promise<KResult<CostData>> {
 }
 export function fetchMemory(limit = 8): Promise<KResult<MemoryData>> {
   return fetchParsed(["memory", "recent", "--json", "--limit", String(limit)], 15000, parseMemory);
+}
+export function fetchSearch(query: string): Promise<KResult<SearchData>> {
+  return fetchParsed(["q", query, "--json"], 30000, parseSearch);
 }
 export function fetchWorkflows(limit = 8): Promise<KResult<WorkflowsData>> {
   return fetchParsed(["workflows", "list", "--json", "--limit", String(limit)], 15000, parseWorkflows);

@@ -4,6 +4,14 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — Cross-source memory search in the TUI
+
+- **`ebrain q --json`:** cross-source fan-out now has a stable result contract with query, source, score, slug and snippet.
+- **Memory:** `s` opens an in-TUI search composer and renders the structured results without reading brain files directly.
+- **Coverage boundary:** `docs/TUI-CLI-COVERAGE.md` distinguishes daily control-plane actions from explicit host/installation administration.
+
+---
+
 ## 2026-07-15 — F6.7.4: matriz de criterios de éxito completa
 
 - **Evidencia trazable:** los ocho criterios TUI enlazan contratos, E2E, guardrails, privacidad, diseño y métricas.

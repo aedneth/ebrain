@@ -90,6 +90,12 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 - **ADR-005:** el criterio de tareas canónicas se corrigió a señales, capability y modos compatibles sin ranking; es incompatible afirmar routing o “ganador” bajo la arquitectura actual.
 - **Auditar:** validar que cada enlace de evidencia soporta su criterio y completar los dos checks humanos antes de aceptar el gate.
 
+## Actualizacion 2026-07-15 — q JSON + Memory search cerrado (pendiente auditoria final)
+
+- **Construido:** `ebrain q --json` devuelve `{query,results:[score,source,slug,snippet]}` desde el fan-out daemon-backed. Memory usa `s` para abrir el composer, ejecuta exclusivamente ese contrato y presenta resultados estructurados; no lee PGLite, YAML ni filesystem de brains.
+- **Cobertura:** `docs/TUI-CLI-COVERAGE.md` clasifica subcomandos integrados y administración explícita. El objetivo es integrar flujos diarios seguros, no convertir la TUI en shell con botones para `daemon`, `onboard`, harness o federación sin guardrails.
+- **Auditar:** revisar el parsing de la salida upstream de query, el esquema JSON vacío/error, el timeout de 30 s y que una búsqueda no exponga secretos ni sources cliente.
+
 ## 1. Qué construí
 
 - F6.6E Unified Cost Ledger v2 (Codex maker, 2026-07-15):

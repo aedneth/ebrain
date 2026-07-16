@@ -35,6 +35,13 @@ function asBool(v: unknown, fallback = false): boolean {
   return typeof v === "boolean" ? v : fallback;
 }
 
+export interface SearchResult { score: number; source: string; slug: string; snippet: string }
+export interface SearchData { query: string; results: SearchResult[] }
+export function parseSearch(j: unknown): SearchData | null {
+  if (!isObj(j) || typeof j.query !== "string" || !Array.isArray(j.results)) return null;
+  return { query: j.query, results: j.results.filter(isObj).map((row) => ({ score: asNum(row.score), source: asStr(row.source), slug: asStr(row.slug), snippet: asStr(row.snippet) })).filter((row) => Boolean(row.source && row.slug)) };
+}
+
 // ---------------------------------------------------------------------------
 // Overview (status --json) — the home panel's live summary (6.5.1)
 // ---------------------------------------------------------------------------

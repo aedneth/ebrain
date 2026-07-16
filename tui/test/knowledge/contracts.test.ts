@@ -22,6 +22,7 @@ import {
   parseWorkflows,
   parseWorkflowRun,
   parseCost,
+  parseSearch,
 } from "../../src/knowledge/contracts.ts";
 
 describe("parseStatus (status --json)", () => {
@@ -187,6 +188,13 @@ describe("parseTaskProfile / parseRouteRun", () => {
     expect(d.tokensIn).toBe(10);
     expect(d.estimated).toBe(false);
     expect(d.content).toBe("ok");
+  });
+});
+
+describe("parseSearch (q --json)", () => {
+  test("normalizes cross-source result rows", () => {
+    expect(parseSearch({ query: "daemon lock", results: [{ score: 0.91, source: "agent-memory", slug: "learning-1", snippet: "Use the daemon" }] })).toEqual({ query: "daemon lock", results: [{ score: 0.91, source: "agent-memory", slug: "learning-1", snippet: "Use the daemon" }] });
+    expect(parseSearch({ query: "x", results: [{ source: "", slug: "bad" }] })?.results).toEqual([]);
   });
 });
 

@@ -114,6 +114,7 @@ const LAUNCH_HINTS: HintEntry[] = [
 /** Per-view hints for the F6.5 knowledge panels — each matches the keys reduce()
  * actually handles for that tab (screens-b.jsx MemoryScreen / DoctorScreen). */
 const MEMORY_HINTS: HintEntry[] = [
+  { k: "s", label: "search" },
   { k: "tab", label: "focus box" },
   { k: "↑↓", label: "navigate" },
   { k: "enter", label: "open/run" },

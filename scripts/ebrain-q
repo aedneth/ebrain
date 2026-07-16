@@ -4,14 +4,21 @@
 # (v1 limitation). Este wrapper consulta cada source federado del knowledge
 # layer y mergea por score — el "cross-source instantáneo" que Eduardo pide.
 #
-# Uso:  ebrain-q "<pregunta>"  [topN]     (topN por defecto 10)
+# Uso:  ebrain-q "<pregunta>" [topN] [--json]     (topN por defecto 10)
 set -euo pipefail
 
 RUN="$HOME/.config/ebrain/ebrain-run"
 [ -x "$RUN" ] || RUN="$HOME/.config/ebrain/gbrain-run"
 EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
-Q="${1:-}"
-TOP="${2:-10}"
+# Keep the positional query compatible while allowing a stable TUI contract.
+JSON=0
+ARGS=()
+for arg in "$@"; do
+  [ "$arg" = "--json" ] && { JSON=1; continue; }
+  ARGS+=("$arg")
+done
+Q="${ARGS[0]:-}"
+TOP="${ARGS[1]:-10}"
 [ -z "$Q" ] && { echo "uso: ebrain-q \"<pregunta>\" [topN]"; exit 2; }
 BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"
 command -v bun >/dev/null 2>&1 && BUN_BIN=bun
@@ -47,12 +54,18 @@ for src in "${SOURCES[@]}"; do
         score="${line%%]*}"; score="${score#[}"          # 0.8873
         rest="${line#*] }"                                # slug -- snippet
         slug="${rest%% --*}"
-        printf '%s\t%s\t%s\t%s\n' "$score" "$src" "$slug" "$rest"
+        snippet="${rest#"$slug -- "}"
+        printf '%s\t%s\t%s\t%s\n' "$score" "$src" "$slug" "$snippet"
       done <<< "$OUT" >> "$TMP"
 done
 [ "$FAIL" = 1 ] && exit 1
 
 # Orden global por score desc, dedup por slug, top N, formato legible.
-sort -t$'\t' -k1,1 -rn "$TMP" \
-  | awk -F'\t' '!seen[$3]++ { printf "%-14s [%s] %s\n", $2, $1, $4 }' \
-  | head -n "$TOP" || true
+if [ "$JSON" = 1 ]; then
+  sort -t$'\t' -k1,1 -rn "$TMP" \
+    | awk -F'\t' -v top="$TOP" '!seen[$3]++ && ++count <= top { print }' \
+    | jq -Rn --arg query "$Q" '[inputs | split("\t") | select(length >= 4) | {score: (.[0] | tonumber), source: .[1], slug: .[2], snippet: .[3]}] | {query: $query, results: .}'
+else
+  sort -t$'\t' -k1,1 -rn "$TMP" \
+    | awk -F'\t' -v top="$TOP" '!seen[$3]++ && ++count <= top { printf "%-14s [%s] %s -- %s\n", $2, $1, $3, $4 }' || true
+fi

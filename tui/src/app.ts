@@ -73,6 +73,7 @@ import type {
   TargetData,
   TargetPlanData,
   ProfileSummaryData,
+  SearchData,
   FleetData,
   DoctorData,
   DoctorCheck,
@@ -93,6 +94,7 @@ import {
   initializeProfiles,
   fetchTargets,
   fetchTargetPlan,
+  fetchSearch,
 } from "./knowledge/run.js";
 
 // Sessions data plane (F6.4) — REUSED from cli/sessions.ts via the control-plane
@@ -219,6 +221,9 @@ export interface OverviewSlice {
  * `logSelected` = focused session-log. */
 export interface MemorySlice {
   data: MemoryData | null;
+  search: SearchData | null;
+  searchStatus: LoadStatus;
+  searchError?: string;
   workflows: WorkflowsData | null;
   selected: number;
   workflowSelected: number;
@@ -257,7 +262,7 @@ export function emptyOverview(): OverviewSlice {
   return { data: null, memory: null, memSelected: 0, status: "idle", atLabel: null };
 }
 export function emptyMemory(): MemorySlice {
-  return { data: null, workflows: null, selected: 0, workflowSelected: 0, logSelected: 0, status: "idle" };
+  return { data: null, search: null, searchStatus: "idle", workflows: null, selected: 0, workflowSelected: 0, logSelected: 0, status: "idle" };
 }
 export function emptyRouting(): RoutingSlice {
   return { data: null, cost: null, mode: "routing", selected: 0, costSelected: 0, status: "idle" };
@@ -295,6 +300,7 @@ export type Overlay =
   | { kind: "confirmProfilesInit" }
   | { kind: "launchTask"; line: LineState }
   | { kind: "remember"; line: LineState }
+  | { kind: "memorySearch"; line: LineState }
   /** Read-only drill-in detail (Enter on a memory/check) — a titled, word-wrapped modal. */
   | { kind: "detail"; title: string; body: string };
 
@@ -460,7 +466,8 @@ export type AppEffect =
   /** Doctor `r`: re-run `doctor --json` (async, spinner) without leaving the view. */
   | { type: "rerunDoctor" }
   /** Write `text` to permanent agentic memory via `ebrain remember`, then refresh. */
-  | { type: "remember"; text: string };
+  | { type: "remember"; text: string }
+  | { type: "searchMemory"; query: string };
 
 export interface ReduceResult {
   state: AppState;
@@ -799,6 +806,17 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       return settle(state);
     }
 
+    if (ov.kind === "memorySearch") {
+      if (key.name === "escape") return settle({ ...state, overlay: null });
+      if (key.name === "enter") {
+        const query = ov.line.text.trim();
+        return query ? settle({ ...state, overlay: null }, { type: "searchMemory", query }) : settle({ ...state, overlay: null });
+      }
+      const edited = lineApplyKey(ov.line, key);
+      if (edited.handled) return settle({ ...state, overlay: { kind: "memorySearch", line: edited.state } });
+      return settle(state);
+    }
+
     // Prompt drafts stay in memory only. Enter opens a review; only y sends exact bytes.
     if (key.name === "escape") return settle({ ...state, overlay: null });
     if (key.name === "enter") {
@@ -907,6 +925,9 @@ export function reduce(state: AppState, key: Key): ReduceResult {
     // Memory panel: r opens the remember composer (writes to permanent agentic memory).
     if (state.tab === "memory" && ch === "r") {
       return settle({ ...state, confirmQuit: false, overlay: { kind: "remember", line: lineFrom("") } });
+    }
+    if (state.tab === "memory" && ch === "s") {
+      return settle({ ...state, confirmQuit: false, overlay: { kind: "memorySearch", line: lineFrom(memoryOf(state).search?.query ?? "") } });
     }
     // Attach a selected workflow as a Launch task. This only materializes text; it
     // does not invoke OpenRouter or start an agent until the user acts in Launch.
@@ -1077,6 +1098,13 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
     const left = Math.max(0, Math.floor((cols - width) / 2));
     const top = Math.max(0, Math.min(Math.floor(rows * 0.4), rows - box.length));
     return { box, top, left };
+  }
+
+  if (overlay.kind === "memorySearch") {
+    const width = Math.min(72, Math.max(30, cols - 6));
+    const field = promptBox({ value: overlay.line.text, focus: true, placeholder: "search shared memory", hint: "enter search · esc cancel", width: width - 4 }, theme);
+    const box = panel({ title: "memory search", dialog: true, width, height: 3, body: [field] }, theme);
+    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
   }
 
   if (overlay.kind === "detail") {
@@ -1713,11 +1741,11 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
 
   const out: string[] = [];
 
-  // Search row (informational — live search lives in `ebrain q` at the terminal).
+  // Search stays on the `ebrain q --json` contract; no direct memory/daemon reads here.
   out.push(
     padTo(
       promptBox(
-        { value: "", focus: false, placeholder: "semantic search — `ebrain q` in terminal", hint: "", width: cols },
+        { value: m.search?.query ?? "", focus: false, placeholder: "shared memory search", hint: "s search", width: cols },
         theme,
       ),
       cols,
@@ -1732,8 +1760,15 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
   const listHeight = Math.max(1, midRect.height - 2);
   const offset = scrollOffset(selected, listHeight, learnings.length);
   const rowW = Math.max(8, leftRect.width - 4 - 3);
+  const searchResults = m.search?.results ?? [];
   const resultsBody =
-    learnings.length > 0
+    m.searchStatus === "error"
+      ? [theme.fg("semantic.error") + `error: ${m.searchError ?? "search failed"}` + theme.reset]
+      : m.search
+        ? searchResults.length > 0
+          ? searchResults.slice(0, listHeight).map((result) => truncate(`${result.source} [${result.score.toFixed(3)}] ${result.slug} -- ${result.snippet}`, rowW))
+          : [theme.fg("text.secondary") + "no search results" + theme.reset]
+        : learnings.length > 0
       ? scrolllist(
           {
             items: learnings,
@@ -1746,7 +1781,7 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
         )
       : [theme.fg("text.secondary") + "no recent learnings" + theme.reset];
   const leftPanel = panel(
-    { title: `results · ${learnings.length} · violet = memory`, focus: focused === "results", width: leftRect.width, height: midRect.height, body: resultsBody },
+    { title: m.search ? `search results · ${searchResults.length}` : `results · ${learnings.length} · violet = memory`, focus: focused === "results", width: leftRect.width, height: midRect.height, body: resultsBody },
     theme,
   );
 
@@ -1796,7 +1831,7 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
   // Footer hint (the composer opens as an overlay on `r`).
   if (footRect.height > 0) {
     const foot =
-      theme.fg("text.muted") + "r remember · enter run/open · a attach workflow · ↑↓ focused box" + theme.reset;
+      theme.fg("text.muted") + "s search · r remember · enter run/open · a attach workflow · ↑↓ focused box" + theme.reset;
     out.push(padTo(truncate(foot, cols), cols));
   }
 
@@ -2652,6 +2687,18 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       }
     }
 
+    async function doSearchMemory(query: string): Promise<void> {
+      const m = memoryOf(state);
+      state = { ...state, memory: { ...m, searchStatus: "loading", searchError: undefined } };
+      if (state.tab === "memory") render();
+      const result = await fetchSearch(query);
+      const current = memoryOf(state);
+      state = result.ok
+        ? { ...state, memory: { ...current, search: result.data, searchStatus: "ready", searchError: undefined } }
+        : { ...state, memory: { ...current, search: null, searchStatus: "error", searchError: result.error } };
+      if (state.tab === "memory") render();
+    }
+
     async function handleEffect(effect: AppEffect): Promise<void> {
       switch (effect.type) {
         case "refreshSessions":
@@ -2680,6 +2727,9 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
           break;
         case "remember":
           await doRemember(effect.text);
+          break;
+        case "searchMemory":
+          await doSearchMemory(effect.query);
           break;
         case "peek":
           await doPeek(effect.name);

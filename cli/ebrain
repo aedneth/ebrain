@@ -35,7 +35,7 @@ usage() {
 ebrain — capa unificada de harness + memoria agéntica (provider-agnostic)
 
   ebrain remember [--project S] [--tags a,b] "<learning>"   escribir a memoria agéntica permanente
-  ebrain q "<pregunta>"                                      buscar (fan-out cross-source)
+  ebrain q "<pregunta>" [--json]                             buscar (fan-out cross-source)
   ebrain route --cap <cap> "<prompt>"                        one-shot ruteado (stack OpenRouter capado)
   ebrain harness install <agent>                             instalar/actualizar el harness de un agente
   ebrain harness doctor [agent]                              verificar el harness de UN agente (guard/hooks/mcp)

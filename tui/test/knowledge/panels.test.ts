@@ -95,7 +95,8 @@ describe("Memory panel (6.5.2)", () => {
     expect(t).toContain("07-14 12:45");
     expect(t).toContain("refactor router");
     expect(t).toContain("r remember");
-    expect(t).toContain("semantic search"); // informational PromptBox placeholder
+    expect(t).toContain("shared memory search");
+    expect(t).toContain("s search");
   });
 });
 
@@ -293,6 +294,13 @@ describe("reduce — knowledge-panel keys", () => {
     const emptySubmit = reduce(opened, { name: "enter" });
     expect(emptySubmit.effect).toBeUndefined();
     expect(emptySubmit.state.overlay).toBeNull();
+  });
+
+  it("memory `s` opens the q --json search composer; enter emits its query", () => {
+    const opened = reduce(base("memory", {}), { name: "char", char: "s" }).state;
+    expect(opened.overlay?.kind).toBe("memorySearch");
+    const typed = { ...opened, overlay: { kind: "memorySearch" as const, line: { text: "daemon lock", cursor: 11 } } };
+    expect(reduce(typed, { name: "enter" }).effect).toEqual({ type: "searchMemory", query: "daemon lock" });
   });
 
   it("routing ↑↓ moves the cap selection", () => {
