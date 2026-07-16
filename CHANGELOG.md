@@ -4,6 +4,13 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-15 — F6.7.4: matriz de criterios de éxito completa
+
+- **Evidencia trazable:** los ocho criterios TUI enlazan contratos, E2E, guardrails, privacidad, diseño y métricas.
+- **ADR-005 aplicado:** las tareas canónicas prueban señales y compatibilidad, no una afirmación de mejor modelo; write-back real y memoria cross-agent quedan identificados como checks humanos del gate final.
+
+---
+
 ## 2026-07-15 — Launch first-use setup and English TUI docs
 
 - **No terminal detour:** Launch now offers explicit in-TUI initialization of the local execution profile; only `y` migrates existing routing, then the wizard reloads.

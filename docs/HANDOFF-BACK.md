@@ -84,6 +84,12 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 - **Docs F6.7.3:** `tui/README.md` cubre navegación, composer, signals, profiles, wizard y ledger; `docs/runbook.md` incluye entrada TUI. `?` permanece autogenerado desde el registry y los controles contextuales se ven en la hint bar.
 - **Auditar:** confirmar que `n`/Esc no escriben profiles, que `y` es el único camino de inicialización, que la salida CLI de error no se trate como éxito y que documentación/hints concuerden con reducer/registry.
 
+## Actualizacion 2026-07-15 — F6.7.4 criterios cerrados (pendiente auditoria final)
+
+- **Matriz:** `docs/f6-success-criteria.md` contiene los ocho criterios originales con evidencia concreta y estado de maker. Los criterios de write-back Claude y memoria visible desde otro agente se declaran explícitamente como checks humanos, no evidencia inventada.
+- **ADR-005:** el criterio de tareas canónicas se corrigió a señales, capability y modos compatibles sin ranking; es incompatible afirmar routing o “ganador” bajo la arquitectura actual.
+- **Auditar:** validar que cada enlace de evidencia soporta su criterio y completar los dos checks humanos antes de aceptar el gate.
+
 ## 1. Qué construí
 
 - F6.6E Unified Cost Ledger v2 (Codex maker, 2026-07-15):

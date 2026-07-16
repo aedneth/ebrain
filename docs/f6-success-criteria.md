@@ -6,13 +6,13 @@ whether all criteria are accepted; entries below are maker evidence, not self-ap
 | # | Criterion | Evidence | Status |
 |---|---|---|---|
 | 1 | TUI boots under 1.5 s and stays below 100 MiB RSS on the Celeron | Cold boot from F6.3: 0.08-0.10 s, 43 MiB RSS. F6.7.2 local tmux probe: 47 MiB RSS peak in Sessions with a fake agent, idle CPU ~0.6% of one core, 1 Hz peek ~1.8% of one core (5 s `/proc/<pid>/stat` samples; `CLK_TCK=100`). | maker evidence complete |
-| 2 | Panels use CLI contracts with no orphan data logic | F6.5 gate evidence; final audit pending | pending audit |
-| 3 | Sessions preserve harness/write-back behavior | F6.4 E2E and final human checklist | pending audit |
-| 4 | Launch is governed, deny-list aware and model selection is user-owned | ADR-005, profiles/targets/wizard tests | pending audit |
-| 5 | Token/USD telemetry is factual, without subscription allocation | `docs/COST-LEDGER.md`, cost contracts | pending audit |
-| 6 | Memory/workflow loop stays deliberate and privacy-safe | workflow contracts and prompt privacy tests | pending audit |
-| 7 | Edge cases degrade visibly and terminal restores | `docs/TUI-EDGE-CASES.md`, final TTY checklist | pending audit |
-| 8 | Design-system adherence and docs are shippable | theme/zero-hex checks, docs tasks 6.7.3-6.7.7 | pending audit |
+| 2 | Every panel is backed by an `ebrain ... --json` contract, with no orphan logic | `knowledge/run.ts` only spawns the dispatcher; contract and panel suites cover status, memory, spend/routing, fleet, doctor, workflows, profiles and targets. | maker evidence complete |
+| 3 | A TUI session gets the full harness and leaves a write-back trace | `cli/sessions.test.ts` E2E covers manifest launch/new/list/peek/send/kill. Full Claude write-back remains a human acceptance step because it must use a real adapter. | automated evidence + human check |
+| 4 | Two tmux sessions can be observed and the RAM governor requires explicit override | Session panel/throttle tests, real tmux fake-agent E2E, and governor tests cover the second-heavy `y` gate. | maker evidence complete |
+| 5 | Ten canonical tasks expose signals, capabilities and compatible modes without a winner | `cli/task-profile.fixtures.test.ts`: 10/10 fixtures across six capabilities; rejects agent/model/rank/cost fields under ADR-005. | maker evidence complete |
+| 6 | A TUI learning/workflow remains deliberate and reaches shared memory | `runRemember` uses the primitive, Memory refreshes after write, workflows materialize before attach; live cross-agent round-trip is a human acceptance step. | automated evidence + human check |
+| 7 | No secrets are rendered in a stream | `scrubSecrets` security tests cover assignments, token prefixes and PEM blocks; every `peekSession` path scrubs before rendering. | maker evidence complete |
+| 8 | Palette, glyphs and spacing come from the design system with no hardcoded colors | `design-sync-tui` generates `theme.ts`; theme tests and zero-hex scan outside `theme.ts` are clean. | maker evidence complete |
 
 ## F6.7.2 Distribution Decision
 
