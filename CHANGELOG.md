@@ -6,15 +6,18 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ## 2026-07-16 — F6 maker correction (Claude, in progress): F1/F5/F7 + public OSS docs
 
-Maker session on the GPT-5.6-sol F6 findings. Committed, each with focused tests (CLI suite 177 → **203 pass / 0 fail**):
+Maker session on the GPT-5.6-sol F6 findings. Committed, each with focused tests (CLI suite 177 → **205 pass / 0 fail**):
 
 - **G56-F1 (HIGH) workflow symlink isolation** (`c15c637`) — `ingestWorkflows`/`discoverMarkdown`/`skillify` now realpath-canonicalize roots and files, fail closed on denied realpaths, never traverse symlink dirs, persist canonical `source_path`, and refuse skillify on records resolving into a client repo. +4 symlink regressions.
 - **G56-F5 (MEDIUM) stable `q` contract + isolation** (`37dbdcc`) — retained + finished the typed `cli/query.ts` adapter (structured MCP `sources_list`/`query(source_id)`, merge/dedup/scrub, `{schema_version,query,results,partial,failures}`). Verified against gbrain v0.42.58; fixed the real defect: `sources_list` exposes `local_path` (not `path`) — the WIP read the wrong field, disabling path-based deny. Full `cli/query.test.ts` + contract q schema + isolation record test + hermetic wrapper smoke.
 - **G56-F7 (MEDIUM) profile provenance** (`5f49c76`) — parser now rejects malformed existing stores: trimmed non-empty provenance, strict ISO-8601 UTC `as_of`, unique catalog ids.
 - **G56-F6 (partial)** — English CLI-visible strings in `workflows.ts` and `profiles.ts`.
-- **G56-R1 (docs)** (`e90b6b0`) — public landing-page `README.md` (English, outcome-first, implicit differentiation, "Built with Codex & GPT-5.6"), `LICENSE` (MIT), `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `docs/ROADMAP.md`, `AGENTS.md` (rendered from NORMS.md), and `docs/devpost-submission.md` for the OpenAI Build Week (Developer Tools) submission.
+- **G56-R1 (docs)** (`e90b6b0`) — public landing-page `README.md` (English, outcome-first, implicit differentiation, "Built with Codex & GPT-5.6"), `LICENSE` (MIT), `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `docs/ROADMAP.md`, `AGENTS.md` (rendered from NORMS.md), and `docs/devpost-submission.md` + `docs/devpost-polish-plan.md` for the OpenAI Build Week (Developer Tools) submission.
+- **G56-R1 (installer/CI)** (`ee84bf4`) — `scripts/install.sh` (POSIX `curl|sh` → `ebrain up`, idempotent, gbrain pin `a25209b`, test overrides) + hermetic `cli/install.test.ts`, `.github/workflows/ci.yml`, and public `package.json` metadata (zod preserved, lockfile consistent).
 
-**Still open for this correction:** F2 (Launch intent delivery), F3 (Memory search selection), F4 (search scrub), F8 (static pricing), remaining F6 TUI-visible strings, R1 code artifacts (installer + CI + root package.json), R2 doc reconciliation. Then spawn Fable 5 as independent checker (`docs/AUDIT-FABLE-F6-CORRECTIONS.md`). No `[AUDIT_PASS]` self-declared; human acceptance unchecked.
+**Interim independent audit:** Fable 5 returned **`[FABLE_AUDIT_PASS]`** for this slice (F1/F5/F7/F6-CLI/R1) with its own reproductions — `docs/AUDIT-FABLE-F6-CORRECTIONS.md`. Found F-CF-1 (installer test cold-run timeout) and F-CF-2 (README roadmap + changelog count stale), both fixed.
+
+**Still open for this correction:** F2 (Launch intent delivery), F3 (Memory search selection), F4 (search scrub in `parseSearch`), F8 (static pricing), remaining F6 TUI-visible strings, R2 doc reconciliation. Final gate still requires GPT-5.6-sol re-audit. No `[AUDIT_PASS]` self-declared; human acceptance unchecked.
 
 ---
 

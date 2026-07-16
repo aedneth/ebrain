@@ -97,7 +97,7 @@ describe("installer (scripts/install.sh)", () => {
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
-  });
+  }, 30_000); // real git clone + double install: generous timeout so a cold CI runner can't flake (F-CF-1)
 
   test("--name installs the launcher under a custom binary name", () => {
     const base = mkdtempSync(join(tmpdir(), "ebrain-install-name-"));
@@ -127,5 +127,5 @@ describe("installer (scripts/install.sh)", () => {
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 });

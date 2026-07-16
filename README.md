@@ -159,7 +159,7 @@ No agent self-approves its own high-risk work. Every phase leaves a trace — te
 - [x] Multi-agent onboarding (`ebrain up` / `onboard`)
 - [x] Capability-based routing with a hard spend cap
 - [x] Terminal cockpit (sessions, memory, routing, doctor)
-- [ ] One-command installer + CI release pipeline
+- [x] One-command installer + CI (`scripts/install.sh` + GitHub Actions)
 - [ ] Pluggable embedding providers (hosted + local, zero-config fallback)
 - [ ] Optional always-on autonomous runtime
 
