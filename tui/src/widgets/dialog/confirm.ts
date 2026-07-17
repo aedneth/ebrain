@@ -61,12 +61,14 @@ export function confirm(props: ConfirmProps, theme: Theme): string[] {
     border + v + reset + padTo(bg + interior, innerW) + reset + border + v + reset;
 
   const blank = bodyRow("");
-  const msg = truncate(message, Math.max(0, innerW - 2));
-  const msgRow = bodyRow(" " + fgPrimary + msg);
+  // A `\n` in the message becomes multiple body rows (each truncated). Single-line callers are
+  // unaffected — they still render exactly one message row.
+  const msgLines = message.length ? message.split("\n") : [""];
+  const msgRows = msgLines.map((line) => bodyRow(" " + fgPrimary + truncate(line, Math.max(0, innerW - 2))));
 
   const confirmPart = keyColor + BOLD + "[" + confirmKey + "]" + NOBOLD + fgPrimary + " " + confirmLabel;
   const cancelPart = fgPrimary + BOLD + "[" + cancelKey + "]" + NOBOLD + fgMuted + " " + cancelLabel;
   const actionsRow = bodyRow(" " + confirmPart + "   " + cancelPart);
 
-  return [top, blank, msgRow, blank, actionsRow, bottom];
+  return [top, blank, ...msgRows, blank, actionsRow, bottom];
 }

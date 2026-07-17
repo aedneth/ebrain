@@ -295,8 +295,8 @@ export type Overlay =
   | { kind: "confirmSend"; name: string; text: string }
   | { kind: "confirmLaunch"; agent: string; cwd: string; reason: string }
   | { kind: "wizardCwd"; line: LineState }
-  | { kind: "confirmTargetLaunch"; plan: TargetPlanData }
-  | { kind: "confirmTargetGovernor"; plan: TargetPlanData; reason: string }
+  | { kind: "confirmTargetLaunch"; plan: TargetPlanData; intent: LaunchIntent }
+  | { kind: "confirmTargetGovernor"; plan: TargetPlanData; intent: LaunchIntent; reason: string }
   | { kind: "confirmProfilesInit" }
   | { kind: "launchTask"; line: LineState }
   | { kind: "remember"; line: LineState }
@@ -332,6 +332,30 @@ export function emptyLaunch(): LaunchSlice {
 
 function launchOf(state: AppState): LaunchSlice {
   return state.launch ?? emptyLaunch();
+}
+
+/**
+ * Immutable snapshot of the reviewed work, captured at the reducer boundary (G56-F2): the task
+ * prompt plus optional workflow attribution. It is carried through every confirmation overlay,
+ * the RAM governor and the launch await, so the created session receives exactly what the user
+ * reviewed — instead of a task re-read from mutable state after an async hop.
+ */
+export interface LaunchIntent { prompt: string; workflowId?: string }
+function launchIntentOf(launch: LaunchSlice): LaunchIntent {
+  return launch.workflowId ? { prompt: launch.task, workflowId: launch.workflowId } : { prompt: launch.task };
+}
+
+/**
+ * Build the argv (+ optional stdin payload) for `ebrain targets launch` from a plan and the
+ * reviewed intent (G56-F2). The task travels over stdin (`--prompt-stdin`) so it never appears in
+ * argv/process listings; the workflow id is a separate flag for ledger attribution. Pure + tested.
+ */
+export function buildTargetLaunchArgs(plan: TargetPlanData, intent: LaunchIntent, slug: string): { args: string[]; stdin: string | null } {
+  const args = ["targets", "launch", "--target", plan.target, "--profile", plan.profile, "--cap", plan.capability, "--cwd", plan.cwd, "--slug", slug, "--yes", "--json"];
+  if (intent.workflowId) args.push("--workflow", intent.workflowId);
+  const stdin = intent.prompt.length > 0 ? intent.prompt : null;
+  if (stdin !== null) args.push("--prompt-stdin");
+  return { args, stdin };
 }
 
 export interface AppState {
@@ -447,13 +471,13 @@ export type AppEffect =
   /** Launch `agent` — the loop runs the RAM governor, which may open a confirm. */
   | { type: "launch"; agent: string; prompt?: string }
   /** Launch confirmed through the governor's dialog (an override that gets logged). */
-  | { type: "launchConfirmed"; agent: string; cwd: string; reason: string }
+  | { type: "launchConfirmed"; agent: string; cwd: string; reason: string; prompt?: string }
   | { type: "profileLaunchTask"; task: string }
   | { type: "openLaunchWizard" }
   | { type: "initializeProfiles" }
   | { type: "planLaunchWizard" }
-  | { type: "requestTargetLaunch"; plan: TargetPlanData }
-  | { type: "launchTarget"; plan: TargetPlanData; reason?: string }
+  | { type: "requestTargetLaunch"; plan: TargetPlanData; intent: LaunchIntent }
+  | { type: "launchTarget"; plan: TargetPlanData; intent: LaunchIntent; reason?: string }
   // Knowledge panels (F6.5): each landing refreshes its slice from its subcommand.
   | { type: "refreshStatus" }
   | { type: "refreshMemory" }
@@ -660,7 +684,8 @@ function launchEnter(state: AppState): ReduceResult {
   const l = launchOf(state);
   const clear = { ...state, confirmQuit: false };
   const it = LAUNCHABLE[l.selected];
-  return it ? settle(clear, { type: "launch", agent: it.agent }) : settle(clear);
+  // Snapshot the reviewed task at the reducer boundary so it survives the async launch (G56-F2).
+  return it ? settle(clear, { type: "launch", agent: it.agent, prompt: l.task }) : settle(clear);
 }
 
 function wizardOf(launch: LaunchSlice): LaunchWizard | null { return launch.wizard ?? null; }
@@ -727,7 +752,7 @@ export function reduce(state: AppState, key: Key): ReduceResult {
           state: { ...state, overlay: null },
           quit: false,
           forceRedraw: false,
-          effect: { type: "launchConfirmed", agent: ov.agent, cwd: ov.cwd, reason: ov.reason },
+          effect: { type: "launchConfirmed", agent: ov.agent, cwd: ov.cwd, reason: ov.reason, prompt: launchOf(state).task },
         };
       }
       if (
@@ -755,12 +780,12 @@ export function reduce(state: AppState, key: Key): ReduceResult {
     }
 
     if (ov.kind === "confirmTargetLaunch") {
-      if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "requestTargetLaunch", plan: ov.plan });
+      if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "requestTargetLaunch", plan: ov.plan, intent: ov.intent });
       if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: null });
       return settle(state);
     }
     if (ov.kind === "confirmTargetGovernor") {
-      if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "launchTarget", plan: ov.plan, reason: ov.reason });
+      if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "launchTarget", plan: ov.plan, intent: ov.intent, reason: ov.reason });
       if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: null });
       return settle(state);
     }
@@ -855,7 +880,7 @@ export function reduce(state: AppState, key: Key): ReduceResult {
         const capability = profile?.capabilities.includes(wizard.capability) ? wizard.capability : (profile?.capabilities[0] ?? wizard.capability);
         return settle({ ...state, launch: { ...launch, wizard: { ...wizard, profileSelected: index, capability, plan: null } } });
       }
-      if (key.name === "enter") return wizard.plan ? settle({ ...state, overlay: { kind: "confirmTargetLaunch", plan: wizard.plan } }) : settle(state, { type: "planLaunchWizard" });
+      if (key.name === "enter") return wizard.plan ? settle({ ...state, overlay: { kind: "confirmTargetLaunch", plan: wizard.plan, intent: launchIntentOf(launch) } }) : settle(state, { type: "planLaunchWizard" });
     }
     if (key.name === "up" || key.name === "down" || key.name === "left" || key.name === "right") {
       const cur = state.launch?.selected ?? 0;
@@ -1083,7 +1108,18 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
     const plan = overlay.plan;
     const governor = overlay.kind === "confirmTargetGovernor";
     const width = Math.min(84, Math.max(44, cols - 6));
-    const box = confirm({ title: governor ? "RAM governor" : "launch target", message: governor ? overlay.reason : `${plan.target} · ${plan.profile} · ${plan.model} · ${plan.costStatus}`, danger: governor, confirmKey: "y", confirmLabel: governor ? "launch anyway" : "launch", cancelKey: "n", cancelLabel: "cancel", width }, theme);
+    // Show the exact task being delivered (G56-F2): the full payload is delivered on launch; the
+    // preview shows its first line + a multi-line hint, never substituting the payload.
+    const task = overlay.intent.prompt.trim();
+    const taskLines = task ? task.split("\n") : [];
+    const extra = Math.max(0, taskLines.length - 1);
+    const taskLine = task
+      ? `task: ${taskLines[0]}${extra > 0 ? ` (+${extra} more line${extra === 1 ? "" : "s"})` : ""}`
+      : "task: (none — nothing will be delivered)";
+    const wfLine = overlay.intent.workflowId ? `workflow: ${overlay.intent.workflowId}` : "";
+    const head = governor ? overlay.reason : `${plan.target} · ${plan.profile} · ${plan.model} · ${plan.costStatus}`;
+    const message = [head, taskLine, wfLine].filter(Boolean).join("\n");
+    const box = confirm({ title: governor ? "RAM governor" : "launch target", message, danger: governor, confirmKey: "y", confirmLabel: governor ? "launch anyway" : "launch", cancelKey: "n", cancelLabel: "cancel", width }, theme);
     return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
   }
   if (overlay.kind === "confirmProfilesInit") {
@@ -2371,21 +2407,25 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
 
     /** Launch `agent`: run the RAM governor (6.4.6); if it wants confirmation, open the
      * dialog; otherwise launch straight away. */
-    async function doLaunch(agent: string): Promise<void> {
+    async function doLaunch(agent: string, prompt: string): Promise<void> {
       const cwd = callerCwd();
       const [cls, heavy] = await Promise.all([classOf(agent), countLiveHeavy()]);
       const g = governLaunch({ launchingClass: cls, liveHeavyCount: heavy, availableMb: readAvailableMb() });
       if (g.decision === "confirm") {
+        // The confirm overlay is modal; the prompt is re-snapshotted from state at the `y` reduce
+        // (launchConfirmed), so it stays consistent with what the user reviewed.
         state = { ...state, overlay: { kind: "confirmLaunch", agent, cwd, reason: g.reason } };
         render();
         return;
       }
-      await performLaunch(agent, cwd, null);
+      await performLaunch(agent, cwd, null, prompt);
     }
 
     /** Actually create the session (via the manifest launch cmd + full harness env).
-     * `override` non-null means the user pushed past the governor → log the override. */
-    async function performLaunch(agent: string, cwd: string, override: string | null): Promise<void> {
+     * `override` non-null means the user pushed past the governor → log the override.
+     * `prompt` is the reviewed task snapshotted at the reducer boundary (G56-F2), NOT re-read
+     * from mutable state after the newSession await. */
+    async function performLaunch(agent: string, cwd: string, override: string | null, prompt: string): Promise<void> {
       if (override) logOverride({ agent, cwd, reason: override });
       const r = await newSession(agent, launchSlug(cwd), { cwd });
       if (!r.ok) {
@@ -2396,7 +2436,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
         return;
       }
       let promptSendError: string | null = null;
-      const initialPrompt = launchOf(state).task;
+      const initialPrompt = prompt;
       if (initialPrompt.length > 0) {
         await new Promise((resolve) => setTimeout(resolve, 900));
         const sent = await sendToSession(r.session.name, initialPrompt, true);
@@ -2618,20 +2658,35 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       if (state.tab === "launch") render();
     }
 
-    async function requestTargetLaunch(plan: TargetPlanData): Promise<void> {
+    async function requestTargetLaunch(plan: TargetPlanData, intent: LaunchIntent): Promise<void> {
       const cls = plan.ramClass === "light" ? "light" : "heavy";
       const g = governLaunch({ launchingClass: cls, liveHeavyCount: await countLiveHeavy(), availableMb: readAvailableMb() });
-      if (g.decision === "confirm") { state = { ...state, overlay: { kind: "confirmTargetGovernor", plan, reason: g.reason } }; render(); return; }
-      await launchTarget(plan);
+      if (g.decision === "confirm") { state = { ...state, overlay: { kind: "confirmTargetGovernor", plan, intent, reason: g.reason } }; render(); return; }
+      await launchTarget(plan, intent);
     }
 
-    async function launchTarget(plan: TargetPlanData, reason?: string): Promise<void> {
+    async function launchTarget(plan: TargetPlanData, intent: LaunchIntent, reason?: string): Promise<void> {
       if (reason) logOverride({ agent: plan.agent, cwd: plan.cwd, reason });
       const launch = launchOf(state); state = { ...state, launch: { ...launch, status: "running", error: undefined } }; if (state.tab === "launch") render();
       const slug = launchSlug(plan.cwd);
-      const proc = Bun.spawn([EBRAIN, "targets", "launch", "--target", plan.target, "--profile", plan.profile, "--cap", plan.capability, "--cwd", plan.cwd, "--slug", slug, "--yes", "--json"], { stdout: "pipe", stderr: "pipe" });
-      const exit = await proc.exited; const current = launchOf(state);
-      state = exit === 0 ? { ...state, launch: { ...current, status: "ready", error: undefined } } : { ...state, launch: { ...current, status: "error", error: "target launch failed" } };
+      // Deliver the reviewed task over stdin (never argv) + attribute the workflow (G56-F2).
+      const { args, stdin } = buildTargetLaunchArgs(plan, intent, slug);
+      const proc = Bun.spawn([EBRAIN, ...args], { stdin: stdin === null ? "ignore" : "pipe", stdout: "pipe", stderr: "pipe" });
+      if (stdin !== null && proc.stdin) { proc.stdin.write(stdin); await proc.stdin.end(); }
+      const [out, exit] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+      const current = launchOf(state);
+      // A `prompt-send` result means the session started but the task could not be delivered — a
+      // recoverable state: keep the session (Sessions is refreshed) and surface a clear error,
+      // never echoing the prompt.
+      let promptSend = false;
+      try { const parsed = JSON.parse(out); if (parsed && parsed.ok === false && parsed.error?.type === "prompt-send") promptSend = true; } catch { /* non-JSON → fall back to exit code */ }
+      if (exit === 0) {
+        state = { ...state, launch: { ...current, status: "ready", error: undefined } };
+      } else if (promptSend) {
+        state = { ...state, launch: { ...current, status: "error", error: "session started but the task could not be delivered; the session is retained" } };
+      } else {
+        state = { ...state, launch: { ...current, status: "error", error: "target launch failed" } };
+      }
       await refreshSessions(); if (state.tab === "launch") render();
     }
 
@@ -2744,10 +2799,10 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
           await doSend(effect.name, effect.text);
           break;
         case "launch":
-          await doLaunch(effect.agent);
+          await doLaunch(effect.agent, effect.prompt ?? "");
           break;
         case "launchConfirmed":
-          await performLaunch(effect.agent, effect.cwd, effect.reason);
+          await performLaunch(effect.agent, effect.cwd, effect.reason, effect.prompt ?? "");
           break;
         case "profileLaunchTask":
           await profileLaunchTask(effect.task);
@@ -2755,8 +2810,8 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
         case "openLaunchWizard": await openLaunchWizard(); break;
         case "initializeProfiles": await initializeLaunchProfiles(); break;
         case "planLaunchWizard": await planLaunchWizard(); break;
-        case "requestTargetLaunch": await requestTargetLaunch(effect.plan); break;
-        case "launchTarget": await launchTarget(effect.plan, effect.reason); break;
+        case "requestTargetLaunch": await requestTargetLaunch(effect.plan, effect.intent); break;
+        case "launchTarget": await launchTarget(effect.plan, effect.intent, effect.reason); break;
       }
     }
 
