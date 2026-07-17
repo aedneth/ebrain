@@ -77,9 +77,9 @@ describe("buildSessionsView — fleet + live peek from a fixture", () => {
 
   test("hint bar shows the mockup's session actions", () => {
     const frame = buildFrame(stateOn(slice()), size, t).map(strip).join("\n");
-    expect(frame).toContain("a attach");
-    expect(frame).toContain("k kill");
-    expect(frame).toContain("p prompt");
+    expect(frame).toContain("[enter/a] attach");
+    expect(frame).toContain("[k] kill");
+    expect(frame).toContain("[p] prompt");
   });
 
   test("every row is exactly `cols` wide (character-buffer invariant)", () => {

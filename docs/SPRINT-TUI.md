@@ -17,18 +17,26 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
 
 ━━━
 
-> ## ⚠ F6 GATE STATUS — reconciled 2026-07-16 (G56-R2, source of truth)
+> ## F6 GATE STATUS — reconciled 2026-07-17 (source of truth)
 >
-> The F6.6/F6.7 gate is **NOT accepted**. Read the per-line `[x]` marks below as **maker evidence
-> complete**, not as an accepted gate. Authoritative status:
+> The automated F6.6/F6.7 correction gate is accepted independently. Per-line `[x]` marks below
+> remain implementation evidence; the audit reports, not a maker declaration, establish the gate.
 >
 > - **GPT-5.6-sol audit 2026-07-15:** `[AUDIT_FAIL]` — 8 findings (G56-F1..F8) + 2 blockers (R1/R2). See `AUDIT-GPT-5.6-SOL-F6.md`.
-> - **Maker corrections (Opus, 2026-07-16):** G56-F1..F8 closed + R1 shipped, each with its own commit and regression tests — see `CHANGELOG.md`. F8 removed the undated pricing snapshot, so any older "pricing verificado" claim below is superseded.
-> - **Still PENDING (do not mark done):** (1) the **GPT-5.6-sol re-audit** — the real gate, never self-declared; (2) **human acceptance F6a–F6e** in `human-checklist.md` (visual, real-adapter write-back, first-use, daily-driver) — automated evidence cannot substitute these; (3) gates **6.6.7** and **6.7.6** stay `[!]` until (1) lands.
+> - **Maker corrections (2026-07-16):** G56-F1..F8 + R1/R2 closed with regression tests. F8 removed the undated pricing snapshot, so older pricing claims below are superseded.
+> - **Independent Fable 5 re-audit:** `[AUDIT_PASS]` in `AUDIT-FABLE-F6-CORRECTIONS.md`; it reproduced the findings with independent fixtures. Low follow-up F-CF-3 was closed afterwards in `0c887c4`.
+> - **Still human-only:** `human-checklist.md` F6a–F6e (visual, real-adapter write-back, first-use, daily-driver). These are product acceptance checks, not a reason to reopen an already passed automated gate.
 >
 > If a line elsewhere in this file or in `SPRINT-ORCHESTRATION.md` contradicts this block, **this block wins.**
 
 ━━━
+
+## FASE 6.8 — Launch experience polish (2026-07-17)
+
+- [x] 6.8.1 **Decision-oriented Launch layout:** split Launch into focusable task & signals, guided launch, and manual agents panels. Enter acts only on the focused decision, so task classification or wizard opening cannot accidentally create a session. **Verify:** `tui/test/launch.test.ts` focus and launch-effect regressions.
+- [x] 6.8.2 **Modal guided wizard:** move target/profile/capability/directory selection out of the base view into a centered modal. The modal owns Tab/arrows; directory save/cancel returns to it; plan review, immutable task delivery, deny-client checks, and RAM confirmation remain in the audited path. **Verify:** modal reducer/render and F2 regression tests.
+- [x] 6.8.3 **Compact, discoverable controls:** center bracketed `[key] action` hints, cap visible controls at six, and make `?` render the current view's complete action reference. At 80x24 all manual agents remain visible. **Verify:** chrome/help/launch snapshots and geometry tests.
+- [x] 6.8.4 **Public operator documentation:** document the visual hierarchy, modal journey, first-use behavior, compact-control policy, and non-recommendation boundary in `docs/UX-LAUNCH-POLISH.md` and `tui/README.md`. **Verify:** documentation review against reducer + tests.
 
 ## FASE 6.0 — Reverse engineering de las TUIs de referencia
 
@@ -108,7 +116,7 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
 - [x] 6.6.4 **Launch Wizard completo:** `w` carga targets/perfiles contractuales; seleccion explicita, capability ajustable, cwd editable, preview de norms/memoria/MCP/workflow/RAM/modelo y doble confirmacion RAM. `r` ya no crashea tras navegar el grid. **Verify:** reducer/render + contracts + suites completas.
 - [x] 6.6.5 **Prompt composer + evidencia:** Sessions `p` abre composer multilinea (paste preservado o Alt+Enter), Enter previsualiza y solo `y` entrega los bytes exactos por `sendToSession`; el draft queda exclusivamente en memoria y no entra a historial/telemetria. `cli/benchmark-evidence.ts` define schema opcional estricto con source/as_of/version/task_scope/metricas, sin winner/ranking/politica de routing. **Verify:** reducer payload exacto, multilinea, cancelacion y privacidad; parser rechaza campos secretos/routing. Fix adicional: Launch manual toma su task del slice existente, eliminando `initialPrompt` indefinido; `w` explica el `profiles init --yes` requerido y Tab enfoca target/perfil correctamente.
 - [x] 6.6.6 Fixture de **10 tareas canónicas:** `cli/task-profile.fixtures.ts` cubre coding, agentic, web design, long context, terminal y general con diez tareas versionadas. El test valida señales literales, capability y modos compatibles; prohíbe campos de agente/modelo/ranking/costo. **Verify:** 10/10 sin ranking implícito. Gotchas visibles y cubiertos: `script` coincide dentro de `TypeScript`; `tool` no sustituye el keyword específico `tool-call`.
-- [!] 6.6.7 **GATE F6.6 (ADR-005) — PENDING re-audit.** **`[AUDIT_FAIL]` GPT-5.6-sol 2026-07-15** — Launch drops the reviewed task/workflow, Memory search navigation is inconsistent, search output is not scrubbed, and English/provenance/q-contract requirements are incomplete. **Maker corrections G56-F1..F8 + R1 have since landed** (Opus 2026-07-16, per-finding commits — see `CHANGELOG.md` and `AUDIT-GPT-5.6-SOL-F6.md`); the gate stays open until GPT-5.6-sol re-runs the focused regressions + full suites and issues an independent verdict. No `[AUDIT_PASS]` is self-declared.
+- [x] 6.6.7 **GATE F6.6 (ADR-005).** The historic `[AUDIT_FAIL]` GPT-5.6-sol report identified G56-F1..F8 + R1/R2; maker corrections landed with regressions, then Fable 5 independently reproduced the corrective evidence and issued `[AUDIT_PASS]` (`AUDIT-FABLE-F6-CORRECTIONS.md`). F-CF-3 was closed after that report in `0c887c4`. Human product acceptance remains separately tracked in `human-checklist.md`.
 - [x] 6.6C/D **Workflows/skills + learning loop:** contrato `ebrain workflows`, panel Memory (browse/materialize/attach), captura de candidatos y skillify con `--yes`; ver `docs/SPRINT-ORCHESTRATION.md` y `WORKFLOW-LEARNING-LOOP.md`.
 - [x] 6.6E **Cost ledger v2:** `ebrain cost --json` normaliza tokens/USD por provider/agente/modelo/sesión/workflow; Routing `c` abre la vista Cost. No se infiere costo de suscripciones; ver `COST-LEDGER.md`.
 
@@ -116,10 +124,10 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
 
 - [x] 6.7.1 Edge cases con test o guard: tmux sin server / muerto a mitad de peek; lock PGLite; sin red (paneles degradan); terminal < 80×24; TERM sin truecolor (fallback 256 automático); crash → terminal SIEMPRE restaurada. **Verify:** `docs/TUI-EDGE-CASES.md` enlaza cada guard a su prueba; nueva regresión limpia pane stale y muestra error si tmux muere entre list/peek. El restore ante señal/crash queda además en checklist manual final. **Residual del gate 6.4.8 (LOW, no bloqueante):** una llave PEM que cruce el borde de la ventana de captura (200 líneas) puede dejar líneas de body base64 visibles (header presente + END fuera de ventana, o viceversa). Está detrás de `guard-secrets.sh`; cerrarlo del todo exige redactar bloques base64 huérfanos → sobre-redacción masiva de output legítimo (JWT/hashes). Documentado para la auditoría final.
 - [x] 6.7.2 Perf en el Celeron: `docs/f6-success-criteria.md` registra boot 0.08-0.10 s, RSS F6.3 43 MiB y pico F6.7 Sessions 47 MiB; CPU idle ~0.6% y peek 1 Hz ~1.8% de un core (muestra local de 5 s). D8 decidido **no**: `bun build --compile` no aporta beneficio medido y agrega carga de release. **Verify:** criterio #1 con evidencia de maker; aceptación final pendiente de GPT-5.6-sol.
-- [x] 6.7.3 Docs: `tui/README.md` documenta los keybindings reales por vista, el composer, signals y el wizard first-use; `docs/runbook.md` enlaza la operación TUI. `?` sigue siendo la ayuda generada desde `COMMANDS` y la hint bar expone controles contextuales. **Verify:** docs en inglés y coherentes con `commands.ts`/reducer.
+- [x] 6.7.3 Docs: `tui/README.md` documents real per-view keybindings, the composer, signals, and first-use wizard; `docs/runbook.md` links TUI operation. `?` opens the current view's action reference, while `/` retains the generated global command palette. **Verify:** English docs match `commands.ts`/reducer.
 - [x] 6.7.4 `docs/f6-success-criteria.md`: **8/8 criterios con evidencia** (formato F5), actualizado para ADR-005: las diez tareas validan señales/modos, no un ganador. Cada fila distingue evidencia automática de los dos pasos humanos inevitables (write-back Claude y round-trip cross-agent). **Verify:** tabla completa; aceptación final pendiente de GPT-5.6-sol.
 - [x] 6.7.5 Retro → `docs/F6-RETRO.md` (artefacto OSS versionado) + learnings durable en `ebrain remember`; el vault privado no se replica en este repo. **Verify:** nota commiteada.
-- [!] 6.7.6 CHANGELOG ebrain actualizado por cada corte. **GATE F6.7 — PENDING re-audit. `[AUDIT_FAIL]` GPT-5.6-sol 2026-07-15**; maker corrections G56-F1..F8 + R1 have since landed (Opus 2026-07-16, per-finding commits in `CHANGELOG.md`). The independent re-audit + human acceptance (F6a-e in `human-checklist.md`) are still required before this gate closes. See `AUDIT-GPT-5.6-SOL-F6.md`.
+- [x] 6.7.6 CHANGELOG ebrain updated for every structural cut. **GATE F6.7 — `[AUDIT_PASS]`** after the independent Fable 5 re-audit in `AUDIT-FABLE-F6-CORRECTIONS.md`; its F-CF-3 follow-up is closed in `0c887c4`. Human acceptance F6a-e remains a product checklist, not an unclosed automated gate.
 - [x] 6.7.7 Checklist humano F6 (append a `docs/human-checklist.md`): aceptación visual vs mockups, write-back real, wizard first-use, daily driver y paquete de auditoría.
 
 ━━━

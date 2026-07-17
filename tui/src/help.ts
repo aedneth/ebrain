@@ -18,10 +18,37 @@ const BOLD = "\x1b[1m";
 const GROUP_LABEL: Record<string, string> = { nav: "navigation", global: "global" };
 const GROUP_ORDER = ["nav", "global"] as const;
 
+export interface HelpAction {
+  key: string;
+  title: string;
+  summary: string;
+}
+
+/** A compact, view-specific action reference. It is intentionally separate from
+ * COMMANDS: these actions can depend on the focused panel and do not belong in the
+ * global command palette. */
+export interface HelpContext {
+  title: string;
+  actions: HelpAction[];
+}
+
 /** Render the help dialog as box rows (square corners — it is a modal). */
-export function renderHelp(theme: Theme, commands: Command[] = COMMANDS, width = 66): string[] {
+export function renderHelp(theme: Theme, commands: Command[] = COMMANDS, width = 66, context?: HelpContext): string[] {
   const keyW = 10;
   const body: string[] = [];
+
+  if (context) {
+    body.push(theme.fg("text.muted") + context.title + theme.reset);
+    for (const action of context.actions) {
+      const kcol = theme.fg("accent.teal") + BOLD + padTo(action.key, keyW) + theme.reset;
+      const title = theme.fg("text.primary") + padTo(truncate(action.title, 13), 14) + theme.reset;
+      const summary = theme.fg("text.secondary") + action.summary + theme.reset;
+      body.push(kcol + title + summary);
+    }
+    body.push("");
+    body.push(theme.fg("text.muted") + "/ command palette · esc close" + theme.reset);
+    return panel({ title: "actions", dialog: true, focus: true, width, height: body.length + 2, body }, theme);
+  }
 
   for (const grp of GROUP_ORDER) {
     const cmds = commands.filter((c) => (c.group ?? "global") === grp);

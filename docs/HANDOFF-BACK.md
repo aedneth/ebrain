@@ -4,18 +4,87 @@ project: ebrain
 from: Codex (maker/constructor)
 to: Opus (Claude Code, auditor) + Fable 5 (gate)
 created: 2026-07-14
-updated: 2026-07-16
-status: ready-for-re-audit
-scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX + workflow/cost loop
+updated: 2026-07-17
+status: launch-ux-polish-complete; human acceptance pending
+scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX + workflow/cost loop + launch UX polish
 ---
 
-# HANDOFF-BACK — daemon work + audit-finding closure
+# HANDOFF-BACK — daemon work + audit-finding closure + Launch UX polish
 
-> **Current authoritative continuation (2026-07-16):**
-> [`HANDOFF-CLAUDE-F6-CORRECTIONS.md`](HANDOFF-CLAUDE-F6-CORRECTIONS.md) is the
-> active maker handoff for the F6 audit correction and OSS release. The historical
-> entries below describe the work that preceded the GPT-5.6-sol `[AUDIT_FAIL]`; do
-> not treat their old completion claims as current gate status.
+> **Current authoritative continuation (2026-07-17):** the F6 correction gate has an
+> independent Fable `[AUDIT_PASS]` in
+> [`AUDIT-FABLE-F6-CORRECTIONS.md`](AUDIT-FABLE-F6-CORRECTIONS.md); F-CF-3 was closed
+> afterwards in `0c887c4`. This addendum is a post-gate UX phase, not a claim that its
+> maker self-approved a new security gate. Historical entries below remain evidence only.
+
+## 2026-07-17 — Launch UX polish complete
+
+### What changed
+
+- **Launch information architecture:** replaced the flat Launch panel with three focusable,
+  numbered panels: **task & signals**, **guided launch**, and **manual agents**. `Tab` cycles
+  those decisions; `Enter` edits a task, opens the wizard, or launches only when the manual
+  agents panel has focus. This removes invisible selection state and prevents accidental agent
+  starts while a user is working on task classification or configuration.
+- **Guided wizard modal:** `w` now opens a centered modal that visibly lists target, execution
+  profile, capability, and directory. Tab cycles all four fields; arrows change the focused
+  selectable field. `c`, or Enter on directory, opens an editor whose save/cancel returns to
+  the wizard. Candidate lists are windowed around the selection. Plan review, immutable
+  `LaunchIntent`, stdin task delivery, deny-client checks, and the RAM governor are unchanged.
+- **Compact interaction chrome:** controls are centered as `[key] action` with muted keys and
+  primary action labels. The footer exposes at most six controls. `?` is now a contextual action
+  reference; `/` remains the global command palette. Confirm dialogs show `[y] confirm` and
+  `[n] cancel`, matching the actual safety gate.
+- **Small terminal behavior:** at the supported 80x24 minimum, explanatory panels compress
+  before manual agents, preserving the complete six-agent grid.
+- **Documentation:** added `docs/UX-LAUNCH-POLISH.md`; updated `tui/README.md`,
+  `docs/SPRINT-TUI.md`, and `CHANGELOG.md` to describe the user journey and record the corrected
+  F6 automated-gate status.
+
+### Decisions and rationale
+
+- Task signals remain explanatory only. They never imply that a model, provider, or profile is
+  best; execution profiles stay user-owned.
+- The wizard owns its keystrokes. Its earlier inline state made `Tab`, arrows, and Enter look
+  non-functional because nothing showed what held focus.
+- Control density is bounded rather than hiding functionality. The action reference preserves
+  discoverability without a permanently saturated footer.
+- No adapter launch argv, credentials, provider routing policy, billing logic, or client-repo
+  policy changed in this phase.
+
+### Verification
+
+- `bun test ./tui/test/` -> **403 pass / 0 fail**.
+- `bun test ./cli/` -> **218 pass / 0 fail**.
+- `git diff --check` -> clean.
+- Zero-hex scan outside `tui/src/theme.ts` -> clean.
+- Targeted regressions cover modal field navigation, directory round-trip, no accidental launch,
+  immutable reviewed-task delivery, accurate confirmation hints, contextual action reference,
+  exact frame geometry, and six agents visible at 80x24.
+- `ebrain up` -> daemon healthy on local loopback with a 94-tool smoke and detected-agent
+  bridge onboarding. No secret values were printed.
+
+### New gotchas and pending work
+
+1. **`ebrain remember` write-through remains degraded in this environment.** With the daemon UP,
+   the primitive writes and commits the local learning but reports a generic MCP write-through
+   warning, so that learning may not be immediately searchable cross-agent. The wrapper currently
+   suppresses the helper's sanitized stderr, therefore this handoff intentionally does not claim a
+   root cause or inspect credential/configuration files. Follow-up: make the wrapper surface a
+   scrubbed, typed diagnostic and add a daemon-up write-through regression without logging a token.
+2. **Human acceptance remains appropriate:** use `docs/human-checklist.md` for visual 80x24 and
+   condensed-terminal review, first-use profile initialization, a real adapter write-back, and a
+   daily-driver pass. These are product checks, not unfinished automated F6 gates.
+3. **No additional external audit was requested for this UX-only phase.** If Opus or Fable is
+   asked to review later, focus on modal key ownership, confirmation-hint accuracy, retained
+   `LaunchIntent`/stdin semantics, and 80x24 rendering. Do not reopen the already recorded F6
+   independent gate without a concrete regression.
+
+### Durable learnings
+
+- Recorded the Launch decision-separation/modal-key-ownership learning with `ebrain remember`.
+- Recorded the daemon-down write-through behavior with `ebrain remember`. Both local records were
+  created; their MCP write-through emitted the warning above, including after `ebrain up`.
 
 ## 2026-07-16 — F6 maker gate CLOSED (all findings), ready for GPT-5.6-sol re-audit
 

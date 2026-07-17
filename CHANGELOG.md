@@ -4,6 +4,15 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-17 — Launch experience polish
+
+- **Decision-oriented Launch:** the TUI now separates **task & signals**, **guided launch**, and **manual agents** into focusable panels. `Enter` acts only on the focused panel, eliminating invisible wizard state and accidental agent launches while preserving the manual-agent path.
+- **Modal wizard:** `w` opens a centered guided-launch dialog with visible target, profile, capability, and directory fields. Tab/arrows operate only in that dialog; directory editing returns to it; preview, immutable `LaunchIntent`, stdin task delivery, deny-client enforcement, and RAM confirmation remain unchanged.
+- **Compact controls:** all hint rows use centered `[key] action` controls with muted keys and primary labels. The visible row is capped at six actions; `?` now presents a view-specific action reference. Launch retains all six manual agents at 80x24.
+- **Documentation:** added `docs/UX-LAUNCH-POLISH.md` and updated `tui/README.md` plus the TUI sprint record. This is UX implementation/test evidence; the completed independent F6 audit remains recorded separately.
+
+---
+
 ## 2026-07-16 — F6 maker correction (Claude): ALL 8 findings + R1/R2 closed (pending re-audit)
 
 Maker session on the GPT-5.6-sol F6 findings. Every finding G56-F1..F8 + blockers R1/R2 closed, each with focused tests (CLI suite 177 → **217 pass / 0 fail**, TUI **397 pass / 0 fail**, zero-hex clean):

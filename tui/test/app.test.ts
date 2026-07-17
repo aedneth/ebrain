@@ -94,8 +94,9 @@ describe("buildFrame — home snapshot (120x32)", () => {
     expect(plain.join("\n")).toContain("active sessions");
   });
 
-  it("the penultimate row is the hint bar, the last row is the footer", () => {
-    expect(plain[30]).toContain("ctrl+c exit");
+  it("the penultimate row is the centered hint bar, the last row is the footer", () => {
+    expect(plain[30]).toContain("[1-6] views");
+    expect(plain[30]).toContain("[?] help");
     expect(plain[31]).toContain("ebrain");
   });
 });

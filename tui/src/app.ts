@@ -33,7 +33,7 @@ import { startNavReader, type Key } from "./kit/input.js";
 import { composerApplyKey, composerFrom, type ComposerState } from "./kit/composer.js";
 
 import { wordmark } from "./widgets/brand/wordmark.js";
-import { statusBar, statusSep, tabBar, hintBar, footer } from "./widgets/chrome/index.js";
+import { statusBar, statusSep, tabBar, hintBar, footer, keyHint } from "./widgets/chrome/index.js";
 import { panel } from "./widgets/layout/panel.js";
 import { gauge } from "./widgets/core/gauge.js";
 
@@ -46,7 +46,7 @@ import {
   toItems,
 } from "./palette.js";
 import { commandPalette } from "./widgets/input/commandpalette.js";
-import { renderHelp } from "./help.js";
+import { renderHelp, type HelpContext } from "./help.js";
 
 import { scrolllist } from "./widgets/data/scrolllist.js";
 import { terminalPeek } from "./widgets/layout/terminalpeek.js";
@@ -751,7 +751,15 @@ export function hintsForState(state: AppState): HintEntry[] {
   }
   if (overlay?.kind === "wizardCwd") return [{ k: "enter", label: "save" }, { k: "esc", label: "back to wizard" }];
   if (overlay?.kind === "launchTask") return [{ k: "enter", label: "analyze signals" }, { k: "esc", label: "cancel" }];
-  if (overlay) return [{ k: "enter", label: "confirm" }, { k: "esc", label: "cancel" }];
+  if (overlay?.kind === "confirmKill" || overlay?.kind === "confirmLaunch" || overlay?.kind === "confirmSend" || overlay?.kind === "confirmTargetLaunch" || overlay?.kind === "confirmTargetGovernor" || overlay?.kind === "confirmProfilesInit") {
+    return [{ k: "y", label: "confirm" }, { k: "n", label: "cancel" }];
+  }
+  if (overlay?.kind === "palette") return [{ k: "↑↓", label: "select" }, { k: "enter", label: "run" }, { k: "esc", label: "close" }];
+  if (overlay?.kind === "help" || overlay?.kind === "detail") return [{ k: "esc", label: "close" }];
+  if (overlay?.kind === "prompt") return [{ k: "alt+enter", label: "line" }, { k: "enter", label: "review" }, { k: "esc", label: "cancel" }];
+  if (overlay?.kind === "remember") return [{ k: "enter", label: "save" }, { k: "esc", label: "cancel" }];
+  if (overlay?.kind === "memorySearch") return [{ k: "enter", label: "search" }, { k: "esc", label: "cancel" }];
+  if (overlay) return [];
 
   if (state.tab === "launch") {
     switch (focusedRegion(state)) {
@@ -780,6 +788,60 @@ export function hintsForState(state: AppState): HintEntry[] {
     }
   }
   return hintsForTab(state.tab).slice(0, 6);
+}
+
+/** The complete local action list behind `[?] actions`. This is the overflow path
+ * for compact terminals: the footer remains scannable while every real interaction
+ * stays discoverable in English and without invented model recommendations. */
+function actionReferenceFor(state: AppState): HelpContext {
+  if (state.tab === "launch") {
+    const action = focusedRegion(state) === "task"
+      ? "edit task"
+      : focusedRegion(state) === "guided"
+        ? "open guided launch"
+        : "launch selected agent";
+    return {
+      title: "launch actions",
+      actions: [
+        { key: "tab", title: "focus box", summary: "move between task, guided launch, and manual agents" },
+        { key: "t", title: "edit task", summary: "describe work and derive non-binding task signals" },
+        { key: "r", title: "refresh signals", summary: "analyze the current task again" },
+        { key: "w", title: "guided launch", summary: "choose your target, profile, capability, and directory" },
+        { key: "↑↓←→", title: "choose agent", summary: "move selection when manual agents has focus" },
+        { key: "enter", title: action, summary: "act only on the focused box" },
+      ],
+    };
+  }
+  if (state.tab === "memory") {
+    return {
+      title: "memory actions",
+      actions: [
+        { key: "s", title: "search", summary: "search the shared memory index" },
+        { key: "r", title: "remember", summary: "store a durable learning" },
+        { key: "a", title: "attach workflow", summary: "place a workflow prompt in Launch" },
+        { key: "tab", title: "focus box", summary: "move between results, workflows, and session logs" },
+        { key: "↑↓", title: "select", summary: "move within the focused collection" },
+        { key: "enter", title: "open or run", summary: "open details or materialize a workflow prompt" },
+        { key: "esc", title: "clear search", summary: "return from search results to recent memory" },
+      ],
+    };
+  }
+  if (state.tab === "sessions") {
+    return {
+      title: "session actions",
+      actions: [
+        { key: "↑↓", title: "select", summary: "move through active sessions" },
+        { key: "enter/a", title: "attach", summary: "attach in a plain terminal" },
+        { key: "p", title: "prompt", summary: "review before sending a literal prompt" },
+        { key: "k", title: "kill", summary: "request an explicit destructive confirmation" },
+        { key: "r", title: "refresh", summary: "refresh the active session list" },
+      ],
+    };
+  }
+  return {
+    title: `${state.tab} actions`,
+    actions: hintsForTab(state.tab).map((hint) => ({ key: hint.k, title: hint.label, summary: "available in this view" })),
+  };
 }
 
 /**
@@ -1131,7 +1193,7 @@ export function buildFrame(state: AppState, size: FrameSize, theme: Theme): stri
   while (frame.length < rows) frame.push(" ".repeat(cols));
   const base = frame.slice(0, rows).map((r) => padTo(truncate(r, cols), cols));
 
-  if (state.overlay) return compositeOverlay(base, state.overlay, size, theme);
+  if (state.overlay) return compositeOverlay(base, state.overlay, size, theme, state);
   return base;
 }
 
@@ -1143,7 +1205,7 @@ export function buildFrame(state: AppState, size: FrameSize, theme: Theme): stri
 // see the tab context behind the modal). Exact width/height preserved.
 // ---------------------------------------------------------------------------
 
-function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme): { box: string[]; top: number; left: number } {
+function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: number, theme: Theme): { box: string[]; top: number; left: number } {
   if (overlay.kind === "palette") {
     const width = Math.min(64, Math.max(20, cols - 4));
     const maxItems = Math.max(1, rows - 8);
@@ -1217,6 +1279,12 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
     return { box, top, left };
   }
 
+  if (overlay.kind === "launchWizard") {
+    const width = Math.min(88, Math.max(48, cols - 6));
+    const box = buildLaunchWizardBox(launchOf(state), width, theme);
+    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+  }
+
   if (overlay.kind === "wizardCwd") {
     const width = Math.min(82, Math.max(36, cols - 6));
     const box = buildWizardCwdBox(overlay, width, theme);
@@ -1269,9 +1337,10 @@ function overlayBox(overlay: Overlay, cols: number, rows: number, theme: Theme):
     return { box, top, left };
   }
 
-  // help (fallthrough)
+  // help (fallthrough): `?` is a focused action reference, while direct unit
+  // callers can still render the full command registry without a context.
   const width = Math.min(66, Math.max(20, cols - 4));
-  const box = renderHelp(theme, COMMANDS, width);
+  const box = renderHelp(theme, COMMANDS, width, actionReferenceFor(state));
   const left = Math.max(0, Math.floor((cols - width) / 2));
   const top = Math.max(0, Math.floor((rows - box.length) / 2));
   return { box, top, left };
@@ -1321,6 +1390,76 @@ function buildWizardCwdBox(overlay: Extract<Overlay, { kind: "wizardCwd" }>, wid
   return panel({ title: "launch cwd", dialog: true, width, height: 3, body: [field] }, theme);
 }
 
+/** Keep long target/profile lists usable without flooding a compact terminal. The
+ * selected choice stays inside a short window; arrows still traverse the full list. */
+function wizardChoiceWindow<T>(items: readonly T[], selected: number, maxItems = 3): Array<{ item: T; index: number }> {
+  if (items.length === 0) return [];
+  const max = Math.max(1, maxItems);
+  const safe = clampIndex(selected, items.length);
+  const start = Math.max(0, Math.min(safe - Math.floor(max / 2), items.length - max));
+  return items.slice(start, start + max).map((item, i) => ({ item, index: start + i }));
+}
+
+function wizardField(label: string, value: string, focused: boolean, width: number, theme: Theme): string {
+  const reset = theme.reset;
+  const marker = focused ? theme.fg("accent.teal") + "▸" + reset : " ";
+  const name = theme.fg(focused ? "accent.teal" : "text.secondary") + label + reset;
+  const valueColor = theme.fg(focused ? "text.primary" : "text.secondary");
+  return marker + " " + name + " " + valueColor + truncate(value, Math.max(0, width - displayWidth(label) - 5)) + reset;
+}
+
+/** Guided-launch dialog. Selections are explicitly user-owned: task signals only
+ * classify text and never choose a provider/model. The reviewed plan is still gated
+ * by the existing confirmation and RAM governor after this dialog. */
+function buildLaunchWizardBox(launch: LaunchSlice, width: number, theme: Theme): string[] {
+  const wizard = wizardOf(launch);
+  const inner = Math.max(0, width - 4);
+  if (!wizard) {
+    return panel({ title: "guided launch", dialog: true, focus: true, width, height: 4, body: ["Wizard data is no longer available.", keyHint({ k: "esc", label: "close" }, theme)] }, theme);
+  }
+
+  const reset = theme.reset;
+  const body: string[] = [];
+  body.push(theme.fg("text.muted") + "Choose a declared target and an execution profile you control. Signals do not choose a model." + reset);
+  body.push("");
+  body.push(wizardField("target", "use arrows to choose", wizard.focus === "target", inner, theme));
+  const targetChoices = wizardChoiceWindow(wizard.targets, wizard.targetSelected);
+  if (targetChoices.length === 0) body.push(theme.fg("semantic.error") + "  No declared targets are available." + reset);
+  for (const { item, index } of targetChoices) {
+    const active = index === wizard.targetSelected;
+    const marker = active ? theme.fg("accent.teal") + "  ▸ " + reset : "    ";
+    const color = active ? theme.fg("text.primary") : theme.fg("text.secondary");
+    body.push(marker + color + truncate(`${item.id} · ${item.provider} / ${item.agent}`, Math.max(0, inner - 4)) + reset);
+  }
+  if (wizard.targets.length > targetChoices.length) body.push(theme.fg("text.muted") + `    ${wizard.targets.length} targets · use arrows to browse` + reset);
+
+  body.push(wizardField("profile", "use arrows to choose", wizard.focus === "profile", inner, theme));
+  const profileChoices = wizardChoiceWindow(wizard.profiles.profiles, wizard.profileSelected);
+  if (profileChoices.length === 0) body.push(theme.fg("semantic.error") + "  No execution profiles are available." + reset);
+  for (const { item, index } of profileChoices) {
+    const active = index === wizard.profileSelected;
+    const marker = active ? theme.fg("accent.teal") + "  ▸ " + reset : "    ";
+    const color = active ? theme.fg("text.primary") : theme.fg("text.secondary");
+    body.push(marker + color + truncate(`${item.label} · ${item.provider} · ${item.models} models`, Math.max(0, inner - 4)) + reset);
+  }
+  if (wizard.profiles.profiles.length > profileChoices.length) body.push(theme.fg("text.muted") + `    ${wizard.profiles.profiles.length} profiles · use arrows to browse` + reset);
+
+  body.push(wizardField("capability", wizard.capability, wizard.focus === "capability", inner, theme));
+  body.push(wizardField("directory", wizard.cwd, wizard.focus === "cwd", inner, theme));
+  if (wizard.plan) {
+    body.push(theme.fg("semantic.ok") + "  Preview ready" + reset + theme.fg("text.muted") + ` · ${truncate(`${wizard.plan.model} · ${wizard.plan.costStatus}`, Math.max(0, inner - 20))}` + reset);
+  }
+  body.push("");
+  body.push(
+    keyHint({ k: "tab", label: "field" }, theme) + "  " +
+    keyHint({ k: "↑↓", label: "choose" }, theme) + "  " +
+    keyHint({ k: "c", label: "directory" }, theme) + "  " +
+    keyHint({ k: "enter", label: wizard.plan ? "review launch" : "preview" }, theme) + "  " +
+    keyHint({ k: "esc", label: "cancel" }, theme),
+  );
+  return panel({ title: "guided launch", dialog: true, focus: true, width, height: body.length + 2, body }, theme);
+}
+
 /** Word-wrap `text` into lines of at most `width` display cells (plain text — the
  * detail modal body carries no ANSI). */
 function wrapText(text: string, width: number): string[] {
@@ -1366,9 +1505,9 @@ function buildRememberBox(overlay: Extract<Overlay, { kind: "remember" }>, width
   );
 }
 
-function compositeOverlay(base: string[], overlay: Overlay, size: FrameSize, theme: Theme): string[] {
+function compositeOverlay(base: string[], overlay: Overlay, size: FrameSize, theme: Theme, state: AppState): string[] {
   const { cols, rows } = size;
-  const { box, top, left } = overlayBox(overlay, cols, rows, theme);
+  const { box, top, left } = overlayBox(overlay, state, cols, rows, theme);
   const out = base.slice();
   for (let i = 0; i < box.length; i++) {
     const y = top + i;
@@ -1741,62 +1880,62 @@ const LAUNCHABLE: Array<{ agent: AgentName; cls: "heavy" | "light" }> = [
   { agent: "generic", cls: "light" },
 ];
 
-function buildLaunchView(launch: LaunchSlice, rect: Rect, theme: Theme): string[] {
+function buildLaunchView(launch: LaunchSlice, focused: string, rect: Rect, theme: Theme): string[] {
   const reset = theme.reset;
-  const selected = Math.min(Math.max(0, launch.selected), LAUNCHABLE.length - 1);
+  // At the supported 80x24 minimum, preserve enough rows for the complete agent
+  // grid. Wider/taller terminals get the more explanatory task/guided panels.
+  const topPanelHeight = rect.height < 23 ? 5 : 7;
+  const [taskRect, guidedRect, agentsRect] = splitV(rect, [topPanelHeight, topPanelHeight, { flex: 1 }], 1);
   const contentW = Math.max(0, rect.width - 4);
-  const colGap = 2;
-  const cellW = Math.max(10, Math.floor((contentW - colGap) / LAUNCH_COLS));
-  const rowsN = Math.ceil(LAUNCHABLE.length / LAUNCH_COLS);
 
-  const body: string[] = [];
-  body.push(theme.fg("text.muted") + "t → task prompt + signals · r → refresh profile · enter → launch selected agent" + reset);
-  body.push(theme.fg("text.muted") + "w → launch wizard" + reset);
+  const taskBody: string[] = [
+    keyHint({ k: "t", label: "edit task" }, theme) + "  " + keyHint({ k: "r", label: "refresh signals" }, theme),
+  ];
   if (launch.task) {
-    body.push(theme.fg("text.secondary") + "task      " + reset + theme.fg("text.primary") + truncate(launch.task, contentW - 10) + reset);
+    taskBody.push(theme.fg("text.secondary") + "task  " + reset + theme.fg("text.primary") + truncate(launch.task, contentW - 6) + reset);
   } else {
-    body.push(theme.fg("text.secondary") + "task      " + reset + theme.fg("text.muted") + "none · pick an agent below or press t" + reset);
+    taskBody.push(theme.fg("text.muted") + "No task yet. Describe work to derive non-binding task signals." + reset);
   }
-
   if (launch.status === "loading") {
-    body.push(spinner({ label: "advising", active: true, frame: 1 }, theme));
-  } else if (launch.status === "running") {
-    body.push(spinner({ label: "running OpenRouter route", active: true, frame: 2 }, theme));
-  } else if (launch.status === "error") {
-    body.push(theme.fg("semantic.error") + "error     " + reset + theme.fg("text.primary") + truncate(launch.error ?? "launch failed", contentW - 10) + reset);
+    taskBody.push(spinner({ label: "analyzing task signals", active: true, frame: 1 }, theme));
   } else if (launch.profile) {
-    const profile = launch.profile;
-    body.push(
-      theme.fg("text.secondary") + "capability " + reset +
-      theme.fg("text.primary") + profile.selectedCapability + reset +
-      theme.fg("text.muted") + " · signals only" + reset,
-    );
-    const signals = profile.signals.map((signal) => `${signal.capability}:${signal.matched.join(",")}`).join(" | ") || "none";
-    body.push(theme.fg("text.secondary") + "signals    " + reset + theme.fg("text.muted") + truncate(signals, contentW - 10) + reset);
-    body.push(theme.fg("text.secondary") + "modes      " + reset + theme.fg("text.muted") + truncate(profile.compatibleTargets.join(" · "), contentW - 10) + reset);
-    body.push(theme.fg("text.secondary") + "note       " + reset + theme.fg("text.muted") + truncate(profile.disclaimer, contentW - 10) + reset);
+    const signals = launch.profile.signals.map((signal) => `${signal.capability}: ${signal.matched.join(", ")}`).join(" · ") || "No explicit signals matched";
+    taskBody.push(theme.fg("text.secondary") + "signals  " + reset + theme.fg("text.muted") + truncate(signals, contentW - 9) + reset);
+    taskBody.push(theme.fg("text.muted") + "Signals classify the task. They never select a provider or model." + reset);
+  } else {
+    taskBody.push(theme.fg("text.muted") + "Signals help you inspect the task; they are not recommendations." + reset);
   }
-  const wizard = launch.wizard;
-  if (wizard) {
-    const target = selectedWizardTarget(wizard);
-    const profile = selectedWizardProfile(wizard);
-    body.push("");
-    body.push(theme.fg("accent.teal") + "launch wizard" + reset + theme.fg("text.muted") + " · tab target/profile · up/down select · c cwd · [/ ] capability · enter preview" + reset);
-    body.push(theme.fg("text.secondary") + "target     " + reset + theme.fg(wizard.focus === "target" ? "accent.teal" : "text.primary") + (target?.id ?? "no declared target") + reset);
-    body.push(theme.fg("text.secondary") + "profile    " + reset + theme.fg(wizard.focus === "profile" ? "accent.teal" : "text.primary") + (profile?.label ?? "run profiles init") + reset);
-    body.push(theme.fg("text.secondary") + "capability " + reset + theme.fg("text.primary") + wizard.capability + reset);
-    body.push(theme.fg("text.secondary") + "cwd        " + reset + theme.fg("text.primary") + truncate(wizard.cwd, contentW - 11) + reset);
-    if (wizard.plan) {
-      body.push(theme.fg("text.secondary") + "model      " + reset + theme.fg("text.primary") + truncate(wizard.plan.model, contentW - 11) + reset);
-      body.push(theme.fg("text.secondary") + "context    " + reset + theme.fg("text.muted") + `norms · MCP daemon · memory bus · workflow ${launch.workflowId ?? "none"} · ${wizard.plan.costStatus}` + reset);
-      body.push(theme.fg("text.muted") + "enter → confirm launch" + reset);
-    }
+  if (launch.status === "error" && launch.error?.startsWith("Describe a task")) {
+    taskBody.push(theme.fg("semantic.error") + truncate(launch.error, contentW) + reset);
   }
 
-  body.push("");
-  body.push(theme.fg("text.secondary") + "manual agents" + reset);
+  const wizard = launch.wizard;
+  const target = wizard ? selectedWizardTarget(wizard) : undefined;
+  const selectedProfile = wizard ? selectedWizardProfile(wizard) : undefined;
+  const guidedBody: string[] = [
+    keyHint({ k: "w", label: "open guided launch" }, theme),
+    theme.fg("text.muted") + "Choose a declared target, your execution profile, capability, and directory." + reset,
+  ];
+  if (wizard) {
+    guidedBody.push(theme.fg("text.secondary") + "target  " + reset + theme.fg("text.primary") + (target?.id ?? "Unavailable") + reset);
+    guidedBody.push(theme.fg("text.secondary") + "profile " + reset + theme.fg("text.primary") + (selectedProfile?.label ?? "Unavailable") + reset + theme.fg("text.muted") + ` · ${wizard.capability}` + reset);
+    if (wizard.plan) guidedBody.push(theme.fg("semantic.ok") + "Preview ready" + reset + theme.fg("text.muted") + ` · ${truncate(`${wizard.plan.model} · ${wizard.plan.costStatus}`, Math.max(0, contentW - 17))}` + reset);
+    else guidedBody.push(theme.fg("text.muted") + "Open the wizard to review or change this configuration." + reset);
+  } else if (launch.status === "loading") {
+    guidedBody.push(spinner({ label: "loading declared launch options", active: true, frame: 1 }, theme));
+  } else {
+    guidedBody.push(theme.fg("text.muted") + "No selection yet. Opening the wizard never starts a session." + reset);
+  }
+  if (launch.status === "error" && !launch.error?.startsWith("Describe a task")) {
+    guidedBody.push(theme.fg("semantic.error") + truncate(launch.error ?? "guided launch unavailable", contentW) + reset);
+  }
+
+  const selected = Math.min(Math.max(0, launch.selected), LAUNCHABLE.length - 1);
+  const agentsContentW = Math.max(0, agentsRect.width - 4);
+  const colGap = 2;
+  const cellW = Math.max(10, Math.floor((agentsContentW - colGap) / LAUNCH_COLS));
   const grid: string[] = [];
-  for (let r = 0; r < rowsN; r++) {
+  for (let r = 0; r < Math.ceil(LAUNCHABLE.length / LAUNCH_COLS); r++) {
     let line = "";
     for (let c = 0; c < LAUNCH_COLS; c++) {
       const idx = r * LAUNCH_COLS + c;
@@ -1805,27 +1944,27 @@ function buildLaunchView(launch: LaunchSlice, rect: Rect, theme: Theme): string[
         line += " ".repeat(cellW);
         continue;
       }
-      const it = LAUNCHABLE[idx]!;
+      const agent = LAUNCHABLE[idx]!;
       const on = idx === selected;
       const marker = on ? theme.fg("accent.teal") + "▸ " + reset : "  ";
-      const b = badge({ agent: it.agent }, theme);
-      const clsColor = it.cls === "heavy" ? theme.fg("semantic.warn") : theme.fg("text.muted");
-      line += padTo(truncate(marker + b + "  " + clsColor + it.cls + reset, cellW), cellW);
+      const clsColor = agent.cls === "heavy" ? theme.fg("semantic.warn") : theme.fg("text.muted");
+      line += padTo(truncate(marker + badge({ agent: agent.agent }, theme) + "  " + clsColor + agent.cls + reset, cellW), cellW);
     }
     grid.push(line);
   }
-  body.push(...grid);
+  const selectedAgent = LAUNCHABLE[selected]!.agent;
+  const agentsBody = [
+    theme.fg("text.muted") + "Start a direct local session. This does not change your guided-launch profile." + reset,
+    ...grid,
+    theme.fg("text.muted") + (launch.task ? "Task will be sent to " : "New session with ") + reset + theme.fg("text.primary") + selectedAgent + reset,
+  ];
 
-  const selAgent = LAUNCHABLE[selected]!.agent;
-  const foot =
-    theme.fg("text.muted") + (launch.task ? "enter → new session + send task " : "enter → new session ") + reset +
-    theme.fg("text.primary") + selAgent + reset +
-    theme.fg("text.muted") + " · profile never changes this selection" + reset;
-  body.push("", foot);
-  return panel(
-    { title: "launch · task router", focus: true, width: rect.width, height: rect.height, body },
-    theme,
-  );
+  const panels = [
+    panel({ title: "1 · task & signals", focus: focused === "task", width: taskRect.width, height: taskRect.height, body: taskBody }, theme),
+    panel({ title: "2 · guided launch", focus: focused === "guided", width: guidedRect.width, height: guidedRect.height, body: guidedBody }, theme),
+    panel({ title: "3 · manual agents", focus: focused === "agents", width: agentsRect.width, height: agentsRect.height, body: agentsBody }, theme),
+  ];
+  return [...panels[0]!, " ".repeat(rect.width), ...panels[1]!, " ".repeat(rect.width), ...panels[2]!];
 }
 
 // ---------------------------------------------------------------------------
@@ -2770,7 +2909,24 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       } else {
         const capability = current.profile?.selectedCapability ?? profiles.data.profiles[0]!.capabilities[0] ?? "general";
         const first = profiles.data.profiles[0]!;
-        state = { ...state, launch: { ...current, status: "ready", wizard: { targets: targets.data, profiles: profiles.data, targetSelected: 0, profileSelected: 0, capability: first.capabilities.includes(capability) ? capability : first.capabilities[0]!, cwd: callerCwd(), focus: "target", plan: null } } };
+        state = {
+          ...state,
+          overlay: { kind: "launchWizard" },
+          launch: {
+            ...current,
+            status: "ready",
+            wizard: {
+              targets: targets.data,
+              profiles: profiles.data,
+              targetSelected: 0,
+              profileSelected: 0,
+              capability: first.capabilities.includes(capability) ? capability : first.capabilities[0]!,
+              cwd: callerCwd(),
+              focus: "target",
+              plan: null,
+            },
+          },
+        };
       }
       if (state.tab === "launch") render();
     }

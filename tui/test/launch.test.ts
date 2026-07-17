@@ -1,7 +1,8 @@
 /**
  * tui/test/launch.test.ts — the Launch view + RAM-governor gate (SPRINT-TUI 6.4.5/6.4.6).
- * buildLaunchView renders the agent grid; reduce drives selection + the launch effect,
- * and the confirmLaunch overlay proves the governor override is explicit (only `y`).
+ * Launch renders task, guided-launch, and manual-agent decisions separately. reduce()
+ * drives explicit focus + the safe launch effect; the confirmLaunch overlay proves
+ * the governor override is explicit (only `y`).
  * All TTY-free — the actual newSession/governor I/O lives in the loop.
  *
  *   bun test ./tui/test/launch.test.ts
@@ -11,29 +12,32 @@ import { makeTheme } from "../src/theme.js";
 import { parseKey } from "../src/kit/input.js";
 import { displayWidth } from "../src/kit/draw.js";
 import { lineFrom } from "../src/kit/lineedit.js";
-import { buildFrame, reduce, initialState, buildTargetLaunchArgs, type AppState, type LaunchIntent } from "../src/app.js";
+import { buildFrame, reduce, initialState, buildTargetLaunchArgs, hintsForState, type AppState, type LaunchIntent } from "../src/app.js";
 
 const t = makeTheme({ trueColor: true, ascii: false });
 const strip = (s: string) => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
 const size = { cols: 100, rows: 30 };
 
-function launchState(selected = 0): AppState {
+function launchState(selected = 0, focusRegion = 0): AppState {
   return {
     tab: "launch",
     confirmQuit: false,
     cwd: "~/eBrain",
     launch: { selected, task: "", profile: null, status: "idle" },
+    focusRegion,
   };
 }
 
-describe("buildLaunchView — the agent grid (F6.4.5)", () => {
-  test("lists the launchable agents + the lanzar hint", () => {
+describe("buildLaunchView — the guided information architecture", () => {
+  test("separates task, guided launch, and manual agents", () => {
     const frame = buildFrame(launchState(), size, t).map(strip).join("\n");
-    expect(frame).toContain("launch · task router");
+    expect(frame).toContain("1 · task & signals");
+    expect(frame).toContain("2 · guided launch");
+    expect(frame).toContain("3 · manual agents");
     expect(frame).toContain("claude");
     expect(frame).toContain("gemini");
     expect(frame).toContain("generic");
-    expect(frame).toContain("enter → new session");
+    expect(frame).toContain("Start a direct local session");
   });
 
   test("shows heavy vs light class per agent", () => {
@@ -42,19 +46,39 @@ describe("buildLaunchView — the agent grid (F6.4.5)", () => {
     expect(frame).toContain("light");
   });
 
-  test("footer reflects the selected agent", () => {
-    expect(buildFrame(launchState(0), size, t).map(strip).join("\n")).toContain("new session claude");
-    expect(buildFrame(launchState(2), size, t).map(strip).join("\n")).toContain("new session gemini");
+  test("manual-agent box reflects the selected agent", () => {
+    expect(buildFrame(launchState(0, 2), size, t).map(strip).join("\n")).toContain("New session with claude");
+    expect(buildFrame(launchState(2, 2), size, t).map(strip).join("\n")).toContain("New session with gemini");
   });
 
-  test("hint bar shows agent + launch", () => {
-    const frame = buildFrame(launchState(), size, t).map(strip).join("\n");
+  test("focused manual-agent box shows launch controls", () => {
+    const frame = buildFrame(launchState(0, 2), size, t).map(strip).join("\n");
     expect(frame).toContain("agent");
-    expect(frame).toContain("run/launch");
+    expect(frame).toContain("launch");
+    expect(frame).toContain("[enter]");
+  });
+
+  test("the compact control row never exceeds six actions", () => {
+    expect(hintsForState(launchState()).length).toBeLessThanOrEqual(6);
+    expect(hintsForState(launchState(0, 1)).length).toBeLessThanOrEqual(6);
+    expect(hintsForState(launchState(0, 2)).length).toBeLessThanOrEqual(6);
+  });
+
+  test("confirmation hints name the only keys the safety gates accept", () => {
+    const hints = hintsForState({ ...launchState(), overlay: { kind: "confirmProfilesInit" } });
+    expect(hints).toEqual([{ k: "y", label: "confirm" }, { k: "n", label: "cancel" }]);
   });
 
   test("every row is exactly cols wide", () => {
     for (const row of buildFrame(launchState(), size, t)) expect(displayWidth(row)).toBe(size.cols);
+  });
+
+  test("80x24 keeps all manual agents visible instead of collapsing the launch path", () => {
+    const frame = buildFrame(launchState(0, 2), { cols: 80, rows: 24 }, t).map(strip).join("\n");
+    expect(frame).toContain("manual agents");
+    expect(frame).toContain("claude");
+    expect(frame).toContain("opencode");
+    expect(frame).toContain("generic");
   });
 });
 
@@ -63,22 +87,26 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     expect(reduce(initialState(), parseKey("l")).state.tab).toBe("launch");
   });
 
-  test("arrows move the selection, clamped to the grid", () => {
-    expect(reduce(launchState(0), { name: "right" }).state.launch?.selected).toBe(1);
-    expect(reduce(launchState(0), { name: "down" }).state.launch?.selected).toBe(2); // +LAUNCH_COLS
-    expect(reduce(launchState(0), { name: "left" }).state.launch?.selected).toBe(0); // clamp low
-    expect(reduce(launchState(5), { name: "right" }).state.launch?.selected).toBe(5); // clamp high
+  test("arrows move the selection only while the manual-agent box is focused", () => {
+    expect(reduce(launchState(0, 2), { name: "right" }).state.launch?.selected).toBe(1);
+    expect(reduce(launchState(0, 2), { name: "down" }).state.launch?.selected).toBe(2); // +LAUNCH_COLS
+    expect(reduce(launchState(0, 2), { name: "left" }).state.launch?.selected).toBe(0); // clamp low
+    expect(reduce(launchState(5, 2), { name: "right" }).state.launch?.selected).toBe(5); // clamp high
+    expect(reduce(launchState(0, 0), { name: "right" }).state.launch?.selected).toBe(0);
   });
 
   test("grid navigation preserves the complete launch slice so refresh never crashes", () => {
-    const state = reduce(launchState(0), { name: "right" }).state;
+    const state = reduce(launchState(0, 2), { name: "right" }).state;
     expect(state.launch?.task).toBe("");
     expect(state.launch?.profile).toBeNull();
-    expect(reduce(state, parseKey("r")).effect).toBeUndefined();
+    const refresh = reduce(state, parseKey("r"));
+    expect(refresh.effect).toBeUndefined();
+    expect(refresh.state.launch?.error).toBe("Describe a task before refreshing task signals.");
   });
 
-  test("enter emits a launch effect for the selected agent", () => {
-    expect(reduce(launchState(1), { name: "enter" }).effect).toEqual({ type: "launch", agent: "codex", prompt: "" });
+  test("enter emits a launch effect only from the selected manual-agent box", () => {
+    expect(reduce(launchState(1, 2), { name: "enter" }).effect).toEqual({ type: "launch", agent: "codex", prompt: "" });
+    expect(reduce(launchState(1, 0), { name: "enter" }).state.overlay?.kind).toBe("launchTask");
   });
 
   test("t opens task composer and enter requests a Task Profile", () => {
@@ -91,7 +119,7 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
 
   test("a Task Profile never changes the manually selected agent", () => {
     const st: AppState = {
-      ...launchState(),
+      ...launchState(0, 2),
       launch: {
         selected: 0,
         task: "Summarize batch transcripts",
@@ -112,7 +140,7 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
 
   test("wizard selects explicit target/profile, previews a plan, and confirms before launch", () => {
     const st: AppState = {
-      ...launchState(),
+      ...launchState(0, 2),
       launch: {
         ...launchState().launch!,
         wizard: {
@@ -122,14 +150,15 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
         },
       },
     };
-    expect(reduce(st, { name: "enter" }).effect).toEqual({ type: "planLaunchWizard" });
+    const modal: AppState = { ...st, overlay: { kind: "launchWizard" } };
+    expect(reduce(modal, { name: "enter" }).effect).toEqual({ type: "planLaunchWizard" });
     const planned: AppState = { ...st, launch: { ...st.launch!, wizard: { ...st.launch!.wizard!, plan: { target: "opencode-openrouter", agent: "opencode", profile: "my-stack", capability: "coding", model: "deepseek/x", fallbackModels: [], cwd: "/tmp/project", ramClass: "heavy", costStatus: "untracked" } } } };
-    const review = reduce(planned, { name: "enter" });
+    const review = reduce({ ...planned, overlay: { kind: "launchWizard" } }, { name: "enter" });
     expect(review.state.overlay?.kind).toBe("confirmTargetLaunch");
     expect(reduce(review.state, parseKey("y")).effect).toEqual({ type: "requestTargetLaunch", plan: planned.launch!.wizard!.plan, intent: { prompt: "" } });
   });
 
-  test("wizard Tab reaches profile selection instead of being intercepted by the page focus ring", () => {
+  test("wizard Tab reaches profile selection inside its modal instead of the page focus ring", () => {
     const st: AppState = {
       ...launchState(),
       launch: {
@@ -141,7 +170,51 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
         },
       },
     };
-    expect(reduce(st, { name: "tab" }).state.launch?.wizard?.focus).toBe("profile");
+    const modal: AppState = { ...st, overlay: { kind: "launchWizard" } };
+    expect(reduce(modal, { name: "tab" }).state.launch?.wizard?.focus).toBe("profile");
+  });
+
+  test("wizard exposes all fields and returns to it after editing the directory", () => {
+    const st: AppState = {
+      ...launchState(),
+      overlay: { kind: "launchWizard" },
+      launch: {
+        ...launchState().launch!,
+        wizard: {
+          targets: [{ id: "opencode-openrouter", agent: "opencode", provider: "openrouter", ramClass: "heavy" }],
+          profiles: { initialized: true, profiles: [{ id: "my-stack", label: "My stack", provider: "openrouter", capabilities: ["coding", "review"], models: 1, evidence: { source: "user", asOf: "d" } }] },
+          targetSelected: 0, profileSelected: 0, capability: "coding", cwd: "/tmp/project", focus: "target", plan: null,
+        },
+      },
+    };
+    const capability = reduce(reduce(st, { name: "tab" }).state, { name: "tab" }).state;
+    expect(capability.launch?.wizard?.focus).toBe("capability");
+    expect(reduce(capability, { name: "right" }).state.launch?.wizard?.capability).toBe("review");
+    const cwd = reduce(reduce(capability, { name: "tab" }).state, { name: "enter" }).state;
+    expect(cwd.overlay?.kind).toBe("wizardCwd");
+    const saved = reduce({ ...cwd, overlay: { kind: "wizardCwd", line: lineFrom("/tmp/next"), returnToWizard: true } }, { name: "enter" });
+    expect(saved.state.overlay?.kind).toBe("launchWizard");
+    expect(saved.state.launch?.wizard?.cwd).toBe("/tmp/next");
+  });
+
+  test("wizard is a visible dialog with choices and never launches on open", () => {
+    const st: AppState = {
+      ...launchState(),
+      overlay: { kind: "launchWizard" },
+      launch: {
+        ...launchState().launch!,
+        wizard: {
+          targets: [{ id: "opencode-openrouter", agent: "opencode", provider: "openrouter", ramClass: "heavy" }],
+          profiles: { initialized: true, profiles: [{ id: "my-stack", label: "My stack", provider: "openrouter", capabilities: ["coding"], models: 1, evidence: { source: "user", asOf: "d" } }] },
+          targetSelected: 0, profileSelected: 0, capability: "coding", cwd: "/tmp/project", focus: "target", plan: null,
+        },
+      },
+    };
+    const frame = buildFrame(st, size, t).map(strip).join("\n");
+    expect(frame).toContain("guided launch");
+    expect(frame).toContain("opencode-openrouter");
+    expect(frame).toContain("My stack");
+    expect(reduce(st, { name: "enter" }).effect).toEqual({ type: "planLaunchWizard" });
   });
 
   test("first-use profile initialization is explicit: only y invokes the migration effect", () => {
@@ -152,7 +225,7 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
 
   test("governor override dialog: ONLY y proceeds (launchConfirmed); n/esc/enter do not", () => {
     const st: AppState = {
-      ...launchState(0),
+      ...launchState(0, 2),
       overlay: { kind: "confirmLaunch", agent: "codex", cwd: "/home/x/proj", reason: "2 heavy" },
     };
     const yes = reduce(st, parseKey("y"));
@@ -181,9 +254,10 @@ describe("G56-F2 — the reviewed task is captured, threaded, previewed and wire
   const PLAN = { target: "opencode-openrouter", agent: "opencode", profile: "my-stack", capability: "coding", model: "deepseek/x", fallbackModels: [] as string[], cwd: "/tmp/project", ramClass: "heavy", costStatus: "untracked" };
 
   function wizardWith(task: string, workflowId?: string): AppState {
-    const base = launchState();
+    const base = launchState(0, 1);
     return {
       ...base,
+      overlay: { kind: "launchWizard" },
       launch: {
         ...base.launch!,
         task,
@@ -222,7 +296,7 @@ describe("G56-F2 — the reviewed task is captured, threaded, previewed and wire
   });
 
   test("the manual grid launch also snapshots the reviewed task (no post-await re-read)", () => {
-    const base = launchState(1);
+    const base = launchState(1, 2);
     const st: AppState = { ...base, launch: { ...base.launch!, task: "manual task body" } };
     expect(reduce(st, { name: "enter" }).effect).toEqual({ type: "launch", agent: "codex", prompt: "manual task body" });
   });

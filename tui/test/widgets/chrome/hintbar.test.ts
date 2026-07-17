@@ -11,7 +11,7 @@ import { keyHint } from "../../../src/widgets/chrome/keyhint.ts";
 describe("hintBar", () => {
   const theme = makeTheme({ trueColor: true, ascii: false });
 
-  it("joins hints with a 2-cell gap, padded to exact width", () => {
+  it("joins hints with a 2-cell gap, centered and padded to exact width", () => {
     const hints = [
       { k: "tab", label: "panels" },
       { k: "/", label: "palette" },
@@ -19,7 +19,7 @@ describe("hintBar", () => {
     const row = hintBar({ hints }, theme, 40);
 
     const left = keyHint(hints[0], theme) + "  " + keyHint(hints[1], theme);
-    const expected = " " + padTo(left, 38) + " ";
+    const expected = " " + padTo(left, 38, "center") + " ";
     expect(row).toBe(expected);
     expect(displayWidth(row)).toBe(40);
   });
