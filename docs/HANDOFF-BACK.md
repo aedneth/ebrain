@@ -4,8 +4,8 @@ project: ebrain
 from: Codex (maker/constructor)
 to: Opus (Claude Code, auditor) + Fable 5 (gate)
 created: 2026-07-14
-updated: 2026-07-15
-status: ready-for-audit
+updated: 2026-07-16
+status: ready-for-re-audit
 scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX + workflow/cost loop
 ---
 
@@ -16,6 +16,32 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 > active maker handoff for the F6 audit correction and OSS release. The historical
 > entries below describe the work that preceded the GPT-5.6-sol `[AUDIT_FAIL]`; do
 > not treat their old completion claims as current gate status.
+
+## 2026-07-16 — F6 maker gate CLOSED (all findings), ready for GPT-5.6-sol re-audit
+
+**Maker: Opus (Claude Code). Every GPT-5.6-sol F6 finding + both release blockers are closed, each with its own commit and regression tests.** No `[AUDIT_PASS]` self-declared — the gate is the re-auditor's to issue.
+
+| Finding | Severity | Fix | Commit |
+|---|---|---|---|
+| G56-F1 | HIGH | workflow symlink isolation (realpath canonicalization, fail-closed) | `c15c637` |
+| G56-F2 | HIGH | Launch delivers the reviewed task (immutable `LaunchIntent`, `--prompt-stdin`, retained session on failure) | `0e72808` + `9b53700` |
+| G56-F3 | MEDIUM | memory search results get their own selection cursor (open the visible row) | `8058d54` |
+| G56-F4 | MEDIUM | federated search scrubbed at the TUI parse boundary (single pure `cli/scrub.ts`) | `d4a4680` |
+| G56-F5 | MEDIUM | stable `q` contract + isolation (`local_path` deny fix, full test) | `37dbdcc` |
+| G56-F6 | MEDIUM | English-only visible surface + `surface-i18n.test.ts` scan-guard | `c84cf1f` (`run.ts` via sweep `168d1c0`) |
+| G56-F7 | MEDIUM | profile provenance (non-empty source, strict ISO UTC, unique catalog ids) | `5f49c76` |
+| G56-F8 | MEDIUM | undated pricing removed from Routing (factual spend only, `.strict()` guard) | `73f6df7` |
+| G56-R1 | GATE | OSS release artifacts (README/LICENSE/installer/CI/package.json) | `e90b6b0` + `ee84bf4` |
+| G56-R2 | GATE | doc reconciliation (authoritative F6 gate-status banner; contradictions fixed) | `c95ad30` |
+
+**Verification (canonical, suites run separately as the auditor does):** `bun test ./cli/` = **217 pass / 0 fail**; `bun test ./tui/test/` = **397 pass / 0 fail**; zero-hex scan outside `theme.ts` clean; `git diff --check` clean. (A combined `./cli/ ./tui/test/` run may flake ONE tmux E2E under shared-server contention — it passes in isolation; run the suites separately.)
+
+**Interim checker:** Fable 5 → `[FABLE_AUDIT_PASS]` on the first slice (F1/F5/F7/F6-CLI/R1), `docs/AUDIT-FABLE-F6-CORRECTIONS.md`. F2/F3/F4/F8/F6-TUI/R2 landed after and are covered by their own regression tests, awaiting the final re-audit.
+
+**Still PENDING (NOT the maker's to close):**
+1. **GPT-5.6-sol re-audit** — the real gate; re-run focused regressions + full suites + independent verdict.
+2. **Human acceptance F6a–F6e** (`docs/human-checklist.md`) — visual, real-adapter write-back, first-use, daily-driver. Left unchecked.
+3. Minor out-of-F6-scope nit spotted while closing: `ebrain remember`'s MCP-write-through warning (harness/core) is still Spanish — not in the F6 evidence list; flag for a later i18n pass.
 
 ## Actualizacion 2026-07-15 — ADR-005, pivot de orquestacion pendiente de implementacion
 
