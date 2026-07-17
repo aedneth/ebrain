@@ -23,7 +23,7 @@ Regla de arquitectura: la TUI no lee YAML/JSONL ni secretos directo. Toda superf
 
 ## F6.6A — OpenRouter stack visible y operable `[x]`
 
-- [x] `ebrain routing --json`: contrato read-only para capacidades OpenRouter, chains winner/fallback/floor, pricing verificado cuando existe, gasto MTD por capability y comando operable.
+- [x] `ebrain routing --json`: contrato read-only para capacidades OpenRouter, chains winner/fallback/floor, gasto MTD por capability y comando operable. (G56-F8 2026-07-16: se removió el snapshot de pricing sin fecha — el contrato ya NO expone precios por-token ni costo estimado; solo gasto factual.)
 - [x] Routing tab consume el contrato nuevo y muestra cadenas reales; se elimina la nota “pending routing --json contract”.
 - [x] Tests: `cli/routing.test.ts`, `cli/contract.test.ts`, `tui/test/knowledge/contracts.test.ts`, `tui/test/knowledge/panels.test.ts`.
 - Verify vivo: `ebrain routing --json` muestra 7 capabilities (`coding`, `agentic`, `web_design`, `reasoning`, `long_context`, `terminal`, `general`) con slugs reales del stack chino.
@@ -93,11 +93,13 @@ Regla de arquitectura: la TUI no lee YAML/JSONL ni secretos directo. Toda superf
 - [x] Confirmacion explicita antes de `targets launch`; el gobernador RAM agrega una segunda confirmacion cuando corresponde. La deny-list literal se bloquea en UI y `newSession` conserva el chequeo `realpath` autoritativo.
 - **Verify:** reducer/render tests del wizard y regresion de `r`; contracts de profiles/targets; suites completas.
 
-## F6.6.5 — Prompt composer y evidencia operativa `[ ]`
+## F6.6.5 — Prompt composer y evidencia operativa `[x]` (maker-complete; gate F6.6 pendiente de re-audit)
 
-- [ ] Composer multiline -> sesion target -> preview de pane -> confirmacion -> `sessions send` exacto.
-- [ ] Historial local factual de lanzamientos, sin prompt ni secretos; no aprende ni cambia perfiles automaticamente.
-- [ ] Esquema opcional de benchmark/evidencia con fuente, fecha, version y tarea; solo informativo.
+> Reconciliado 2026-07-16 (G56-R2): este bloque estaba `[ ]` acá pero `[x]` en `SPRINT-TUI.md` 6.6.5 — contradicción. El composer, la entrega exacta y el schema de evidencia SÍ están implementados y testeados (Sessions `p` + `sendToSession`; la entrega de la tarea revisada quedó cerrada en G56-F2). Se marca maker-complete; la aceptación del GATE F6.6 sigue pendiente del re-audit de GPT-5.6-sol.
+
+- [x] Composer multiline -> sesion target -> preview de pane -> confirmacion -> `sessions send` exacto.
+- [x] Historial local factual de lanzamientos, sin prompt ni secretos; no aprende ni cambia perfiles automaticamente.
+- [x] Esquema opcional de benchmark/evidencia con fuente, fecha, version y tarea; solo informativo.
 - **Verify:** fake-agent recibe bytes exactos; schema rechaza evidencia sin procedencia/fecha y el historial no contiene prompts.
 
 ## Gates

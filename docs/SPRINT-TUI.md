@@ -17,6 +17,19 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
 
 ━━━
 
+> ## ⚠ F6 GATE STATUS — reconciled 2026-07-16 (G56-R2, source of truth)
+>
+> The F6.6/F6.7 gate is **NOT accepted**. Read the per-line `[x]` marks below as **maker evidence
+> complete**, not as an accepted gate. Authoritative status:
+>
+> - **GPT-5.6-sol audit 2026-07-15:** `[AUDIT_FAIL]` — 8 findings (G56-F1..F8) + 2 blockers (R1/R2). See `AUDIT-GPT-5.6-SOL-F6.md`.
+> - **Maker corrections (Opus, 2026-07-16):** G56-F1..F8 closed + R1 shipped, each with its own commit and regression tests — see `CHANGELOG.md`. F8 removed the undated pricing snapshot, so any older "pricing verificado" claim below is superseded.
+> - **Still PENDING (do not mark done):** (1) the **GPT-5.6-sol re-audit** — the real gate, never self-declared; (2) **human acceptance F6a–F6e** in `human-checklist.md` (visual, real-adapter write-back, first-use, daily-driver) — automated evidence cannot substitute these; (3) gates **6.6.7** and **6.7.6** stay `[!]` until (1) lands.
+>
+> If a line elsewhere in this file or in `SPRINT-ORCHESTRATION.md` contradicts this block, **this block wins.**
+
+━━━
+
 ## FASE 6.0 — Reverse engineering de las TUIs de referencia
 
 > Mismo método que F0 con gbrain/gstack: leer el código real (open source) u observar la conducta (cerradas), documentar en `discovery/`, sintetizar requisitos. Rubrica común para TODAS: (a) anatomía de layout (home/wordmark, prompt box, status/hint bar, footer), (b) modelo de input (keybinds, modos, palette), (c) sistema de slash commands, (d) theming/tokens, (e) modelo de sesiones/tabs, (f) stack de render y por qué, (g) qué robar / qué evitar.
@@ -87,7 +100,7 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
 
 ## FASE 6.6 — Orquestación + advisor v1
 
-- [x] 6.6A **OpenRouter stack visible y operable** (Codex 2026-07-15): nuevo contrato `ebrain routing --json` con capacidades, chains winner/fallback/floor, pricing verificado, gasto MTD y comando operable. Routing tab consume ese contrato y ya muestra modelos reales del stack chino, no una nota “pendiente”. **Verify:** `cli/routing.test.ts`, `cli/contract.test.ts`, `tui/test/knowledge/{contracts,panels}.test.ts`; smoke vivo `ebrain routing --json` muestra 7 capabilities.
+- [x] 6.6A **OpenRouter stack visible y operable** (Codex 2026-07-15; reconciliado por G56-F8 2026-07-16): contrato `ebrain routing --json` con capacidades, chains winner/fallback/floor, gasto MTD factual y comando operable. **G56-F8 removió el snapshot de pricing sin fecha**: routing ya NO expone precios por-token ni un costo estimado (eran cifras sin fuente/fecha que parecían billing verificado); el costo se reporta solo como gasto MTD factual + el ledger `cost`. Routing tab muestra modelos reales del stack, no una nota “pendiente”. **Verify:** `cli/routing.test.ts`, `cli/contract.test.ts` (schema `.strict()` que rechaza pricing/est reintroducidos), `tui/test/knowledge/{contracts,panels}.test.ts`.
 - [x] 6.6B **Launch task router** (Codex 2026-07-15): Launch conserva el grid manual de agentes y suma composer `t` → `ebrain advise --json`; muestra task/capability/lane/agent/model/costo/razón; Enter con `one_shot_route` confirma costo y ejecuta `ebrain route --json --cap`; Enter con sesión lanza agente recomendado y envía el prompt inicial. Frontier sigue confirm-only. **Verify:** `tui/test/launch.test.ts`.
 - [x] 6.6.1 **Task Profile (ADR-005):** `ebrain task-profile --json` clasifica senales/capability explicables; `advise` es alias compatible. La TUI ya no recibe una recomendacion y Enter conserva el agente manualmente seleccionado. Sin “mejor modelo”, creditos, suscripciones ni auto-routing. **Verify:** CLI 161/0, TUI 371/0, contratos/fixtures + smokes del comando y alias.
 - [x] 6.6.2 **Perfiles locales + catalogo:** `profiles init` migra routing de forma explicita; `catalog-add` registra fuente/fecha y `create` guarda ordenes elegidos por el usuario. Store `700/600`, sin secretos, sin default universal. **Verify:** tests de schema/permisos + smoke temporal.
@@ -95,7 +108,7 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
 - [x] 6.6.4 **Launch Wizard completo:** `w` carga targets/perfiles contractuales; seleccion explicita, capability ajustable, cwd editable, preview de norms/memoria/MCP/workflow/RAM/modelo y doble confirmacion RAM. `r` ya no crashea tras navegar el grid. **Verify:** reducer/render + contracts + suites completas.
 - [x] 6.6.5 **Prompt composer + evidencia:** Sessions `p` abre composer multilinea (paste preservado o Alt+Enter), Enter previsualiza y solo `y` entrega los bytes exactos por `sendToSession`; el draft queda exclusivamente en memoria y no entra a historial/telemetria. `cli/benchmark-evidence.ts` define schema opcional estricto con source/as_of/version/task_scope/metricas, sin winner/ranking/politica de routing. **Verify:** reducer payload exacto, multilinea, cancelacion y privacidad; parser rechaza campos secretos/routing. Fix adicional: Launch manual toma su task del slice existente, eliminando `initialPrompt` indefinido; `w` explica el `profiles init --yes` requerido y Tab enfoca target/perfil correctamente.
 - [x] 6.6.6 Fixture de **10 tareas canónicas:** `cli/task-profile.fixtures.ts` cubre coding, agentic, web design, long context, terminal y general con diez tareas versionadas. El test valida señales literales, capability y modos compatibles; prohíbe campos de agente/modelo/ranking/costo. **Verify:** 10/10 sin ranking implícito. Gotchas visibles y cubiertos: `script` coincide dentro de `TypeScript`; `tool` no sustituye el keyword específico `tool-call`.
-- [!] 6.6.7 **GATE F6.6 (ADR-005)**. **`[AUDIT_FAIL]` GPT-5.6-sol 2026-07-15** — Launch drops the reviewed task/workflow, Memory search navigation is inconsistent, search output is not scrubbed, and English/provenance/q-contract requirements are incomplete. See `AUDIT-GPT-5.6-SOL-F6.md`.
+- [!] 6.6.7 **GATE F6.6 (ADR-005) — PENDING re-audit.** **`[AUDIT_FAIL]` GPT-5.6-sol 2026-07-15** — Launch drops the reviewed task/workflow, Memory search navigation is inconsistent, search output is not scrubbed, and English/provenance/q-contract requirements are incomplete. **Maker corrections G56-F1..F8 + R1 have since landed** (Opus 2026-07-16, per-finding commits — see `CHANGELOG.md` and `AUDIT-GPT-5.6-SOL-F6.md`); the gate stays open until GPT-5.6-sol re-runs the focused regressions + full suites and issues an independent verdict. No `[AUDIT_PASS]` is self-declared.
 - [x] 6.6C/D **Workflows/skills + learning loop:** contrato `ebrain workflows`, panel Memory (browse/materialize/attach), captura de candidatos y skillify con `--yes`; ver `docs/SPRINT-ORCHESTRATION.md` y `WORKFLOW-LEARNING-LOOP.md`.
 - [x] 6.6E **Cost ledger v2:** `ebrain cost --json` normaliza tokens/USD por provider/agente/modelo/sesión/workflow; Routing `c` abre la vista Cost. No se infiere costo de suscripciones; ver `COST-LEDGER.md`.
 
@@ -106,7 +119,7 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
 - [x] 6.7.3 Docs: `tui/README.md` documenta los keybindings reales por vista, el composer, signals y el wizard first-use; `docs/runbook.md` enlaza la operación TUI. `?` sigue siendo la ayuda generada desde `COMMANDS` y la hint bar expone controles contextuales. **Verify:** docs en inglés y coherentes con `commands.ts`/reducer.
 - [x] 6.7.4 `docs/f6-success-criteria.md`: **8/8 criterios con evidencia** (formato F5), actualizado para ADR-005: las diez tareas validan señales/modos, no un ganador. Cada fila distingue evidencia automática de los dos pasos humanos inevitables (write-back Claude y round-trip cross-agent). **Verify:** tabla completa; aceptación final pendiente de GPT-5.6-sol.
 - [x] 6.7.5 Retro → `docs/F6-RETRO.md` (artefacto OSS versionado) + learnings durable en `ebrain remember`; el vault privado no se replica en este repo. **Verify:** nota commiteada.
-- [!] 6.7.6 CHANGELOG ebrain actualizado por cada corte. **GATE F6.7 — `[AUDIT_FAIL]` GPT-5.6-sol 2026-07-15**; maker corrections and independent re-audit required. See `AUDIT-GPT-5.6-SOL-F6.md`.
+- [!] 6.7.6 CHANGELOG ebrain actualizado por cada corte. **GATE F6.7 — PENDING re-audit. `[AUDIT_FAIL]` GPT-5.6-sol 2026-07-15**; maker corrections G56-F1..F8 + R1 have since landed (Opus 2026-07-16, per-finding commits in `CHANGELOG.md`). The independent re-audit + human acceptance (F6a-e in `human-checklist.md`) are still required before this gate closes. See `AUDIT-GPT-5.6-SOL-F6.md`.
 - [x] 6.7.7 Checklist humano F6 (append a `docs/human-checklist.md`): aceptación visual vs mockups, write-back real, wizard first-use, daily driver y paquete de auditoría.
 
 ━━━
