@@ -14,10 +14,11 @@ Maker session on the GPT-5.6-sol F6 findings. Committed, each with focused tests
 - **G56-F6 (partial)** — English CLI-visible strings in `workflows.ts` and `profiles.ts`.
 - **G56-R1 (docs)** (`e90b6b0`) — public landing-page `README.md` (English, outcome-first, implicit differentiation, "Built with Codex & GPT-5.6"), `LICENSE` (MIT), `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `docs/ROADMAP.md`, `AGENTS.md` (rendered from NORMS.md), and `docs/devpost-submission.md` + `docs/devpost-polish-plan.md` for the OpenAI Build Week (Developer Tools) submission.
 - **G56-R1 (installer/CI)** (`ee84bf4`) — `scripts/install.sh` (POSIX `curl|sh` → `ebrain up`, idempotent, gbrain pin `a25209b`, test overrides) + hermetic `cli/install.test.ts`, `.github/workflows/ci.yml`, and public `package.json` metadata (zod preserved, lockfile consistent).
+- **G56-F2 (HIGH) Launch delivers the reviewed task** — CLI half (`0e72808`): `ebrain targets launch --prompt-stdin --workflow` delivers the task over stdin via `sendToSession`, retains the session on a `prompt-send` failure (never echoes the prompt), and attributes the workflow on the untracked event. TUI half (`9b53700` + `a51b6d7` sweep): an immutable `LaunchIntent {prompt, workflowId}` is snapshotted at the reducer boundary and threaded through both confirm overlays + effects; the preview now shows the exact task + workflow; the manual path uses the snapshot (no post-await re-read).
 
 **Interim independent audit:** Fable 5 returned **`[FABLE_AUDIT_PASS]`** for this slice (F1/F5/F7/F6-CLI/R1) with its own reproductions — `docs/AUDIT-FABLE-F6-CORRECTIONS.md`. Found F-CF-1 (installer test cold-run timeout) and F-CF-2 (README roadmap + changelog count stale), both fixed.
 
-**Still open for this correction:** F2 (Launch intent delivery), F3 (Memory search selection), F4 (search scrub in `parseSearch`), F8 (static pricing), remaining F6 TUI-visible strings, R2 doc reconciliation. Final gate still requires GPT-5.6-sol re-audit. No `[AUDIT_PASS]` self-declared; human acceptance unchecked.
+**Still open for this correction:** F3 (Memory search selection), F4 (search scrub in `parseSearch`), F8 (static pricing), remaining F6 TUI-visible strings, R2 doc reconciliation. Final gate still requires GPT-5.6-sol re-audit. No `[AUDIT_PASS]` self-declared; human acceptance unchecked.
 
 ---
 
