@@ -173,26 +173,27 @@ describe("6.1.3 spend --json", () => {
 });
 
 // ── 6.6A ebrain routing --json ───────────────────────────────────────────────
+// Strict on purpose: the routing contract must carry NO per-token price snapshot and NO
+// cost estimate (G56-F8). A reintroduced `pricing`/`est_typical_usd` field breaks the schema.
 const RoutingModelSchema = z.object({
   role: z.enum(["winner", "fallback", "floor"]),
   slug: z.string(),
   free: z.boolean(),
   frontier: z.boolean(),
-  pricing: z.object({ input_per_m: z.number(), output_per_m: z.number() }).nullable(),
-});
+}).strict();
+const RoutingCapabilitySchema = z.object({
+  capability: z.string(),
+  mtd: z.number(),
+  routes: z.number().int().nonnegative(),
+  command: z.string(),
+  models: z.array(RoutingModelSchema).min(1),
+}).strict();
 const RoutingSchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/),
   budget: z.object({ monthly_usd: z.number(), hard_stop: z.boolean() }),
   mtd: z.number(),
   remaining: z.number(),
-  capabilities: z.array(z.object({
-    capability: z.string(),
-    mtd: z.number(),
-    routes: z.number().int().nonnegative(),
-    command: z.string(),
-    est_typical_usd: z.number().nullable(),
-    models: z.array(RoutingModelSchema).min(1),
-  })),
+  capabilities: z.array(RoutingCapabilitySchema),
   gbrain_untracked: z.literal(true),
 });
 
@@ -207,11 +208,10 @@ const routingFixture = {
       mtd: 0.001253,
       routes: 2,
       command: 'ebrain route --cap coding "<prompt>"',
-      est_typical_usd: 0.00261,
       models: [
-        { role: "winner", slug: "deepseek/deepseek-v4-pro", free: false, frontier: false, pricing: { input_per_m: 0.435, output_per_m: 0.87 } },
-        { role: "fallback", slug: "deepseek/deepseek-v4-flash", free: false, frontier: false, pricing: { input_per_m: 0.077, output_per_m: 0.154 } },
-        { role: "floor", slug: "qwen/qwen3-coder:free", free: true, frontier: false, pricing: { input_per_m: 0, output_per_m: 0 } },
+        { role: "winner", slug: "deepseek/deepseek-v4-pro", free: false, frontier: false },
+        { role: "fallback", slug: "deepseek/deepseek-v4-flash", free: false, frontier: false },
+        { role: "floor", slug: "qwen/qwen3-coder:free", free: true, frontier: false },
       ],
     },
   ],
@@ -222,15 +222,20 @@ describe("6.6A routing --json", () => {
   test("fixture pasa el schema", () => {
     expect(() => RoutingSchema.parse(routingFixture)).not.toThrow();
   });
-  test("modelo sin pricing debe explicitar null, no omitir el campo", () => {
-    const fixture = {
+  test("reintroducir un price snapshot o cost estimate rompe el contrato (G56-F8)", () => {
+    const withPricing = {
       ...routingFixture,
       capabilities: [{
         ...routingFixture.capabilities[0],
-        models: [{ ...routingFixture.capabilities[0].models[0], pricing: null }],
+        models: [{ ...routingFixture.capabilities[0].models[0], pricing: { input_per_m: 0.435, output_per_m: 0.87 } }],
       }],
     };
-    expect(RoutingSchema.safeParse(fixture).success).toBe(true);
+    expect(RoutingSchema.safeParse(withPricing).success).toBe(false);
+    const withEst = {
+      ...routingFixture,
+      capabilities: [{ ...routingFixture.capabilities[0], est_typical_usd: 0.0026 }],
+    };
+    expect(RoutingSchema.safeParse(withEst).success).toBe(false);
   });
   test("role inválido falla", () => {
     const fixture = {

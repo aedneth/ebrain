@@ -137,7 +137,7 @@ describe("parseSpend (spend --json)", () => {
 });
 
 describe("parseRouting (routing --json)", () => {
-  test("normalizes chains and pricing", () => {
+  test("normalizes chains to factual fields only — no price snapshot survives (G56-F8)", () => {
     const d = parseRouting({
       month: "2026-07",
       budget: { monthly_usd: 10, hard_stop: true },
@@ -149,6 +149,7 @@ describe("parseRouting (routing --json)", () => {
         mtd: 0.001,
         routes: 2,
         command: 'ebrain route --cap coding "<prompt>"',
+        // Even if a stale producer emits pricing/est, the parser must drop them.
         est_typical_usd: 0.0026,
         models: [
           { role: "winner", slug: "deepseek/deepseek-v4-pro", free: false, frontier: false, pricing: { input_per_m: 0.435, output_per_m: 0.87 } },
@@ -156,7 +157,9 @@ describe("parseRouting (routing --json)", () => {
         ],
       }],
     })!;
-    expect(d.capabilities[0]!.models[0]!.pricing).toEqual({ inputPerM: 0.435, outputPerM: 0.87 });
+    expect(d.capabilities[0]!.models[0]).toEqual({ role: "winner", slug: "deepseek/deepseek-v4-pro", free: false, frontier: false });
+    expect(d.capabilities[0]!.models[0]).not.toHaveProperty("pricing");
+    expect(d.capabilities[0]!).not.toHaveProperty("estTypicalUsd");
     expect(d.byCap[0]).toEqual({ capability: "coding", mtd: 0.001, routes: 2 });
   });
 });

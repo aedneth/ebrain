@@ -24,10 +24,13 @@ describe("routing overview contract", () => {
     expect(coding.command).toBe('ebrain route --cap coding "<prompt>"');
     expect(coding.mtd).toBe(0.125);
     expect(coding.routes).toBe(2);
-    expect(coding.est_typical_usd).not.toBeNull();
     expect(coding.models.map((m) => m.role)).toEqual(["winner", "fallback", "floor"]);
-    expect(coding.models[0].pricing).toEqual({ input_per_m: 0.435, output_per_m: 0.87 });
+    // No undated price snapshot or cost estimate is emitted (G56-F8): only factual fields.
+    expect(coding).not.toHaveProperty("est_typical_usd");
+    expect(coding.models[0]).not.toHaveProperty("pricing");
+    // `free` is asserted only from the slug (`:free`), never inferred from a price table.
     expect(coding.models[2].free).toBe(true);
+    expect(coding.models[0].free).toBe(false);
 
     const terminal = payload.capabilities.find((c) => c.capability === "terminal")!;
     expect(terminal.mtd).toBe(0);

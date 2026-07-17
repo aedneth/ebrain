@@ -181,15 +181,15 @@ export interface RoutingModel {
   slug: string;
   free: boolean;
   frontier: boolean;
-  pricing: { inputPerM: number; outputPerM: number } | null;
 }
 
+// No per-token price snapshot and no cost estimate: those were undated/unsourced numbers that
+// read like verified billing (G56-F8). Cost surfaces ONLY as factual MTD spend + the cost ledger.
 export interface RoutingCapability {
   capability: string;
   mtd: number;
   routes: number;
   command: string;
-  estTypicalUsd: number | null;
   models: RoutingModel[];
 }
 
@@ -236,19 +236,12 @@ export function parseRouting(j: unknown): RoutingData | null {
       mtd: asNum(c.mtd),
       routes: asNum(c.routes),
       command: asStr(c.command),
-      estTypicalUsd: typeof c.est_typical_usd === "number" ? c.est_typical_usd : null,
-      models: asArr(c.models).filter(isObj).map((m) => {
-        const pricing = isObj(m.pricing) ? m.pricing : null;
-        return {
-          role: asRoutingRole(m.role),
-          slug: asStr(m.slug, "?"),
-          free: asBool(m.free),
-          frontier: asBool(m.frontier),
-          pricing: pricing
-            ? { inputPerM: asNum(pricing.input_per_m), outputPerM: asNum(pricing.output_per_m) }
-            : null,
-        };
-      }),
+      models: asArr(c.models).filter(isObj).map((m) => ({
+        role: asRoutingRole(m.role),
+        slug: asStr(m.slug, "?"),
+        free: asBool(m.free),
+        frontier: asBool(m.frontier),
+      })),
     }));
   return {
     ...base,

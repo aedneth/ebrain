@@ -2038,19 +2038,18 @@ export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): str
 
   // Left: per-capability spend table + total line.
   const selected = clampIndex(r.selected, Math.max(1, d.capabilities.length));
+  // Only factual, provider-reported MTD spend is shown — no undated cost estimate (G56-F8).
   const rows = d.capabilities.map((c) => ({
     cap: c.capability,
     routes: String(c.routes),
     mtd: "$" + c.mtd.toFixed(3),
-    est: c.estTypicalUsd == null ? "n/d" : "$" + c.estTypicalUsd.toFixed(4),
   }));
   const tableRows = table(
     {
       columns: [
-        { key: "cap", label: "capability", width: 15 },
-        { key: "routes", label: "routes", width: 6, align: "right" },
-        { key: "mtd", label: "mtd", width: 9, align: "right" },
-        { key: "est", label: "est", width: 9, align: "right" },
+        { key: "cap", label: "capability", width: 18 },
+        { key: "routes", label: "routes", width: 8, align: "right" },
+        { key: "mtd", label: "mtd", width: 10, align: "right" },
       ],
       rows,
       selected,
@@ -2063,7 +2062,7 @@ export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): str
     theme.fg("text.muted") + " / $" + d.cap.toFixed(2) + theme.reset;
   const leftBody = [...tableRows, "", totalLine];
   const leftPanel = panel(
-    { title: "OpenRouter caps · spend + est.", focus: true, width: leftRect.width, height, body: leftBody },
+    { title: "OpenRouter caps · spend", focus: true, width: leftRect.width, height, body: leftBody },
     theme,
   );
 
@@ -2086,9 +2085,10 @@ export function buildRoutingView(r: RoutingSlice, rect: Rect, theme: Theme): str
     budgetBody.push(theme.fg("text.primary") + selectedCap.capability + theme.reset);
     for (const m of selectedCap.models.slice(0, 3)) {
       const tone = m.role === "winner" ? "semantic.ok" : m.role === "floor" ? "text.muted" : "text.secondary";
-      const price = m.pricing ? `$${m.pricing.inputPerM}/$${m.pricing.outputPerM}M` : "pricing n/d";
-      budgetBody.push(theme.fg(tone as any) + m.role.padEnd(8) + theme.reset + truncate(m.slug, Math.max(10, rightRect.width - 18)));
-      budgetBody.push(theme.fg("text.muted") + "         " + price + (m.free ? " · free" : "") + theme.reset);
+      // Only factual, slug/chain-derived flags — no price snapshot (G56-F8).
+      const tag = m.free ? " · free" : m.frontier ? " · frontier" : "";
+      const slugW = Math.max(8, rightRect.width - 8 - displayWidth(tag) - 2);
+      budgetBody.push(theme.fg(tone as any) + m.role.padEnd(8) + theme.reset + truncate(m.slug, slugW) + theme.fg("text.muted") + tag + theme.reset);
     }
     budgetBody.push("");
     budgetBody.push(theme.fg("text.secondary") + truncate(selectedCap.command, Math.max(10, rightRect.width - 4)) + theme.reset);

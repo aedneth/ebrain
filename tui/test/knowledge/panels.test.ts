@@ -219,11 +219,10 @@ describe("Routing panel (6.6A)", () => {
             mtd: 1.253,
             routes: 2,
             command: 'ebrain route --cap coding "<prompt>"',
-            estTypicalUsd: 0.0026,
             models: [
-              { role: "winner", slug: "deepseek/deepseek-v4-pro", free: false, frontier: false, pricing: { inputPerM: 0.435, outputPerM: 0.87 } },
-              { role: "fallback", slug: "deepseek/deepseek-v4-flash", free: false, frontier: false, pricing: { inputPerM: 0.077, outputPerM: 0.154 } },
-              { role: "floor", slug: "qwen/qwen3-coder:free", free: true, frontier: false, pricing: { inputPerM: 0, outputPerM: 0 } },
+              { role: "winner", slug: "deepseek/deepseek-v4-pro", free: false, frontier: false },
+              { role: "fallback", slug: "deepseek/deepseek-v4-flash", free: false, frontier: false },
+              { role: "floor", slug: "qwen/qwen3-coder:free", free: true, frontier: false },
             ],
           },
           {
@@ -231,9 +230,8 @@ describe("Routing panel (6.6A)", () => {
             mtd: 0.521,
             routes: 1,
             command: 'ebrain route --cap general "<prompt>"',
-            estTypicalUsd: 0.0094,
             models: [
-              { role: "winner", slug: "qwen/qwen3.7-max", free: false, frontier: false, pricing: { inputPerM: 1.25, outputPerM: 3.75 } },
+              { role: "winner", slug: "qwen/qwen3.7-max", free: false, frontier: false },
             ],
           },
         ],
@@ -253,6 +251,16 @@ describe("Routing panel (6.6A)", () => {
     expect(t).toContain("gbrain: untracked spend");
     expect(t).toContain("deepseek/deepseek-v4-pro");
     expect(t).toContain("ebrain route --cap coding");
+  });
+
+  it("shows only factual spend — no undated price snapshot or cost estimate (G56-F8)", () => {
+    const t = frameText(state);
+    expect(t).toContain("OpenRouter caps · spend");
+    expect(t).not.toContain("· est");        // the old table's est column header
+    expect(t).not.toContain("/$0.87M");       // the old per-token price line
+    expect(t).not.toContain("pricing n/d");
+    // `free` (slug-derived) is still surfaced, since it is factual.
+    expect(t).toContain("free");
   });
 });
 
@@ -408,8 +416,8 @@ describe("reduce — knowledge-panel keys", () => {
         data: {
           month: "m", mtd: 0, cap: 10, remaining: 10, hardStop: true, byCap: [{ capability: "a", mtd: 0, routes: 0 }, { capability: "b", mtd: 0, routes: 0 }],
           capabilities: [
-            { capability: "a", mtd: 0, routes: 0, command: "ebrain route --cap a", estTypicalUsd: null, models: [{ role: "winner", slug: "a/model", free: false, frontier: false, pricing: null }] },
-            { capability: "b", mtd: 0, routes: 0, command: "ebrain route --cap b", estTypicalUsd: null, models: [{ role: "winner", slug: "b/model", free: false, frontier: false, pricing: null }] },
+            { capability: "a", mtd: 0, routes: 0, command: "ebrain route --cap a", models: [{ role: "winner", slug: "a/model", free: false, frontier: false }] },
+            { capability: "b", mtd: 0, routes: 0, command: "ebrain route --cap b", models: [{ role: "winner", slug: "b/model", free: false, frontier: false }] },
           ],
           gbrainUntracked: false,
         },
