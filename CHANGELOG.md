@@ -22,7 +22,7 @@ Maker session on the GPT-5.6-sol F6 findings. Every finding G56-F1..F8 + blocker
 
 **Interim independent audit:** Fable 5 returned **`[FABLE_AUDIT_PASS]`** for the first slice (F1/F5/F7/F6-CLI/R1) with its own reproductions — `docs/AUDIT-FABLE-F6-CORRECTIONS.md`. Found F-CF-1 (installer test cold-run timeout) and F-CF-2 (README roadmap + changelog count stale), both fixed. F2/F3/F4/F8/F6-TUI/R2 landed after that pass and still await the final re-audit.
 
-**Maker gate COMPLETE — final acceptance still PENDING:** all 8 findings (G56-F1..F8) + both blockers (R1/R2) are closed with per-finding commits + regression tests. The gate itself is NOT self-declared: it still requires (1) the independent **GPT-5.6-sol re-audit** and (2) **human acceptance F6a-e** (`docs/human-checklist.md`). No `[AUDIT_PASS]` declared by the maker.
+**Maker gate COMPLETE + independent re-audit PASSED (`33710a9`):** all 8 findings (G56-F1..F8) + both blockers (R1/R2) are closed with per-finding commits + regression tests, and an **independent gate re-audit reproduced every finding with its own fixtures and returned `[AUDIT_PASS]`** (CLI 217/0, TUI 397/0, zero-hex clean, diff clean) — not self-declared by the maker. It surfaced one LOW follow-up **F-CF-3** (`q` failure messages ran only the weak `redactSecrets`; a bare assignment could survive) + 3 doc/schema nits; all closed by the maker in `0c887c4` (compose `scrubSecrets(redactSecrets(...))` + test; routing header/`.strict()`/SPRINT-TUI nits). **Final acceptance still PENDING** and NOT substituted by automated evidence: **human acceptance F6a-e** (`docs/human-checklist.md`) — visual, real-adapter write-back, first-use, daily-driver.
 
 ---
 
