@@ -37,7 +37,7 @@ import { statusBar, statusSep, tabBar, hintBar, footer } from "./widgets/chrome/
 import { panel } from "./widgets/layout/panel.js";
 import { gauge } from "./widgets/core/gauge.js";
 
-import { TABS, type TabName, hintsForTab, COMMANDS, type Command } from "./commands.js";
+import { TABS, type TabName, hintsForTab, COMMANDS, type Command, type HintEntry } from "./commands.js";
 import {
   type PaletteState,
   emptyPaletteState,
@@ -297,7 +297,10 @@ export type Overlay =
   | { kind: "prompt"; name: string; draft: ComposerState }
   | { kind: "confirmSend"; name: string; text: string }
   | { kind: "confirmLaunch"; agent: string; cwd: string; reason: string }
-  | { kind: "wizardCwd"; line: LineState }
+  /** The guided target/profile workflow. Its selections live in LaunchSlice. */
+  | { kind: "launchWizard" }
+  /** Directory editor entered from the wizard; completion returns to that wizard. */
+  | { kind: "wizardCwd"; line: LineState; returnToWizard: boolean }
   | { kind: "confirmTargetLaunch"; plan: TargetPlanData; intent: LaunchIntent }
   | { kind: "confirmTargetGovernor"; plan: TargetPlanData; intent: LaunchIntent; reason: string }
   | { kind: "confirmProfilesInit" }
@@ -325,7 +328,8 @@ export interface LaunchWizard {
   profileSelected: number;
   capability: string;
   cwd: string;
-  focus: "target" | "profile";
+  /** Tab cycles all four user-owned fields in the dialog. */
+  focus: "target" | "profile" | "capability" | "cwd";
   plan: TargetPlanData | null;
 }
 
@@ -439,7 +443,7 @@ export function initialState(): AppState {
 const REGIONS: Record<TabName, readonly string[]> = {
   home: ["sessions", "memories", "system"],
   sessions: ["list"],
-  launch: ["grid"],
+  launch: ["task", "guided", "agents"],
   memory: ["results", "workflows", "logs"],
   routing: ["caps"],
   doctor: ["checks", "fleet"],
@@ -658,6 +662,16 @@ function drillIn(state: AppState): ReduceResult {
   const region = focusedRegion(state);
   const clear = { ...state, confirmQuit: false };
 
+  // Launch has three explicit decision areas. Enter acts only on the focused area,
+  // so selecting a task or guided configuration can never accidentally start an agent.
+  if (state.tab === "launch") {
+    if (region === "task") {
+      return settle({ ...clear, overlay: { kind: "launchTask", line: lineFrom(launchOf(state).task) } });
+    }
+    if (region === "guided") return settle(clear, { type: "openLaunchWizard" });
+    if (region === "agents") return launchEnter(state);
+  }
+
   // Attach the selected session — from the Sessions list OR home's active-sessions box.
   if ((state.tab === "sessions" && region === "list") || (state.tab === "home" && region === "sessions")) {
     const sel = sessionsOf(state).rows[sessionsOf(state).selected];
@@ -709,6 +723,64 @@ function launchEnter(state: AppState): ReduceResult {
 function wizardOf(launch: LaunchSlice): LaunchWizard | null { return launch.wizard ?? null; }
 function selectedWizardTarget(wizard: LaunchWizard): TargetData | undefined { return wizard.targets[wizard.targetSelected]; }
 function selectedWizardProfile(wizard: LaunchWizard): ProfileSummaryData | undefined { return wizard.profiles.profiles[wizard.profileSelected]; }
+
+const WIZARD_FIELDS: readonly LaunchWizard["focus"][] = ["target", "profile", "capability", "cwd"];
+
+function cycleWizardFocus(focus: LaunchWizard["focus"], delta: number): LaunchWizard["focus"] {
+  const current = Math.max(0, WIZARD_FIELDS.indexOf(focus));
+  return WIZARD_FIELDS[(current + delta + WIZARD_FIELDS.length) % WIZARD_FIELDS.length]!;
+}
+
+function cycleIndex(current: number, count: number, delta: number): number {
+  if (count <= 0) return 0;
+  return (current + delta + count) % count;
+}
+
+/** Compact, contextual controls: the footer is intentionally capped at six actions.
+ * More complete per-view guidance stays available through the action reference (`?`). */
+export function hintsForState(state: AppState): HintEntry[] {
+  const overlay = state.overlay;
+  if (overlay?.kind === "launchWizard") {
+    return [
+      { k: "tab", label: "field" },
+      { k: "↑↓", label: "select" },
+      { k: "c", label: "directory" },
+      { k: "enter", label: "preview" },
+      { k: "esc", label: "cancel" },
+    ];
+  }
+  if (overlay?.kind === "wizardCwd") return [{ k: "enter", label: "save" }, { k: "esc", label: "back to wizard" }];
+  if (overlay?.kind === "launchTask") return [{ k: "enter", label: "analyze signals" }, { k: "esc", label: "cancel" }];
+  if (overlay) return [{ k: "enter", label: "confirm" }, { k: "esc", label: "cancel" }];
+
+  if (state.tab === "launch") {
+    switch (focusedRegion(state)) {
+      case "task":
+        return [
+          { k: "t", label: "edit task" },
+          { k: "r", label: "refresh signals" },
+          { k: "tab", label: "next box" },
+          { k: "enter", label: "edit" },
+          { k: "?", label: "actions" },
+        ];
+      case "guided":
+        return [
+          { k: "w", label: "open wizard" },
+          { k: "tab", label: "next box" },
+          { k: "enter", label: "open" },
+          { k: "?", label: "actions" },
+        ];
+      default:
+        return [
+          { k: "↑↓←→", label: "agent" },
+          { k: "tab", label: "next box" },
+          { k: "enter", label: "launch" },
+          { k: "?", label: "actions" },
+        ];
+    }
+  }
+  return hintsForTab(state.tab).slice(0, 6);
+}
 
 /**
  * Apply one key to the current state. Pure — no I/O, no rendering. Mirrors the
@@ -782,29 +854,72 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       return settle(state);
     }
 
+    if (ov.kind === "launchWizard") {
+      const launch = launchOf(state);
+      const wizard = wizardOf(launch);
+      if (!wizard) return settle({ ...state, overlay: null });
+      if (key.name === "escape" || (key.name === "char" && key.char === "q")) return settle({ ...state, overlay: null });
+      if (key.name === "tab" || key.name === "shifttab") {
+        const delta = key.name === "tab" ? 1 : -1;
+        return settle({ ...state, launch: { ...launch, wizard: { ...wizard, focus: cycleWizardFocus(wizard.focus, delta) } } });
+      }
+      if (key.name === "up" || key.name === "down" || key.name === "left" || key.name === "right") {
+        const delta = key.name === "up" || key.name === "left" ? -1 : 1;
+        if (wizard.focus === "target") {
+          return settle({ ...state, launch: { ...launch, wizard: { ...wizard, targetSelected: cycleIndex(wizard.targetSelected, wizard.targets.length, delta), plan: null } } });
+        }
+        if (wizard.focus === "profile") {
+          const profileSelected = cycleIndex(wizard.profileSelected, wizard.profiles.profiles.length, delta);
+          const profile = wizard.profiles.profiles[profileSelected];
+          const capability = profile?.capabilities.includes(wizard.capability) ? wizard.capability : (profile?.capabilities[0] ?? wizard.capability);
+          return settle({ ...state, launch: { ...launch, wizard: { ...wizard, profileSelected, capability, plan: null } } });
+        }
+        if (wizard.focus === "capability") {
+          const capabilities = selectedWizardProfile(wizard)?.capabilities ?? [];
+          const capability = capabilities.length
+            ? capabilities[cycleIndex(Math.max(0, capabilities.indexOf(wizard.capability)), capabilities.length, delta)]!
+            : wizard.capability;
+          return settle({ ...state, launch: { ...launch, wizard: { ...wizard, capability, plan: null } } });
+        }
+        return settle(state);
+      }
+      if (key.name === "char" && key.char === "c") {
+        return settle({ ...state, overlay: { kind: "wizardCwd", line: lineFrom(wizard.cwd), returnToWizard: true } });
+      }
+      if (key.name === "enter") {
+        if (wizard.focus === "cwd") return settle({ ...state, overlay: { kind: "wizardCwd", line: lineFrom(wizard.cwd), returnToWizard: true } });
+        return wizard.plan
+          ? settle({ ...state, overlay: { kind: "confirmTargetLaunch", plan: wizard.plan, intent: launchIntentOf(launch) } })
+          : settle(state, { type: "planLaunchWizard" });
+      }
+      return settle(state);
+    }
+
     if (ov.kind === "wizardCwd") {
-      if (key.name === "escape") return settle({ ...state, overlay: null });
+      const returnToWizard = ov.returnToWizard && wizardOf(launchOf(state));
+      if (key.name === "escape") return settle({ ...state, overlay: returnToWizard ? { kind: "launchWizard" } : null });
       if (key.name === "enter") {
         const cwd = ov.line.text.trim();
         const launch = launchOf(state);
         const wizard = wizardOf(launch);
-        if (!cwd || !wizard) return settle({ ...state, overlay: null });
-        if (isClientPath(cwd)) return settle({ ...state, overlay: null, launch: { ...launch, status: "error", error: "client repository cwd rejected" } });
-        return settle({ ...state, overlay: null, launch: { ...launch, wizard: { ...wizard, cwd, plan: null }, status: "ready", error: undefined } });
+        const nextOverlay = ov.returnToWizard && wizard ? { kind: "launchWizard" } as const : null;
+        if (!cwd || !wizard) return settle({ ...state, overlay: nextOverlay });
+        if (isClientPath(cwd)) return settle({ ...state, overlay: nextOverlay, launch: { ...launch, status: "error", error: "client repository cwd rejected" } });
+        return settle({ ...state, overlay: nextOverlay, launch: { ...launch, wizard: { ...wizard, cwd, plan: null }, status: "ready", error: undefined } });
       }
       const edited = lineApplyKey(ov.line, key);
-      if (edited.handled) return settle({ ...state, overlay: { kind: "wizardCwd", line: edited.state } });
+      if (edited.handled) return settle({ ...state, overlay: { kind: "wizardCwd", line: edited.state, returnToWizard: ov.returnToWizard } });
       return settle(state);
     }
 
     if (ov.kind === "confirmTargetLaunch") {
       if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "requestTargetLaunch", plan: ov.plan, intent: ov.intent });
-      if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: null });
+      if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: wizardOf(launchOf(state)) ? { kind: "launchWizard" } : null });
       return settle(state);
     }
     if (ov.kind === "confirmTargetGovernor") {
       if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "launchTarget", plan: ov.plan, intent: ov.intent, reason: ov.reason });
-      if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: null });
+      if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: wizardOf(launchOf(state)) ? { kind: "launchWizard" } : null });
       return settle(state);
     }
     if (ov.kind === "confirmProfilesInit") {
@@ -875,9 +990,6 @@ export function reduce(state: AppState, key: Key): ReduceResult {
   // Tab / Shift+Tab move the focus RING between the boxes of the current view — they no
   // longer switch views (1-6 does that). Single-region views: a harmless no-op.
   if (key.name === "tab" || key.name === "shifttab") {
-    const launch = state.tab === "launch" ? launchOf(state) : null;
-    const wizard = launch ? wizardOf(launch) : null;
-    if (launch && wizard) return settle({ ...state, launch: { ...launch, wizard: { ...wizard, focus: wizard.focus === "target" ? "profile" : "target" } } });
     const regions = regionsFor(state.tab);
     if (regions.length <= 1) return settle({ ...state, confirmQuit: false });
     const delta = key.name === "tab" ? 1 : -1;
@@ -885,29 +997,18 @@ export function reduce(state: AppState, key: Key): ReduceResult {
     return settle({ ...state, confirmQuit: false, focusRegion: (cur + delta + regions.length) % regions.length });
   }
 
-  // Launch grid keeps its own 2-D selection model (arrows + enter to launch).
+  // Launch arrows stay inside the manual-agent grid. The task and guided-launch
+  // panels use Enter to open their respective modal flows, preventing accidental runs.
   if (state.tab === "launch") {
     const launch = launchOf(state);
-    const wizard = wizardOf(launch);
-    if (wizard) {
-      if (key.name === "up" || key.name === "down") {
-        const delta = key.name === "down" ? 1 : -1;
-        if (wizard.focus === "target") return settle({ ...state, launch: { ...launch, wizard: { ...wizard, targetSelected: clampIndex(wizard.targetSelected + delta, wizard.targets.length), plan: null } } });
-        const index = clampIndex(wizard.profileSelected + delta, wizard.profiles.profiles.length);
-        const profile = wizard.profiles.profiles[index];
-        const capability = profile?.capabilities.includes(wizard.capability) ? wizard.capability : (profile?.capabilities[0] ?? wizard.capability);
-        return settle({ ...state, launch: { ...launch, wizard: { ...wizard, profileSelected: index, capability, plan: null } } });
-      }
-      if (key.name === "enter") return wizard.plan ? settle({ ...state, overlay: { kind: "confirmTargetLaunch", plan: wizard.plan, intent: launchIntentOf(launch) } }) : settle(state, { type: "planLaunchWizard" });
-    }
-    if (key.name === "up" || key.name === "down" || key.name === "left" || key.name === "right") {
+    if (focusedRegion(state) === "agents" && (key.name === "up" || key.name === "down" || key.name === "left" || key.name === "right")) {
       const cur = state.launch?.selected ?? 0;
       const delta =
         key.name === "left" ? -1 : key.name === "right" ? 1 : key.name === "up" ? -LAUNCH_COLS : LAUNCH_COLS;
       const selected = Math.min(Math.max(0, cur + delta), LAUNCHABLE.length - 1);
       return settle({ ...state, confirmQuit: false, launch: { ...launch, selected } });
     }
-    if (key.name === "enter") return launchEnter(state);
+    if (key.name === "enter") return drillIn(state);
   }
 
   // Memory: esc exits an active search back to recent memory (G56-F3 — the results box
@@ -947,17 +1048,9 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       if (ch === "r") {
         const task = launchOf(state).task.trim();
         if (task) return settle({ ...state, confirmQuit: false }, { type: "profileLaunchTask", task });
+        return settle({ ...state, confirmQuit: false, launch: { ...launchOf(state), status: "error", error: "Describe a task before refreshing task signals." } });
       }
       if (ch === "w") return settle({ ...state, confirmQuit: false }, { type: "openLaunchWizard" });
-      const wizard = wizardOf(launchOf(state));
-      if (wizard && ch === "c") return settle({ ...state, overlay: { kind: "wizardCwd", line: lineFrom(wizard.cwd) } });
-      if (wizard && (ch === "[" || ch === "]")) {
-        const profile = selectedWizardProfile(wizard);
-        const capabilities = profile?.capabilities ?? [];
-        const current = capabilities.indexOf(wizard.capability);
-        const next = capabilities.length ? capabilities[(current + (ch === "]" ? 1 : -1) + capabilities.length) % capabilities.length]! : wizard.capability;
-        return settle({ ...state, launch: { ...launchOf(state), wizard: { ...wizard, capability: next, plan: null } } });
-      }
     }
 
     // Sessions panel actions (only on that tab): a attach · k kill · p prompt · r refrescar.
@@ -1030,7 +1123,7 @@ export function buildFrame(state: AppState, size: FrameSize, theme: Theme): stri
   frame.push(padTo(tabBar({ tabs: [...TABS], active: TABS.indexOf(state.tab) }, theme), cols));
   frame.push(buildHairlineRow(theme, cols));
   frame.push(...buildMiddle(state, middleRect, theme));
-  frame.push(hintBar({ hints: hintsForTab(state.tab), right: "ctrl+c exit" }, theme, cols));
+  frame.push(hintBar({ hints: hintsForState(state) }, theme, cols));
   frame.push(footer({ cwd: state.cwd, branch: state.branch, right: `ebrain ${EBRAIN_UI_VERSION}` }, theme, cols));
 
   // Defensive: guarantee exactly `rows` rows of exactly `cols` width regardless of
@@ -1329,7 +1422,7 @@ function buildMiddle(state: AppState, rect: Rect, theme: Theme): string[] {
   let rows: string[];
   if (state.tab === "home") rows = buildOverviewView(overviewOf(state), sessionsOf(state), focused, rect, theme);
   else if (state.tab === "sessions") rows = buildSessionsView(sessionsOf(state), rect, theme);
-  else if (state.tab === "launch") rows = buildLaunchView(launchOf(state), rect, theme);
+  else if (state.tab === "launch") rows = buildLaunchView(launchOf(state), focused, rect, theme);
   else if (state.tab === "memory") rows = buildMemoryView(memoryOf(state), focused, rect, theme);
   else if (state.tab === "routing") rows = buildRoutingView(routingOf(state), rect, theme);
   else rows = buildDoctorView(doctorOf(state), focused, rect, theme);

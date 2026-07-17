@@ -101,14 +101,13 @@ const HOME_HINTS: HintEntry[] = [
   { k: "?", label: "help" },
 ];
 
-/** Per-view hints for the Launch panel. Task Profile classifies explicit signals only;
- * profile/target selection lands in the user-governed wizard (F6.6.2-6.6.4). */
+/** Per-view fallback hints for the Launch panel. The app refines these by focused
+ * panel so the footer never pretends one key has two simultaneous meanings. */
 const LAUNCH_HINTS: HintEntry[] = [
   { k: "t", label: "task" },
-  { k: "r", label: "profile" },
-  { k: "w", label: "wizard" },
-  { k: "↑↓←→", label: "agent" },
-  { k: "enter", label: "run/launch" },
+  { k: "w", label: "guided launch" },
+  { k: "tab", label: "focus box" },
+  { k: "?", label: "actions" },
 ];
 
 /** Per-view hints for the F6.5 knowledge panels — each matches the keys reduce()

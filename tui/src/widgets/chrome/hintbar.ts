@@ -3,8 +3,9 @@
  * design-system/components/chrome/HintBar.{d.ts,jsx,prompt.md} (SPRINT-TUI 6.3.2).
  *
  * Keyboard-shortcut bar present on EVERY view (penultimate row, above the footer).
- * Composes `keyHint` for each hint, joined with a 2-cell gap; contextual hints
- * first, global last (caller-ordered). Optional `right` segment, dim, right-justified.
+ * Composes `keyHint` for each hint, joined with a 2-cell gap. A normal control row
+ * is centered like FlowClock; an optional `right` segment keeps legacy status use
+ * cases available without changing their alignment.
  *
  * `width` is the terminal column count (render dimension), 3rd arg so `props`
  * stays 1:1 with HintBarProps (hints, right) per the .d.ts.
@@ -41,7 +42,7 @@ export function hintBar(props: HintBarProps, theme: Theme, width: number): strin
       body = padTo(truncate(left, leftRoom), leftRoom) + rightSeg;
     }
   } else {
-    body = padTo(truncate(left, inner), inner);
+    body = padTo(truncate(left, inner), inner, "center");
   }
 
   return " " + body + " ";
