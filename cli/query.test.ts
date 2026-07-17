@@ -142,6 +142,17 @@ describe("queryAcrossSources", () => {
     expect(res.failures).toEqual([{ source: "company-brain", message: "boom" }]);
   });
 
+  test("a secret in a source-failure message is scrubbed (assignment + token) — F-CF-3", async () => {
+    const res = await queryAcrossSources("x", 10, deps(twoSources, {
+      "second-brain": [{ score: 0.5, slug: "ok", chunk_text: "z" }],
+      "company-brain": () => { throw new Error("upstream said OPENAI_API_KEY=sk-proj-Ab12Cd34Ef56Gh78Ij90Kl rejected"); },
+    }));
+    expect(res.partial).toBe(true);
+    const msg = res.failures[0]!.message;
+    expect(msg).not.toContain("sk-proj-Ab12Cd34Ef56Gh78Ij90Kl");
+    expect(msg).toContain("[REDACTED]");
+  });
+
   test("all sources fail → loud throw, never a silent empty result", async () => {
     await expect(queryAcrossSources("x", 10, deps(twoSources, {
       "second-brain": () => { throw new Error("a"); },

@@ -190,12 +190,12 @@ const RoutingCapabilitySchema = z.object({
 }).strict();
 const RoutingSchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/),
-  budget: z.object({ monthly_usd: z.number(), hard_stop: z.boolean() }),
+  budget: z.object({ monthly_usd: z.number(), hard_stop: z.boolean() }).strict(),
   mtd: z.number(),
   remaining: z.number(),
   capabilities: z.array(RoutingCapabilitySchema),
   gbrain_untracked: z.literal(true),
-});
+}).strict();
 
 const routingFixture = {
   month: "2026-07",

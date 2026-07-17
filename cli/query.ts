@@ -134,7 +134,7 @@ export async function queryAcrossSources(
     } catch (error) {
       failures.push({
         source: source.id,
-        message: redactSecrets(error instanceof Error ? error.message : String(error)),
+        message: scrubMessage(error instanceof Error ? error.message : String(error)),
       });
     }
   }
@@ -177,7 +177,7 @@ async function main(): Promise<void> {
 
 if (import.meta.main) {
   main().catch((error) => {
-    console.error(`ebrain q: ${redactSecrets(error instanceof Error ? error.message : String(error))}`);
+    console.error(`ebrain q: ${scrubMessage(error instanceof Error ? error.message : String(error))}`);
     process.exit(1);
   });
 }

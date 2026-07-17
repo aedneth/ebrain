@@ -2,10 +2,11 @@
 /**
  * ebrain routing — contract for the OpenRouter stack UX.
  *
- * Read-only. It exposes the routed Chinese-model stack as an operable data model
- * for the TUI: capabilities, winner/fallback/floor chains, pricing, MTD spend,
- * and the exact one-shot command surface. The TUI must consume this JSON instead
- * of reading routing.yaml or spend.jsonl directly.
+ * Read-only. It exposes the routed model stack as an operable data model
+ * for the TUI: capabilities, winner/fallback/floor chains, factual MTD spend,
+ * and the exact one-shot command surface. No price snapshot or cost estimate is
+ * emitted (G56-F8). The TUI must consume this JSON instead of reading
+ * routing.yaml or spend.jsonl directly.
  */
 import { loadRoutingCfg, spendByCapability, type CapSpend } from "./spend.ts";
 import { chainHasFrontier, expandHome, monthKey, monthSpend } from "./route.ts";
