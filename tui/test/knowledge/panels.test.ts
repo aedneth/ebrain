@@ -100,6 +100,105 @@ describe("Memory panel (6.5.2)", () => {
   });
 });
 
+// ── Memory search selection (G56-F3) ─────────────────────────────────────────
+// When search is active the results box swaps its collection: it must navigate + open the
+// SELECTED SEARCH ROW, never the recent learning that sits at the same index underneath.
+describe("Memory search selection (G56-F3)", () => {
+  const RESULTS = [
+    { source: "agent-memory", score: 0.91, slug: "SEARCH-0", snippet: "hit zero body" },
+    { source: "second-brain", score: 0.80, slug: "SEARCH-1", snippet: "hit one body" },
+    { source: "company-brain", score: 0.72, slug: "SEARCH-2", snippet: "hit two body" },
+  ];
+  function memState(mem: Partial<NonNullable<AppState["memory"]>>): AppState {
+    return base("memory", {
+      memory: {
+        data: {
+          learnings: [
+            { project: "RECENT-NOT-SEARCH", agent: "x", date: "d", tags: [], text: "recent body one" },
+            { project: "r2", agent: "x", date: "d", tags: [], text: "recent body two" },
+          ],
+          sessions: [],
+        },
+        search: null,
+        searchStatus: "ready",
+        searchSelected: 0,
+        workflows: { workflows: [] },
+        selected: 0,
+        workflowSelected: 0,
+        logSelected: 0,
+        status: "ready",
+        ...mem,
+      },
+    });
+  }
+
+  it("↑↓ moves the search cursor and leaves the learnings selection untouched (many results)", () => {
+    const s = memState({ search: { query: "q", results: RESULTS } });
+    const down = reduce(s, { name: "down" });
+    expect(down.state.memory!.searchSelected).toBe(1);
+    expect(down.state.memory!.selected).toBe(0); // recent-learnings cursor never moved
+    const down2 = reduce(down.state, { name: "down" });
+    expect(down2.state.memory!.searchSelected).toBe(2);
+  });
+
+  it("Enter opens the SELECTED search row, never the learning underneath (audit reproduction)", () => {
+    const s = memState({ search: { query: "q", results: [RESULTS[0]!] } });
+    const r = reduce(s, { name: "enter" });
+    expect(r.state.overlay?.kind).toBe("detail");
+    const ov = r.state.overlay as { kind: "detail"; title: string; body: string };
+    expect(ov.title).toContain("agent-memory");
+    expect(ov.title).not.toContain("RECENT-NOT-SEARCH");
+    expect(ov.body).toContain("SEARCH-0");
+    expect(ov.body).toContain("hit zero body");
+    expect(ov.body).not.toContain("recent body");
+  });
+
+  it("Enter follows the cursor across many results", () => {
+    const s = memState({ search: { query: "q", results: RESULTS }, searchSelected: 2 });
+    const ov = reduce(s, { name: "enter" }).state.overlay as { title: string; body: string };
+    expect(ov.body).toContain("SEARCH-2");
+    expect(ov.title).toContain("company-brain");
+  });
+
+  it("one result: the cursor clamps at 0 and Enter opens it", () => {
+    const s = memState({ search: { query: "q", results: [RESULTS[1]!] } });
+    expect(reduce(s, { name: "down" }).state.memory!.searchSelected).toBe(0); // clamp high
+    const ov = reduce(s, { name: "enter" }).state.overlay as { body: string };
+    expect(ov.body).toContain("SEARCH-1");
+  });
+
+  it("zero results: navigation is a no-op and Enter opens nothing (no learning leaks through)", () => {
+    const s = memState({ search: { query: "q", results: [] } });
+    const down = reduce(s, { name: "down" });
+    expect(down.state.memory!.searchSelected).toBe(0);
+    const enter = reduce(s, { name: "enter" });
+    expect(enter.state.overlay ?? null).toBeNull();
+    expect(frameText(s)).toContain("no search results");
+  });
+
+  it("esc switches back to recent memory: search clears, cursor resets, learnings navigate again", () => {
+    const s = memState({ search: { query: "q", results: RESULTS }, searchSelected: 2 });
+    const back = reduce(s, { name: "escape" });
+    expect(back.state.memory!.search).toBeNull();
+    expect(back.state.memory!.searchSelected).toBe(0);
+    // With search cleared, ↑↓ once again drive the recent-learnings cursor.
+    expect(reduce(back.state, { name: "down" }).state.memory!.selected).toBe(1);
+    // …and Enter now opens a recent learning, not a search row.
+    const ov = reduce(back.state, { name: "enter" }).state.overlay as { title: string; body: string };
+    expect(ov.title).toContain("RECENT-NOT-SEARCH");
+    expect(ov.body).toContain("recent body one");
+  });
+
+  it("renders the search results with their own cursor + title, and an out-of-range cursor clamps safely", () => {
+    const t = frameText(memState({ search: { query: "q", results: RESULTS }, searchSelected: 1 }));
+    expect(t).toContain("search results · 3");
+    expect(t).toContain("SEARCH-1");
+    expect(t).toContain("esc back to recent");
+    // A stale cursor past the result set must not break the width invariant (frameText asserts it).
+    frameText(memState({ search: { query: "q", results: RESULTS }, searchSelected: 99 }));
+  });
+});
+
 // ── Routing (6.6A) ───────────────────────────────────────────────────────────
 describe("Routing panel (6.6A)", () => {
   const state = base("routing", {

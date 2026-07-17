@@ -74,6 +74,7 @@ import type {
   TargetPlanData,
   ProfileSummaryData,
   SearchData,
+  SearchResult,
   FleetData,
   DoctorData,
   DoctorCheck,
@@ -217,13 +218,15 @@ export interface OverviewSlice {
 }
 
 /** Memory panel: learnings + local workflows + session logs, navigable (F6.6C).
- * `selected` = focused learning; `workflowSelected` = focused workflow;
- * `logSelected` = focused session-log. */
+ * `selected` = focused learning; `searchSelected` = focused search result (its own
+ * cursor — the results box swaps between recent learnings and live search, G56-F3);
+ * `workflowSelected` = focused workflow; `logSelected` = focused session-log. */
 export interface MemorySlice {
   data: MemoryData | null;
   search: SearchData | null;
   searchStatus: LoadStatus;
   searchError?: string;
+  searchSelected: number;
   workflows: WorkflowsData | null;
   selected: number;
   workflowSelected: number;
@@ -262,7 +265,7 @@ export function emptyOverview(): OverviewSlice {
   return { data: null, memory: null, memSelected: 0, status: "idle", atLabel: null };
 }
 export function emptyMemory(): MemorySlice {
-  return { data: null, search: null, searchStatus: "idle", workflows: null, selected: 0, workflowSelected: 0, logSelected: 0, status: "idle" };
+  return { data: null, search: null, searchStatus: "idle", searchSelected: 0, workflows: null, selected: 0, workflowSelected: 0, logSelected: 0, status: "idle" };
 }
 export function emptyRouting(): RoutingSlice {
   return { data: null, cost: null, mode: "routing", selected: 0, costSelected: 0, status: "idle" };
@@ -610,6 +613,13 @@ function moveSelection(state: AppState, delta: number): ReduceResult {
       if (n === 0) return settle(clear);
       return settle({ ...clear, memory: { ...m, logSelected: clampIndex(m.logSelected + delta, n) } });
     }
+    // The results box swaps collections: when a search is active it navigates its own
+    // cursor over search results, not the recent learnings underneath (G56-F3).
+    if (m.search) {
+      const n = m.search.results.length;
+      if (n === 0) return settle(clear);
+      return settle({ ...clear, memory: { ...m, searchSelected: clampIndex(m.searchSelected + delta, n) } });
+    }
     const n = m.data?.learnings.length ?? 0;
     if (n === 0) return settle(clear);
     return settle({ ...clear, memory: { ...m, selected: clampIndex(m.selected + delta, n) } });
@@ -658,9 +668,17 @@ function drillIn(state: AppState): ReduceResult {
   if (state.tab === "home" && region === "memories") return goTab(state, "memory");
   if (state.tab === "home" && region === "system") return goTab(state, "routing");
 
-  // Memory result → read-only detail of the full learning.
+  // Memory result → read-only detail. When a search is active the results box shows search
+  // rows, so Enter must open the SELECTED search row (its own cursor), never the recent
+  // learning that happens to sit at the same index underneath (G56-F3).
   if (state.tab === "memory" && region === "results") {
-    const l = memoryOf(state).data?.learnings[memoryOf(state).selected];
+    const m = memoryOf(state);
+    if (m.search) {
+      const r = m.search.results[m.searchSelected];
+      if (r) return settle({ ...clear, overlay: { kind: "detail", title: `search · ${r.source}`, body: `${r.slug}\n\n${r.snippet}` } });
+      return settle(clear);
+    }
+    const l = m.data?.learnings[m.selected];
     if (l) return settle({ ...clear, overlay: { kind: "detail", title: `memory · ${l.project}`, body: l.text } });
     return settle(clear);
   }
@@ -890,6 +908,13 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       return settle({ ...state, confirmQuit: false, launch: { ...launch, selected } });
     }
     if (key.name === "enter") return launchEnter(state);
+  }
+
+  // Memory: esc exits an active search back to recent memory (G56-F3 — the results box
+  // swaps its collection, so there must be a way to switch back; also resets the cursor).
+  if (key.name === "escape" && state.tab === "memory" && memoryOf(state).search) {
+    const m = memoryOf(state);
+    return settle({ ...state, confirmQuit: false, memory: { ...m, search: null, searchStatus: "idle", searchError: undefined, searchSelected: 0 } });
   }
 
   // ↑↓ navigate items within the FOCUSED box; Enter drills into it (attach / open / nav).
@@ -1740,6 +1765,14 @@ function renderLearningRow(l: MemoryLearning, width: number, sel: boolean, theme
   return violet + dot + " " + reset + textCell + srcCell;
 }
 
+/** One federated-search result row (source · score · slug -- snippet). The selection
+ * cursor/scrollbar are applied by scrolllist; this only colors the content (G56-F3). */
+function renderSearchRow(r: SearchResult, width: number, sel: boolean, theme: Theme): string {
+  const reset = theme.reset;
+  const textColor = sel ? theme.fg("text.primary") + BOLD : theme.fg("text.secondary");
+  return textColor + truncate(`${r.source} [${r.score.toFixed(3)}] ${r.slug} -- ${r.snippet}`, width) + reset;
+}
+
 function renderLogRow(s: MemorySession, width: number, theme: Theme): string {
   const reset = theme.reset;
   const ts = theme.fg("text.muted") + padTo(fmtLogTs(s.ts), 11) + reset;
@@ -1797,12 +1830,25 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
   const offset = scrollOffset(selected, listHeight, learnings.length);
   const rowW = Math.max(8, leftRect.width - 4 - 3);
   const searchResults = m.search?.results ?? [];
+  const searchSel = clampIndex(m.searchSelected, Math.max(1, searchResults.length));
+  const searchOff = scrollOffset(searchSel, listHeight, searchResults.length);
   const resultsBody =
     m.searchStatus === "error"
       ? [theme.fg("semantic.error") + `error: ${m.searchError ?? "search failed"}` + theme.reset]
       : m.search
         ? searchResults.length > 0
-          ? searchResults.slice(0, listHeight).map((result) => truncate(`${result.source} [${result.score.toFixed(3)}] ${result.slug} -- ${result.snippet}`, rowW))
+          // Search results carry their OWN selection cursor (G56-F3): the highlighted row is
+          // exactly the one Enter opens, so the panel never renders one row and opens another.
+          ? scrolllist(
+              {
+                items: searchResults,
+                selected: searchSel,
+                height: listHeight,
+                offset: searchOff,
+                renderItem: (r, idx) => renderSearchRow(r, rowW, idx === searchSel, theme),
+              },
+              theme,
+            )
           : [theme.fg("text.secondary") + "no search results" + theme.reset]
         : learnings.length > 0
       ? scrolllist(
@@ -1864,10 +1910,13 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
     out.push((leftPanel[i] ?? "") + gap + right);
   }
 
-  // Footer hint (the composer opens as an overlay on `r`).
+  // Footer hint (the composer opens as an overlay on `r`). When a search is active, surface
+  // `esc back to recent` so the collection swap is discoverable (G56-F3).
   if (footRect.height > 0) {
-    const foot =
-      theme.fg("text.muted") + "s search · r remember · enter run/open · a attach workflow · ↑↓ focused box" + theme.reset;
+    const hint = m.search
+      ? "s search · esc back to recent · enter open result · ↑↓ focused box"
+      : "s search · r remember · enter run/open · a attach workflow · ↑↓ focused box";
+    const foot = theme.fg("text.muted") + hint + theme.reset;
     out.push(padTo(truncate(foot, cols), cols));
   }
 
@@ -2748,9 +2797,11 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       if (state.tab === "memory") render();
       const result = await fetchSearch(query);
       const current = memoryOf(state);
+      // Reset the search cursor on every query so selection never dangles past the new
+      // result set (G56-F3 — clamp/reset on each query).
       state = result.ok
-        ? { ...state, memory: { ...current, search: result.data, searchStatus: "ready", searchError: undefined } }
-        : { ...state, memory: { ...current, search: null, searchStatus: "error", searchError: result.error } };
+        ? { ...state, memory: { ...current, search: result.data, searchStatus: "ready", searchError: undefined, searchSelected: 0 } }
+        : { ...state, memory: { ...current, search: null, searchStatus: "error", searchError: result.error, searchSelected: 0 } };
       if (state.tab === "memory") render();
     }
 
