@@ -41,6 +41,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// Error text from a failed source query can carry EITHER an MCP/Bearer/Authorization token
+// (redactSecrets) OR a general secret shape — an API key, a PEM block, a `NAME=value` assignment
+// (scrubSecrets). Compose both so a leaked assignment never survives in failures[].message or the
+// top-level error (G56-F-CF-3: redactSecrets alone let a bare assignment through).
+function scrubMessage(text: string): string {
+  return scrubSecrets(redactSecrets(text));
+}
+
 export function parseFederatedSources(value: unknown): QuerySource[] {
   if (!isRecord(value) || !Array.isArray(value.sources)) {
     throw new Error("sources_list returned an invalid payload");
