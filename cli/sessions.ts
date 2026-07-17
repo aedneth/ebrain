@@ -68,45 +68,12 @@ export function isSafeToken(s: string): boolean {
 
 // ── scrubber de secretos (SPRINT-TUI 6.1.6 — hard requirement) ─────────────
 // capture-pane devuelve texto CRUDO de terminal — puede contener un secreto real que el agente
-// imprimió sin querer (o que un `cat .env` se coló por otro camino). guard-secrets.sh (harness/core)
-// bloquea COMANDOS lectores de archivos de secretos ANTES de que corran; esto es distinto y
-// complementario: acá ya no hay comando que bloquear, hay TEXTO YA IMPRESO en el pane que hay que
-// redactar antes de que salga de este proceso. Reusa el mismo vocabulario de guard-secrets.sh
-// (key/token/password/.env-value) pero como patrones de FORMA-DE-VALOR, no de nombre-de-archivo.
-// Nunca se imprime/retorna pane sin pasar por acá — ver peekSession().
-// Incluye el sufijo `KEY` genérico (SECRET_KEY / ENCRYPTION_KEY / SSH_KEY — nombres de env
-// ultra-comunes de Django/Flask/Rails), no solo API_KEY/ACCESS_KEY/PRIVATE_KEY (gap cazado en el
-// gate F6.4.8). Sobre-redactar (p.ej. un inocente `KEY=`) es aceptable; el sesgo de un scrubber de
-// seguridad es fail-safe hacia redactar de más, nunca de menos.
-const KEYLIKE_NAME = /((?:[A-Z0-9_]*_)?(?:API[_-]?KEY|ACCESS[_-]?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PWD|CREDENTIAL[S]?|PRIVATE[_-]?KEY|KEY))/i;
-// `NOMBRE=valor` o `NOMBRE: valor` (separador `[:=]` únicamente — NO cubre separador por espacio)
-// donde NOMBRE matchea forma de secreto — redacta el VALOR, preserva el nombre (depurar sin filtrar).
-const KV_SECRET = new RegExp(`(${KEYLIKE_NAME.source})\\s*[:=]\\s*(\\S+)`, "gi");
-// Prefijos de proveedor conocidos (Anthropic/OpenAI/OpenRouter/GitHub/AWS/Google/Slack) + Bearer
-// tokens genéricos — redacta el token completo dondequiera que aparezca. sk- admite `_-` internos
-// (cubre `sk-proj-…`/`sk-svcacct-…` de OpenAI, que rompían el `sk-<alnum>{20,}` en el guion — gate F6.4.8).
-const KNOWN_TOKEN_SHAPES = [
-  /sk-ant-[A-Za-z0-9_-]{8,}/g,
-  /sk-or-v1-[A-Za-z0-9]{8,}/g,
-  /sk-[A-Za-z0-9][A-Za-z0-9_-]{19,}/g,
-  /gh[pousr]_[A-Za-z0-9]{20,}/g,
-  /AKIA[0-9A-Z]{16}/g,
-  /AIza[0-9A-Za-z_-]{35}/g,
-  /xox[baprs]-[0-9A-Za-z-]{10,}/g,
-  /Bearer\s+[A-Za-z0-9._-]{15,}/gi,
-];
-// Bloque PEM de llave privada (RSA/EC/OPENSSH/…) — redacta entero, o el header suelto si el pane
-// cortó el bloque antes del END (gate F6.4.8: un `.pen`/`.key` volcado al pane fugaba sin esto).
-const PEM_BLOCK = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g;
-const PEM_HEADER = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/g;
-
-export function scrubSecrets(text: string): string {
-  let out = text.replace(PEM_BLOCK, "[REDACTED PRIVATE KEY]");
-  out = out.replace(PEM_HEADER, "[REDACTED PRIVATE KEY]"); // header sin END en la ventana capturada
-  out = out.replace(KV_SECRET, (_m, name: string) => `${name}=[REDACTED]`);
-  for (const re of KNOWN_TOKEN_SHAPES) out = out.replace(re, "[REDACTED]");
-  return out;
-}
+// imprimió sin querer. peekSession() SIEMPRE lo pasa por scrubSecrets() antes de imprimir/retornar.
+// La lógica del scrubber vive en el módulo puro `./scrub.ts` (fuente de verdad única compartida por
+// el CLI y la TUI). Se importa para uso interno (peekSession) y se re-exporta para que todos los
+// consumidores existentes de sessions.ts (tmux.ts, query.ts, sessions.test.ts) sigan importándola sin cambios.
+import { scrubSecrets } from "./scrub.ts";
+export { scrubSecrets };
 
 // ── tmux wrapper (errores tipados — no-server / not-found nunca crashean) ──
 export type TmuxErrorType = "tmux-not-installed" | "no-server" | "not-found" | "deny-client" | "confirm-required" | "bad-agent" | "exists" | "prompt-send" | "other";

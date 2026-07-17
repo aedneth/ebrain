@@ -15,6 +15,8 @@
  * (spec 6.5.6). See tui/test/knowledge/contracts.test.ts.
  */
 
+import { scrubSecrets } from "../../../cli/scrub.ts";
+
 // ---------------------------------------------------------------------------
 // Tiny defensive JSON accessors — never trust the shape of subprocess output.
 // ---------------------------------------------------------------------------
@@ -39,7 +41,11 @@ export interface SearchResult { score: number; source: string; slug: string; sni
 export interface SearchData { query: string; results: SearchResult[] }
 export function parseSearch(j: unknown): SearchData | null {
   if (!isObj(j) || typeof j.query !== "string" || !Array.isArray(j.results)) return null;
-  return { query: j.query, results: j.results.filter(isObj).map((row) => ({ score: asNum(row.score), source: asStr(row.source), slug: asStr(row.slug), snippet: asStr(row.snippet) })).filter((row) => Boolean(row.source && row.slug)) };
+  // Defense in depth (G56-F4): scrub slug + snippet at THIS trusted boundary before any row is
+  // stored or rendered. `ebrain q` already scrubs at source, but the TUI must never trust the
+  // content of subprocess output — a source regression or a different producer must not leak a
+  // secret onto the terminal. Same scrubber as the CLI (single source of truth: cli/scrub.ts).
+  return { query: j.query, results: j.results.filter(isObj).map((row) => ({ score: asNum(row.score), source: asStr(row.source), slug: scrubSecrets(asStr(row.slug)), snippet: scrubSecrets(asStr(row.snippet)) })).filter((row) => Boolean(row.source && row.slug)) };
 }
 
 // ---------------------------------------------------------------------------

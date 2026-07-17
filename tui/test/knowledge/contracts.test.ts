@@ -196,6 +196,29 @@ describe("parseSearch (q --json)", () => {
     expect(parseSearch({ query: "daemon lock", results: [{ score: 0.91, source: "agent-memory", slug: "learning-1", snippet: "Use the daemon" }] })).toEqual({ query: "daemon lock", results: [{ score: 0.91, source: "agent-memory", slug: "learning-1", snippet: "Use the daemon" }] });
     expect(parseSearch({ query: "x", results: [{ source: "", slug: "bad" }] })?.results).toEqual([]);
   });
+
+  // G56-F4 — the snippet/slug are scrubbed at THIS boundary before storage/render, even if a
+  // producer regresses and emits a raw secret. Assignment (KV), provider-token and PEM shapes.
+  test("scrubs an assignment (NAME=value) secret in the snippet", () => {
+    const row = parseSearch({ query: "env", results: [{ score: 0.5, source: "s", slug: "note", snippet: "config: OPENAI_API_KEY=sk-proj-Ab12Cd34Ef56Gh78Ij90Kl leaked" }] })?.results[0];
+    expect(row?.snippet).not.toContain("sk-proj-Ab12Cd34Ef56Gh78Ij90Kl");
+    expect(row?.snippet).toContain("[REDACTED]");
+  });
+
+  test("scrubs a provider token shape anywhere in the snippet or slug", () => {
+    const bySnippet = parseSearch({ query: "t", results: [{ score: 0.5, source: "s", slug: "note", snippet: "the pane printed sk-ant-abcd1234efgh mid-line" }] })?.results[0];
+    expect(bySnippet?.snippet).not.toContain("sk-ant-abcd1234efgh");
+    expect(bySnippet?.snippet).toContain("[REDACTED]");
+    const bySlug = parseSearch({ query: "t", results: [{ score: 0.5, source: "s", slug: "ghp_ABCDEFGHIJKLMNOPQRST1234", snippet: "ok" }] })?.results[0];
+    expect(bySlug?.slug).not.toContain("ghp_ABCDEFGHIJKLMNOPQRST1234");
+    expect(bySlug?.slug).toContain("[REDACTED]");
+  });
+
+  test("scrubs a PEM private-key block bleeding into the snippet", () => {
+    const row = parseSearch({ query: "key", results: [{ score: 0.5, source: "s", slug: "note", snippet: "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEAbase64blob\n-----END RSA PRIVATE KEY-----" }] })?.results[0];
+    expect(row?.snippet).toContain("[REDACTED PRIVATE KEY]");
+    expect(row?.snippet).not.toContain("MIIEpAIBAAKCAQEAbase64blob");
+  });
 });
 
 describe("parseMemory (memory recent --json)", () => {
