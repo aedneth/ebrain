@@ -64,7 +64,7 @@ export function buildTaskProfile(task: string, rules: TaskProfileRules): TaskPro
     signals,
     selected_capability: selected,
     compatible_targets: ["manual-session", "openrouter-one-shot"],
-    disclaimer: "Signals classify the task; they do not rank models or pick an agent.",
+    disclaimer: "Signals classify the task; they do not order models or pick an agent.",
   };
 }
 

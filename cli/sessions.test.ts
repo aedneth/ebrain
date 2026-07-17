@@ -48,7 +48,7 @@ test("isSafeToken: solo [a-zA-Z0-9_-], rechaza espacios/slashes/shell-metacaract
 test("shellCommandFromArgv serializa argv estructurado sin permitir control chars", () => {
   expect(shellCommandFromArgv(["opencode", "--model", "openrouter/deepseek/deepseek-v4-pro"])).toBe("'opencode' '--model' 'openrouter/deepseek/deepseek-v4-pro'");
   expect(shellCommandFromArgv(["echo", "it's literal"])).toBe("'echo' 'it'\\''s literal'");
-  expect(() => shellCommandFromArgv(["opencode\nrm -rf /"])).toThrow("argv de launch invalido");
+  expect(() => shellCommandFromArgv(["opencode\nrm -rf /"])).toThrow("invalid launch argv");
 });
 
 // ── deny-list de cliente (aislamiento duro, CLAUDE.md) ──────────────────────

@@ -208,7 +208,7 @@ export async function newSession(agent: string, slug: string, opts: NewSessionOp
   } else {
     const resolved = await resolveLaunch(agent, opts.adaptersDir);
     if (!resolved) {
-      return { ok: false, error: { type: "bad-agent", message: `adapter desconocido o sin 'launch' en su manifest: '${agent}'` } };
+      return { ok: false, error: { type: "bad-agent", message: `unknown adapter or no 'launch' in its manifest: '${agent}'` } };
     }
     cmd = resolved.cmd;
     env = { ...resolved.env, ...(opts.env ?? {}) };
@@ -325,7 +325,7 @@ async function main() {
     }
     case "new": {
       const [agent, slug] = positional;
-      if (!agent || !slug) die("uso: ebrain sessions new <agent> <slug> [--cwd <dir>] [--json]");
+      if (!agent || !slug) die("usage: ebrain sessions new <agent> <slug> [--cwd <dir>] [--json]");
       // Sin --cwd explícito: preferí el cwd REAL desde donde se invocó `ebrain` (el dispatcher lo
       // exporta como EBRAIN_CALLER_CWD antes de saltar al dir neutral de run_bun — ver cli/ebrain).
       // Corriendo sessions.ts directo (bun run cli/sessions.ts, como en los tests) esa var no está
@@ -339,7 +339,7 @@ async function main() {
     }
     case "peek": {
       const [name] = positional;
-      if (!name) die("uso: ebrain sessions peek <name> [--lines N] [--json]");
+      if (!name) die("usage: ebrain sessions peek <name> [--lines N] [--json]");
       const lines = flags.lines ? parseInt(flags.lines, 10) || DEFAULT_PEEK_LINES : DEFAULT_PEEK_LINES;
       const r = await peekSession(name, lines);
       if (json) { console.log(JSON.stringify(r, null, 2)); }
@@ -349,16 +349,16 @@ async function main() {
     }
     case "send": {
       const [name, text] = positional;
-      if (!name || text === undefined) die('uso: ebrain sessions send <name> "<texto>" --yes [--json]');
+      if (!name || text === undefined) die('usage: ebrain sessions send <name> "<text>" --yes [--json]');
       const r = await sendToSession(name, text, yes);
       if (json) { console.log(JSON.stringify(r, null, 2)); }
       if (!r.ok) { if (!json) console.error(`✗ ${r.error.message}`); process.exit(r.error.type === "confirm-required" ? 2 : 1); }
-      if (!json) console.log(`✓ enviado a ${r.name}`);
+      if (!json) console.log(`✓ sent to ${r.name}`);
       return;
     }
     case "kill": {
       const [name] = positional;
-      if (!name) die("uso: ebrain sessions kill <name> --yes [--json]");
+      if (!name) die("usage: ebrain sessions kill <name> --yes [--json]");
       const r = await killSession(name, yes);
       if (json) { console.log(JSON.stringify(r, null, 2)); }
       if (!r.ok) { if (!json) console.error(`✗ ${r.error.message}`); process.exit(r.error.type === "confirm-required" ? 2 : 1); }
@@ -366,7 +366,7 @@ async function main() {
       return;
     }
     default:
-      die(`ebrain sessions: subcomando desconocido '${sub ?? ""}' (soportado: list · new · peek · send · kill)`, 2);
+      die(`ebrain sessions: unknown subcommand '${sub ?? ""}' (supported: list · new · peek · send · kill)`, 2);
   }
 }
 
