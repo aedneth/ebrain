@@ -11,7 +11,7 @@ import { makeTheme } from "../src/theme.js";
 import { parseKey } from "../src/kit/input.js";
 import { displayWidth } from "../src/kit/draw.js";
 import { lineFrom } from "../src/kit/lineedit.js";
-import { buildFrame, reduce, initialState, type AppState } from "../src/app.js";
+import { buildFrame, reduce, initialState, buildTargetLaunchArgs, type AppState, type LaunchIntent } from "../src/app.js";
 
 const t = makeTheme({ trueColor: true, ascii: false });
 const strip = (s: string) => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
@@ -78,7 +78,7 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
   });
 
   test("enter emits a launch effect for the selected agent", () => {
-    expect(reduce(launchState(1), { name: "enter" }).effect).toEqual({ type: "launch", agent: "codex" });
+    expect(reduce(launchState(1), { name: "enter" }).effect).toEqual({ type: "launch", agent: "codex", prompt: "" });
   });
 
   test("t opens task composer and enter requests a Task Profile", () => {
@@ -106,7 +106,7 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
       },
     };
     const r = reduce(st, { name: "enter" });
-    expect(r.effect).toEqual({ type: "launch", agent: "claude" });
+    expect(r.effect).toEqual({ type: "launch", agent: "claude", prompt: "Summarize batch transcripts" });
     expect(r.state.overlay).toBeUndefined();
   });
 
@@ -126,7 +126,7 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     const planned: AppState = { ...st, launch: { ...st.launch!, wizard: { ...st.launch!.wizard!, plan: { target: "opencode-openrouter", agent: "opencode", profile: "my-stack", capability: "coding", model: "deepseek/x", fallbackModels: [], cwd: "/tmp/project", ramClass: "heavy", costStatus: "untracked" } } } };
     const review = reduce(planned, { name: "enter" });
     expect(review.state.overlay?.kind).toBe("confirmTargetLaunch");
-    expect(reduce(review.state, parseKey("y")).effect).toEqual({ type: "requestTargetLaunch", plan: planned.launch!.wizard!.plan });
+    expect(reduce(review.state, parseKey("y")).effect).toEqual({ type: "requestTargetLaunch", plan: planned.launch!.wizard!.plan, intent: { prompt: "" } });
   });
 
   test("wizard Tab reaches profile selection instead of being intercepted by the page focus ring", () => {
@@ -156,7 +156,7 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
       overlay: { kind: "confirmLaunch", agent: "codex", cwd: "/home/x/proj", reason: "2 heavy" },
     };
     const yes = reduce(st, parseKey("y"));
-    expect(yes.effect).toEqual({ type: "launchConfirmed", agent: "codex", cwd: "/home/x/proj", reason: "2 heavy" });
+    expect(yes.effect).toEqual({ type: "launchConfirmed", agent: "codex", cwd: "/home/x/proj", reason: "2 heavy", prompt: "" });
     expect(yes.state.overlay).toBeNull();
 
     expect(reduce(st, parseKey("n")).state.overlay).toBeNull();
@@ -174,5 +174,68 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     expect(frame).toContain("RAM governor");
     expect(frame).toContain("800 MB");
     expect(frame).toContain("launch codex anyway");
+  });
+});
+
+describe("G56-F2 — the reviewed task is captured, threaded, previewed and wired to launch", () => {
+  const PLAN = { target: "opencode-openrouter", agent: "opencode", profile: "my-stack", capability: "coding", model: "deepseek/x", fallbackModels: [] as string[], cwd: "/tmp/project", ramClass: "heavy", costStatus: "untracked" };
+
+  function wizardWith(task: string, workflowId?: string): AppState {
+    const base = launchState();
+    return {
+      ...base,
+      launch: {
+        ...base.launch!,
+        task,
+        workflowId,
+        wizard: {
+          targets: [{ id: PLAN.target, agent: PLAN.agent, provider: "openrouter", ramClass: "heavy" }],
+          profiles: { initialized: true, profiles: [{ id: "my-stack", label: "My stack", provider: "openrouter", capabilities: ["coding"], models: 1, evidence: { source: "user", asOf: "d" } }] },
+          targetSelected: 0, profileSelected: 0, capability: "coding", cwd: "/tmp/project", focus: "target", plan: { ...PLAN },
+        },
+      },
+    };
+  }
+
+  test("Enter on a ready plan snapshots the reviewed task + workflow into the confirm overlay", () => {
+    const st = wizardWith("implement the parser", "second-brain-dev-sop");
+    const review = reduce(st, { name: "enter" });
+    expect(review.state.overlay?.kind).toBe("confirmTargetLaunch");
+    const ov = review.state.overlay as { kind: "confirmTargetLaunch"; intent: LaunchIntent };
+    expect(ov.intent).toEqual({ prompt: "implement the parser", workflowId: "second-brain-dev-sop" });
+  });
+
+  test("confirming carries the SAME intent into the launch effect (never dropped)", () => {
+    const st = wizardWith("do the thing", "wf-1");
+    const review = reduce(st, { name: "enter" });
+    const confirmed = reduce(review.state, parseKey("y"));
+    expect(confirmed.effect).toEqual({ type: "requestTargetLaunch", plan: st.launch!.wizard!.plan, intent: { prompt: "do the thing", workflowId: "wf-1" } });
+  });
+
+  test("the preview shows the exact task + workflow attribution (ADR-005 reviewability)", () => {
+    const st = wizardWith("summarize the transcripts", "company-brain-sop");
+    const review = reduce(st, { name: "enter" });
+    const frame = buildFrame(review.state, size, t).map(strip).join("\n");
+    expect(frame).toContain("launch target");
+    expect(frame).toContain("summarize the transcripts");
+    expect(frame).toContain("workflow: company-brain-sop");
+  });
+
+  test("the manual grid launch also snapshots the reviewed task (no post-await re-read)", () => {
+    const base = launchState(1);
+    const st: AppState = { ...base, launch: { ...base.launch!, task: "manual task body" } };
+    expect(reduce(st, { name: "enter" }).effect).toEqual({ type: "launch", agent: "codex", prompt: "manual task body" });
+  });
+
+  test("buildTargetLaunchArgs wires the task over stdin + the workflow flag, and omits both when absent", () => {
+    const withBoth = buildTargetLaunchArgs(PLAN, { prompt: "deliver me", workflowId: "wf-9" }, "slug1");
+    expect(withBoth.stdin).toBe("deliver me");
+    expect(withBoth.args).toContain("--prompt-stdin");
+    expect(withBoth.args.join(" ")).toContain("--workflow wf-9");
+
+    const withNone = buildTargetLaunchArgs(PLAN, { prompt: "" }, "slug2");
+    expect(withNone.stdin).toBeNull();
+    expect(withNone.args).not.toContain("--prompt-stdin");
+    expect(withNone.args).not.toContain("--workflow");
   });
 });
