@@ -35,7 +35,7 @@ function asCapability(value: string): Capability {
 
 export async function loadTaskProfileRules(path = RULES_PATH): Promise<TaskProfileRules> {
   const file = Bun.file(path);
-  if (!(await file.exists())) die(`task-profile-rules.yaml no existe en ${path}`);
+  if (!(await file.exists())) die(`task-profile-rules.yaml does not exist at ${path}`);
   return (Bun as unknown as { YAML: { parse: (text: string) => TaskProfileRules } }).YAML.parse(await file.text());
 }
 
@@ -57,14 +57,14 @@ export function classifyTask(task: string, rules: TaskProfileRules): { selected:
 
 export function buildTaskProfile(task: string, rules: TaskProfileRules): TaskProfile {
   const trimmed = task.trim();
-  if (!trimmed) throw new Error("la tarea no puede estar vacia");
+  if (!trimmed) throw new Error("the task cannot be empty");
   const { selected, signals } = classifyTask(trimmed, rules);
   return {
     task: trimmed,
     signals,
     selected_capability: selected,
     compatible_targets: ["manual-session", "openrouter-one-shot"],
-    disclaimer: "Las senales clasifican la tarea; no ordenan modelos ni eligen un agente.",
+    disclaimer: "Signals classify the task; they do not rank models or pick an agent.",
   };
 }
 
@@ -77,7 +77,7 @@ export async function runTaskProfileCli(argv = process.argv.slice(2), command = 
   const parsed = parseTaskProfileArgs(argv);
   let task = parsed.task;
   if (!task && !process.stdin.isTTY) task = (await Bun.readableStreamToText(Bun.stdin.stream())).trim();
-  if (!task) die(`uso: ebrain ${command} \"<tarea>\" [--json]  (o por stdin)`);
+  if (!task) die(`usage: ebrain ${command} \"<task>\" [--json]  (or via stdin)`);
   const profile = buildTaskProfile(task, await loadTaskProfileRules());
   if (parsed.json) {
     console.log(JSON.stringify(profile, null, 2));

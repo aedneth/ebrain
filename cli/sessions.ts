@@ -105,11 +105,11 @@ export type Result<T> = { ok: true } & T | { ok: false; error: TmuxError };
 
 export async function listSessions(): Promise<Result<{ sessions: SessionRow[] }>> {
   const r = await tmuxRaw(["list-sessions", "-F", "#{session_name}\t#{session_created}\t#{session_attached}\t#{session_path}"]);
-  if ("spawnError" in r) return { ok: false, error: { type: "tmux-not-installed", message: `tmux no disponible: ${r.spawnError}` } };
+  if ("spawnError" in r) return { ok: false, error: { type: "tmux-not-installed", message: `tmux not available: ${r.spawnError}` } };
   if (r.code !== 0) {
     const type = classifyTmuxError(r.stderr);
     if (type === "no-server") return { ok: true, sessions: [] }; // sin server = cero sesiones, no es un fallo duro
-    return { ok: false, error: { type, message: r.stderr.trim() || "tmux list-sessions falló" } };
+    return { ok: false, error: { type, message: r.stderr.trim() || "tmux list-sessions failed" } };
   }
   const sessions: SessionRow[] = [];
   for (const line of r.stdout.split("\n")) {
@@ -136,7 +136,7 @@ export interface ManifestLaunch { cmd: string; env: Record<string, string> }
  * validated by the profile store before this boundary. */
 export function shellCommandFromArgv(argv: string[]): string {
   if (argv.length === 0 || argv.some((arg) => typeof arg !== "string" || arg.length === 0 || /[\u0000\r\n]/.test(arg))) {
-    throw new Error("argv de launch invalido");
+    throw new Error("invalid launch argv");
   }
   return argv.map((arg) => `'${arg.replace(/'/g, `'\\''`)}'`).join(" ");
 }
@@ -168,7 +168,7 @@ export interface NewSessionInfo { name: string; agent: string; slug: string; cwd
 
 export async function newSession(agent: string, slug: string, opts: NewSessionOpts = {}): Promise<Result<{ session: NewSessionInfo }>> {
   if (!isSafeToken(agent) || !isSafeToken(slug)) {
-    return { ok: false, error: { type: "bad-agent", message: "agente/slug inválidos (solo [a-zA-Z0-9_-])" } };
+    return { ok: false, error: { type: "bad-agent", message: "invalid agent/slug (only [a-zA-Z0-9_-])" } };
   }
   const name = sessionName(agent, slug);
   const cwd = resolve(opts.cwd ?? process.cwd());
@@ -187,7 +187,7 @@ export async function newSession(agent: string, slug: string, opts: NewSessionOp
     return { ok: false, error: { type: "deny-client", message: `cwd resuelve bajo un repo de cliente (${CLIENT_DENYLIST.join(" / ")}) — rechazado (aislamiento duro, ver CLAUDE.md)` } };
   }
   if (!existsSync(cwd)) {
-    return { ok: false, error: { type: "other", message: `cwd no existe: ${cwd}` } };
+    return { ok: false, error: { type: "other", message: `cwd does not exist: ${cwd}` } };
   }
 
   let cmd: string;
@@ -196,7 +196,7 @@ export async function newSession(agent: string, slug: string, opts: NewSessionOp
     try {
       cmd = shellCommandFromArgv(opts.launchArgv);
     } catch (error) {
-      return { ok: false, error: { type: "bad-agent", message: error instanceof Error ? error.message : "argv de launch invalido" } };
+      return { ok: false, error: { type: "bad-agent", message: error instanceof Error ? error.message : "invalid launch argv" } };
     }
     env = { AGENT_NAME: agent, ...(opts.env ?? {}) };
   } else if (opts.launchCmd) {
@@ -219,13 +219,13 @@ export async function newSession(agent: string, slug: string, opts: NewSessionOp
 
   const existing = await listSessions();
   if (existing.ok && existing.sessions.some((s) => s.name === name)) {
-    return { ok: false, error: { type: "exists", message: `la sesión '${name}' ya existe (usá 'sessions kill' primero, o un slug distinto)` } };
+    return { ok: false, error: { type: "exists", message: `session '${name}' already exists (run 'sessions kill' first, or use a different slug)` } };
   }
 
   const envFlags = Object.entries(env).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
   const r = await tmuxRaw(["new-session", "-d", "-s", name, "-c", cwd, ...envFlags, cmd]);
   if ("spawnError" in r) return { ok: false, error: { type: "tmux-not-installed", message: r.spawnError } };
-  if (r.code !== 0) return { ok: false, error: { type: classifyTmuxError(r.stderr), message: r.stderr.trim() || "tmux new-session falló" } };
+  if (r.code !== 0) return { ok: false, error: { type: classifyTmuxError(r.stderr), message: r.stderr.trim() || "tmux new-session failed" } };
 
   return { ok: true, session: { name, agent, slug, cwd } };
 }
@@ -233,11 +233,11 @@ export async function newSession(agent: string, slug: string, opts: NewSessionOp
 // ── peek (SIEMPRE scrubbeado) ───────────────────────────────────────────────
 export async function peekSession(name: string, lines = DEFAULT_PEEK_LINES): Promise<Result<{ name: string; lines: number; text: string }>> {
   if (!name.startsWith(SESSION_PREFIX)) {
-    return { ok: false, error: { type: "other", message: `nombre inválido (esperado prefijo '${SESSION_PREFIX}'): ${name}` } };
+    return { ok: false, error: { type: "other", message: `invalid name (expected prefix '${SESSION_PREFIX}'): ${name}` } };
   }
   const r = await tmuxRaw(["capture-pane", "-p", "-t", name, "-S", `-${lines}`]);
   if ("spawnError" in r) return { ok: false, error: { type: "tmux-not-installed", message: r.spawnError } };
-  if (r.code !== 0) return { ok: false, error: { type: classifyTmuxError(r.stderr), message: r.stderr.trim() || "tmux capture-pane falló" } };
+  if (r.code !== 0) return { ok: false, error: { type: classifyTmuxError(r.stderr), message: r.stderr.trim() || "tmux capture-pane failed" } };
   // Hard requirement: cero pane crudo sale de esta función. scrubSecrets() SIEMPRE corre acá,
   // sin excepción ni flag de bypass.
   return { ok: true, name, lines, text: scrubSecrets(r.stdout) };
@@ -248,7 +248,7 @@ export async function sendToSession(name: string, text: string, yes: boolean): P
   if (!yes) {
     return {
       ok: false,
-      error: { type: "confirm-required", message: `falta --yes: sin confirmación NO se envía nada. Con --yes se enviaría a '${name}'.` },
+      error: { type: "confirm-required", message: `missing --yes: without confirmation NOTHING is sent. With --yes it would be sent to '${name}'.` },
       would: { name, text },
     };
   }
@@ -257,10 +257,10 @@ export async function sendToSession(name: string, text: string, yes: boolean): P
   // al agente en vez del texto). El Enter que somete el prompt va como pulsación aparte.
   const rLit = await tmuxRaw(["send-keys", "-t", name, "-l", "--", text]);
   if ("spawnError" in rLit) return { ok: false, error: { type: "tmux-not-installed", message: rLit.spawnError } };
-  if (rLit.code !== 0) return { ok: false, error: { type: classifyTmuxError(rLit.stderr), message: rLit.stderr.trim() || "tmux send-keys falló" } };
+  if (rLit.code !== 0) return { ok: false, error: { type: classifyTmuxError(rLit.stderr), message: rLit.stderr.trim() || "tmux send-keys failed" } };
   const rEnter = await tmuxRaw(["send-keys", "-t", name, "Enter"]);
   if ("spawnError" in rEnter) return { ok: false, error: { type: "tmux-not-installed", message: rEnter.spawnError } };
-  if (rEnter.code !== 0) return { ok: false, error: { type: classifyTmuxError(rEnter.stderr), message: rEnter.stderr.trim() || "tmux send-keys falló" } };
+  if (rEnter.code !== 0) return { ok: false, error: { type: classifyTmuxError(rEnter.stderr), message: rEnter.stderr.trim() || "tmux send-keys failed" } };
   return { ok: true, name, sent: true };
 }
 
@@ -268,13 +268,13 @@ export async function killSession(name: string, yes: boolean): Promise<Result<{ 
   if (!yes) {
     return {
       ok: false,
-      error: { type: "confirm-required", message: `falta --yes: sin confirmación NO se mata nada. Con --yes se mataría '${name}'.` },
+      error: { type: "confirm-required", message: `missing --yes: without confirmation NOTHING is killed. With --yes it would kill '${name}'.` },
       would: { name },
     };
   }
   const r = await tmuxRaw(["kill-session", "-t", name]);
   if ("spawnError" in r) return { ok: false, error: { type: "tmux-not-installed", message: r.spawnError } };
-  if (r.code !== 0) return { ok: false, error: { type: classifyTmuxError(r.stderr), message: r.stderr.trim() || "tmux kill-session falló" } };
+  if (r.code !== 0) return { ok: false, error: { type: classifyTmuxError(r.stderr), message: r.stderr.trim() || "tmux kill-session failed" } };
   return { ok: true, name, killed: true };
 }
 
@@ -334,7 +334,7 @@ async function main() {
       const r = await newSession(agent, slug, { cwd });
       if (json) { console.log(JSON.stringify(r, null, 2)); }
       if (!r.ok) { if (!json) console.error(`✗ ${r.error.message}`); process.exit(r.error.type === "deny-client" ? 2 : 1); }
-      if (!json) console.log(`✓ sesión creada: ${r.session.name} (cwd=${r.session.cwd})`);
+      if (!json) console.log(`✓ session created: ${r.session.name} (cwd=${r.session.cwd})`);
       return;
     }
     case "peek": {
@@ -362,7 +362,7 @@ async function main() {
       const r = await killSession(name, yes);
       if (json) { console.log(JSON.stringify(r, null, 2)); }
       if (!r.ok) { if (!json) console.error(`✗ ${r.error.message}`); process.exit(r.error.type === "confirm-required" ? 2 : 1); }
-      if (!json) console.log(`✓ sesión matada: ${r.name}`);
+      if (!json) console.log(`✓ session killed: ${r.name}`);
       return;
     }
     default:

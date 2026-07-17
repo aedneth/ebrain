@@ -62,7 +62,7 @@ async function runEbrainJson(args: string[], timeoutMs: number): Promise<KResult
   try {
     proc = Bun.spawn([EBRAIN, ...args], { stdout: "pipe", stderr: "pipe" });
   } catch (e) {
-    return { ok: false, error: `no se pudo ejecutar ebrain: ${msgOf(e)}` };
+    return { ok: false, error: `could not run ebrain: ${msgOf(e)}` };
   }
 
   const timer = setTimeout(() => {
@@ -77,12 +77,12 @@ async function runEbrainJson(args: string[], timeoutMs: number): Promise<KResult
     const [out, exit] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
     clearTimeout(timer);
     if (exit !== 0) {
-      return { ok: false, error: `ebrain ${args[0]} salió con código ${exit}` };
+      return { ok: false, error: `ebrain ${args[0]} exited with code ${exit}` };
     }
     try {
       return { ok: true, data: JSON.parse(out) };
     } catch {
-      return { ok: false, error: `ebrain ${args[0]} devolvió JSON inválido` };
+      return { ok: false, error: `ebrain ${args[0]} returned invalid JSON` };
     }
   } catch (e) {
     clearTimeout(timer);
@@ -103,7 +103,7 @@ async function fetchParsed<T>(
   const raw = await runEbrainJson(args, timeoutMs);
   if (!raw.ok) return raw;
   const data = parse(raw.data);
-  if (data == null) return { ok: false, error: `ebrain ${args[0]}: forma JSON inesperada` };
+  if (data == null) return { ok: false, error: `ebrain ${args[0]}: unexpected JSON shape` };
   return { ok: true, data };
 }
 
@@ -176,7 +176,7 @@ export async function runRemember(
   try {
     proc = Bun.spawn([EBRAIN, ...args], { stdout: "pipe", stderr: "pipe" });
   } catch (e) {
-    return { ok: false, error: `no se pudo ejecutar ebrain remember: ${msgOf(e)}` };
+    return { ok: false, error: `could not run ebrain remember: ${msgOf(e)}` };
   }
   const timer = setTimeout(() => {
     try {
@@ -192,7 +192,7 @@ export async function runRemember(
       proc.exited,
     ]);
     clearTimeout(timer);
-    if (exit !== 0) return { ok: false, error: (err || out).trim().split("\n").pop() || `código ${exit}` };
+    if (exit !== 0) return { ok: false, error: (err || out).trim().split("\n").pop() || `exit code ${exit}` };
     return { ok: true, data: out.trim() };
   } catch (e) {
     clearTimeout(timer);
