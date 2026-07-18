@@ -22,7 +22,9 @@ import {
   parseRouting,
   parseCost,
   parseMemory,
+  parseEpisodes,
   parseWorkflows,
+  parseProcedures,
   parseWorkflowRun,
   parseTaskProfile,
   parseWorkspaces,
@@ -42,7 +44,9 @@ import {
   type RoutingData,
   type CostData,
   type MemoryData,
+  type EpisodesData,
   type WorkflowsData,
+  type ProceduresData,
   type WorkflowRunData,
   type TaskProfileData,
   type WorkspacesData,
@@ -136,11 +140,19 @@ export function fetchCost(): Promise<KResult<CostData>> {
 export function fetchMemory(limit = 8): Promise<KResult<MemoryData>> {
   return fetchParsed(["memory", "recent", "--json", "--limit", String(limit)], 15000, parseMemory);
 }
+/** Summary-only by contract: episode bodies require an explicit bounded CLI get. */
+export function fetchEpisodes(limit = 8): Promise<KResult<EpisodesData>> {
+  return fetchParsed(["episodes", "list", "--json", "--limit", String(limit)], 15000, parseEpisodes);
+}
 export function fetchSearch(query: string): Promise<KResult<SearchData>> {
   return fetchParsed(["q", query, "--json"], 30000, parseSearch);
 }
 export function fetchWorkflows(limit = 8): Promise<KResult<WorkflowsData>> {
   return fetchParsed(["workflows", "list", "--json", "--limit", String(limit)], 15000, parseWorkflows);
+}
+/** Procedure rows add only human-reviewed lifecycle evidence to workflow summaries. */
+export function fetchProcedures(limit = 8): Promise<KResult<ProceduresData>> {
+  return fetchParsed(["procedures", "list", "--json", "--limit", String(limit)], 15000, parseProcedures);
 }
 export function runWorkflow(id: string): Promise<KResult<WorkflowRunData>> {
   return fetchParsed(["workflows", "run", id, "--json"], 15000, parseWorkflowRun);

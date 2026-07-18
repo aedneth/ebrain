@@ -116,7 +116,25 @@ fi
 # Write-through por MCP al daemon para que sea buscable sin pelear el lock PGLite.
 EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
 REMOTE="$EBRAIN_HOME/cli/remote-tools.ts"
-BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN_BIN=bun
+if [ -z "${BUN_BIN:-}" ]; then
+  BUN_BIN="$HOME/.bun/bin/bun"
+  command -v bun >/dev/null 2>&1 && BUN_BIN=bun
+fi
+EPISODES="$EBRAIN_HOME/cli/episodes.ts"
+
+# An explicit remember is also a high-signal local episode. Mirroring is deliberately best-effort:
+# the durable learning above is already committed, and a secondary recall-store failure must never
+# turn that successful write into a user-visible failure or block the agent's workflow.
+if [ -f "$EPISODES" ]; then
+  EP_ARGS=(record --kind learning --source remember --project "$SLUG" --agent "$AGENT" --text "$CONTENT" --yes)
+  [ -n "$SESSION_ID" ] && EP_ARGS+=(--session "$SESSION_ID")
+  if "$BUN_BIN" run "$EPISODES" "${EP_ARGS[@]}" >/dev/null 2>&1; then
+    echo "  episode mirror ✓ (local bounded recall)"
+  else
+    echo "  WARN: episode mirror failed; durable learning remains available"
+  fi
+fi
+
 SLUG_PATH="learnings/$SLUG/${DATE_TAG}-${AGENT}-${HASH}"
 if [ "$SYNC" = "1" ] && [ -f "$REMOTE" ]; then
   if "$BUN_BIN" run "$REMOTE" put-page --source agent-memory --slug "$SLUG_PATH" --file "$OUT" >/dev/null 2>&1; then

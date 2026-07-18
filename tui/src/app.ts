@@ -66,8 +66,10 @@ import type {
   MemoryData,
   MemoryLearning,
   MemorySession,
+  EpisodesData,
   WorkflowsData,
-  WorkflowSummaryData,
+  ProcedureSummaryData,
+  ProceduresData,
   RoutingData,
   CostData,
   ProfilesData,
@@ -87,7 +89,8 @@ import type {
 import {
   fetchStatus,
   fetchMemory,
-  fetchWorkflows,
+  fetchEpisodes,
+  fetchProcedures,
   runWorkflow,
   fetchRouting,
   fetchCost,
@@ -237,12 +240,15 @@ export interface OverviewSlice {
   atLabel: string | null;
 }
 
-/** Memory panel: learnings + local workflows + session logs, navigable (F6.6C).
- * `selected` = focused learning; `searchSelected` = focused search result (its own
- * cursor — the results box swaps between recent learnings and live search, G56-F3);
- * `workflowSelected` = focused workflow; `logSelected` = focused session-log. */
+/** Memory panel: governed recall + context metadata + reviewed procedures (F9.2).
+ * `selected` is the combined recall cursor (episode summaries first, legacy learnings after);
+ * `searchSelected` remains its own cursor; `workflowSelected` selects a procedure's underlying
+ * workflow; `logSelected` is retained for legacy session summaries until F9.3 migration. */
 export interface MemorySlice {
   data: MemoryData | null;
+  episodes?: EpisodesData | null;
+  contexts?: ContextPacksData | null;
+  procedures?: ProceduresData | null;
   search: SearchData | null;
   searchStatus: LoadStatus;
   searchError?: string;
@@ -285,7 +291,7 @@ export function emptyOverview(): OverviewSlice {
   return { data: null, memory: null, memSelected: 0, status: "idle", atLabel: null };
 }
 export function emptyMemory(): MemorySlice {
-  return { data: null, search: null, searchStatus: "idle", searchSelected: 0, workflows: null, selected: 0, workflowSelected: 0, logSelected: 0, status: "idle" };
+  return { data: null, episodes: null, contexts: null, procedures: null, search: null, searchStatus: "idle", searchSelected: 0, workflows: null, selected: 0, workflowSelected: 0, logSelected: 0, status: "idle" };
 }
 export function emptyRouting(): RoutingSlice {
   return { data: null, cost: null, mode: "routing", selected: 0, costSelected: 0, status: "idle" };
@@ -300,6 +306,26 @@ function overviewOf(state: AppState): OverviewSlice {
 function memoryOf(state: AppState): MemorySlice {
   return state.memory ?? emptyMemory();
 }
+
+type RecallRow =
+  | { kind: "episode"; episode: NonNullable<EpisodesData>["episodes"][number] }
+  | { kind: "learning"; learning: MemoryLearning };
+
+/** Episodes are intentionally ordered before legacy learnings. An episode can be inspected for
+ * provenance but its body remains outside passive TUI state (F9.2 privacy boundary). */
+function recallRows(memory: MemorySlice): RecallRow[] {
+  return [
+    ...(memory.episodes?.episodes ?? []).map((episode): RecallRow => ({ kind: "episode", episode })),
+    ...(memory.data?.learnings ?? []).map((learning): RecallRow => ({ kind: "learning", learning })),
+  ];
+}
+
+/** Existing workflows stay as a fixture/migration fallback; live TUI refreshes use procedures. */
+function procedureRows(memory: MemorySlice): ProcedureSummaryData[] {
+  if (memory.procedures) return memory.procedures.procedures;
+  return (memory.workflows?.workflows ?? []).map((workflow) => ({ ...workflow, state: "active", useCount: 0, skillified: false }));
+}
+
 function routingOf(state: AppState): RoutingSlice {
   return state.routing ?? emptyRouting();
 }
@@ -602,7 +628,7 @@ const REGIONS: Record<TabName, readonly string[]> = {
   sessions: ["list"],
   launch: ["agents", "guided", "task"],
   workspaces: ["registry", "activity", "detail"],
-  memory: ["results", "workflows", "logs"],
+  memory: ["results", "procedures", "logs"],
   routing: ["caps"],
   doctor: ["checks", "fleet"],
 };
@@ -797,8 +823,8 @@ function moveSelection(state: AppState, delta: number): ReduceResult {
 
   if (state.tab === "memory") {
     const m = memoryOf(state);
-    if (region === "workflows") {
-      const n = m.workflows?.workflows.length ?? 0;
+    if (region === "procedures") {
+      const n = procedureRows(m).length;
       if (n === 0) return settle(clear);
       return settle({ ...clear, memory: { ...m, workflowSelected: clampIndex(m.workflowSelected + delta, n) } });
     }
@@ -814,7 +840,7 @@ function moveSelection(state: AppState, delta: number): ReduceResult {
       if (n === 0) return settle(clear);
       return settle({ ...clear, memory: { ...m, searchSelected: clampIndex(m.searchSelected + delta, n) } });
     }
-    const n = m.data?.learnings.length ?? 0;
+    const n = recallRows(m).length;
     if (n === 0) return settle(clear);
     return settle({ ...clear, memory: { ...m, selected: clampIndex(m.selected + delta, n) } });
   }
@@ -894,14 +920,20 @@ function drillIn(state: AppState): ReduceResult {
       if (r) return settle({ ...clear, overlay: { kind: "detail", title: `search · ${r.source}`, body: `${r.slug}\n\n${r.snippet}` } });
       return settle(clear);
     }
-    const l = m.data?.learnings[m.selected];
-    if (l) return settle({ ...clear, overlay: { kind: "detail", title: `memory · ${l.project}`, body: l.text } });
+    const selected = recallRows(m)[m.selected];
+    if (selected?.kind === "episode") {
+      const e = selected.episode;
+      const workspace = e.workspaceId ? `\nworkspace ${e.workspaceId}` : "";
+      const session = e.session ? `\nsession ${e.session}` : "";
+      return settle({ ...clear, overlay: { kind: "detail", title: `episode · ${e.project}`, body: `${e.kind} · ${e.source}\n${e.createdAt}\n${e.agent} · ${e.chars} chars${workspace}${session}\n\nEpisode text is available only through explicit bounded retrieval.` } });
+    }
+    if (selected?.kind === "learning") return settle({ ...clear, overlay: { kind: "detail", title: `memory · ${selected.learning.project}`, body: selected.learning.text } });
     return settle(clear);
   }
   // Workflow run only materializes a reviewable prompt. The user still attaches it to
   // Launch and confirms a route/session there; no workflow command executes here.
-  if (state.tab === "memory" && region === "workflows") {
-    const w = memoryOf(state).workflows?.workflows[memoryOf(state).workflowSelected];
+  if (state.tab === "memory" && region === "procedures") {
+    const w = procedureRows(memoryOf(state))[memoryOf(state).workflowSelected];
     if (w) return settle(clear, { type: "runWorkflow", id: w.id });
     return settle(clear);
   }
@@ -1077,10 +1109,10 @@ function actionReferenceFor(state: AppState): HelpContext {
       actions: [
         { key: "s", title: "search", summary: "search the shared memory index" },
         { key: "r", title: "remember", summary: "store a durable learning" },
-        { key: "a", title: "attach workflow", summary: "place a workflow prompt in Launch" },
-        { key: "tab", title: "focus box", summary: "move between results, workflows, and session logs" },
+        { key: "a", title: "attach procedure", summary: "place its materialized workflow prompt in Launch" },
+        { key: "tab", title: "focus box", summary: "move between recall, procedures, and legacy session logs" },
         { key: "↑↓", title: "select", summary: "move within the focused collection" },
-        { key: "enter", title: "open or run", summary: "open details or materialize a workflow prompt" },
+        { key: "enter", title: "open or run", summary: "open recall metadata or materialize a procedure prompt" },
         { key: "esc", title: "clear search", summary: "return from search results to recent memory" },
       ],
     };
@@ -1507,10 +1539,10 @@ export function reduce(state: AppState, key: Key, options: ReduceOptions = {}): 
     if (state.tab === "memory" && ch === "s") {
       return settle({ ...state, confirmQuit: false, overlay: { kind: "memorySearch", line: lineFrom(memoryOf(state).search?.query ?? "") } });
     }
-    // Attach a selected workflow as a Launch task. This only materializes text; it
+    // Attach a selected procedure's workflow as a Launch task. This only materializes text; it
     // does not invoke OpenRouter or start an agent until the user acts in Launch.
-    if (state.tab === "memory" && ch === "a" && focusedRegion(state) === "workflows") {
-      const w = memoryOf(state).workflows?.workflows[memoryOf(state).workflowSelected];
+    if (state.tab === "memory" && ch === "a" && focusedRegion(state) === "procedures") {
+      const w = procedureRows(memoryOf(state))[memoryOf(state).workflowSelected];
       if (w) return settle({ ...state, confirmQuit: false }, { type: "attachWorkflow", id: w.id });
     }
     if (state.tab === "routing" && ch === "c") {
@@ -2717,12 +2749,9 @@ function buildLaunchView(launch: LaunchSlice, workspace: WorkspaceSelection, cal
 }
 
 // ---------------------------------------------------------------------------
-// Memory view (F6.5.2) — screens-b.jsx's MemoryScreen wired to `memory recent --json`:
-// a semantic-search PromptBox (informational — `ebrain q` has no --json contract, so no
-// fabricated score/source parsing), a navigable "resultados" ScrollList of recent
-// learnings (violet = memoria), a "session-logs" side panel, and `r` to open the
-// remember composer (writes to permanent agentic memory). Round-trip remember→recent is
-// the F6.5 criterion #6.
+// Memory view (F9.2) — governed recall records, human context metadata, reviewed procedures,
+// and legacy session summaries during the fixture-only migration window. Every passive source is
+// summary-only; body retrieval remains an explicit bounded CLI action.
 // ---------------------------------------------------------------------------
 
 /** MM-DD HH:MM from an ISO ts, by pure slicing (no Date — buildFrame stays pure). */
@@ -2746,6 +2775,26 @@ function renderLearningRow(l: MemoryLearning, width: number, sel: boolean, theme
   return violet + dot + " " + reset + textCell + srcCell;
 }
 
+function renderEpisodeRow(e: NonNullable<EpisodesData>["episodes"][number], width: number, sel: boolean, theme: Theme): string {
+  const reset = theme.reset;
+  const violet = theme.fg("memory.violet");
+  const dot = theme.glyph("badgeDot");
+  const meta = `${e.source} · ${e.chars} chars`;
+  const metaW = Math.min(20, Math.max(10, Math.floor(width * 0.36)));
+  const labelW = Math.max(0, width - 2 - metaW);
+  const label = `${e.kind === "session-summary" ? "summary" : "learning"} · ${e.project}`;
+  const text = (sel ? theme.fg("text.primary") + BOLD : theme.fg("text.secondary")) +
+    padTo(truncate(label, labelW), labelW) + reset;
+  return violet + dot + " " + reset + text + theme.fg("text.muted") + padTo(truncate(meta, metaW), metaW, "right") + reset;
+}
+
+function renderContextRow(pack: NonNullable<ContextPacksData>["packs"][number], width: number, theme: Theme): string {
+  const reset = theme.reset;
+  const scope = pack.scope === "operator" ? "operator" : `workspace ${pack.workspaceId ?? ""}`.trim();
+  return theme.fg("accent.teal") + theme.glyph("badgeDot") + " " + reset +
+    theme.fg("text.secondary") + truncate(`${scope} · v${pack.version}`, Math.max(0, width - 2)) + reset;
+}
+
 /** One federated-search result row (source · score · slug -- snippet). The selection
  * cursor/scrollbar are applied by scrolllist; this only colors the content (G56-F3). */
 function renderSearchRow(r: SearchResult, width: number, sel: boolean, theme: Theme): string {
@@ -2761,16 +2810,18 @@ function renderLogRow(s: MemorySession, width: number, theme: Theme): string {
   return truncate(ts + " " + b, width);
 }
 
-function renderWorkflowRow(w: WorkflowSummaryData, width: number, sel: boolean, theme: Theme): string {
+function renderProcedureRow(w: ProcedureSummaryData, width: number, sel: boolean, theme: Theme): string {
   const reset = theme.reset;
   const tone = theme.fg("accent.teal");
-  const meta = `v${w.version} · ${w.steps} steps · ${w.gates} gates`;
-  const metaW = Math.min(22, Math.max(10, Math.floor(width * 0.38)));
-  const titleW = Math.max(0, width - 2 - metaW);
+  const meta = `${w.state} · ${w.useCount} uses${w.skillified ? " · skill" : ""}`;
+  // Reserve enough room at normal widths for state, explicit use evidence, and derived skill
+  // presence. Compact terminals may truncate metadata, but Recall remains the priority there.
+  const metaW = Math.min(23, Math.max(10, width - 13));
+  const titleW = Math.max(0, width - 3 - metaW);
   const title = (sel ? theme.fg("text.primary") + BOLD : theme.fg("text.secondary")) +
     padTo(truncate(w.title, titleW), titleW) + reset;
   return tone + theme.glyph("badgeDot") + " " + reset + title + theme.fg("text.muted") +
-    padTo(truncate(meta, metaW), metaW, "right") + reset;
+    " " + padTo(truncate(meta, metaW), metaW, "right") + reset;
 }
 
 export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, theme: Theme): string[] {
@@ -2785,7 +2836,10 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
   }
 
   const learnings = m.data.learnings;
-  const workflows = m.workflows?.workflows ?? [];
+  const episodes = m.episodes?.episodes ?? [];
+  const recall = recallRows(m);
+  const procedures = procedureRows(m);
+  const contexts = m.contexts?.packs ?? [];
   const sessions = m.data.sessions;
   const [searchRect, midRect, footRect] = splitV(rect, [1, { flex: 1 }, 1]);
 
@@ -2802,13 +2856,14 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
     ),
   );
 
-  // Mid: recent learnings (left) + workflows/session logs stacked on the right.
-  const rightW = Math.min(40, Math.max(24, Math.floor(cols * 0.34)));
+  // Recall stays dominant. Context has no focus because it is metadata only; Procedures and
+  // legacy session logs remain the two selectable support collections.
+  const rightW = Math.min(50, Math.max(30, Math.floor(cols * 0.42)));
   const [leftRect, rightRect] = splitH({ top: 0, left: 0, width: cols, height: midRect.height }, [{ flex: 1 }, rightW], 2);
 
-  const selected = clampIndex(m.selected, Math.max(1, learnings.length));
+  const selected = clampIndex(m.selected, Math.max(1, recall.length));
   const listHeight = Math.max(1, midRect.height - 2);
-  const offset = scrollOffset(selected, listHeight, learnings.length);
+  const offset = scrollOffset(selected, listHeight, recall.length);
   const rowW = Math.max(8, leftRect.width - 4 - 3);
   const searchResults = m.search?.results ?? [];
   const searchSel = clampIndex(m.searchSelected, Math.max(1, searchResults.length));
@@ -2831,37 +2886,51 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
               theme,
             )
           : [theme.fg("text.secondary") + "no search results" + theme.reset]
-        : learnings.length > 0
+        : recall.length > 0
       ? scrolllist(
           {
-            items: learnings,
+            items: recall,
             selected,
             height: listHeight,
             offset,
-            renderItem: (l, idx) => renderLearningRow(l, rowW, idx === selected, theme),
+            renderItem: (row, idx) => row.kind === "episode"
+              ? renderEpisodeRow(row.episode, rowW, idx === selected, theme)
+              : renderLearningRow(row.learning, rowW, idx === selected, theme),
           },
           theme,
         )
-      : [theme.fg("text.secondary") + "no recent learnings" + theme.reset];
+      : [theme.fg("text.secondary") + "no local episodes or recent learnings" + theme.reset];
   const leftPanel = panel(
-    { title: m.search ? `search results · ${searchResults.length}` : `results · ${learnings.length} · violet = memory`, focus: focused === "results", width: leftRect.width, height: midRect.height, body: resultsBody },
+    { title: m.search ? `search results · ${searchResults.length}` : `recall · ${episodes.length} episodes · ${learnings.length} learnings`, focus: focused === "results", width: leftRect.width, height: midRect.height, body: resultsBody },
     theme,
   );
 
-  const [workflowRect, logsRect] = splitV(rightRect, [{ flex: 1 }, { flex: 1 }], 1);
-  const workflowW = Math.max(8, workflowRect.width - 4);
-  const workflowSel = clampIndex(m.workflowSelected, Math.max(1, workflows.length));
-  const workflowRoom = Math.max(1, workflowRect.height - 2);
-  const workflowOff = scrollOffset(workflowSel, workflowRoom, workflows.length);
-  const workflowsBody =
-    workflows.length > 0
-      ? workflows.slice(workflowOff, workflowOff + workflowRoom).map((w, i) => {
-          const row = renderWorkflowRow(w, workflowW, focused === "workflows" && workflowOff + i === workflowSel, theme);
-          return focused === "workflows" && workflowOff + i === workflowSel ? highlightRow(padTo(row, workflowW), theme) : row;
+  const contextHeight = rightRect.height >= 13 ? 5 : 4;
+  const [contextRect, procedureRect, logsRect] = splitV(rightRect, [contextHeight, { flex: 1 }, { flex: 1 }], 1);
+  const contextW = Math.max(8, contextRect.width - 4);
+  const contextRoom = Math.max(1, contextRect.height - 2);
+  const contextBody = contexts.length > 0
+    ? contexts.slice(0, contextRoom).map((pack) => renderContextRow(pack, contextW, theme))
+    : [theme.fg("text.secondary") + "no active context packs" + theme.reset];
+  const contextsPanel = panel(
+    { title: `context · ${contexts.length}`, focus: false, width: contextRect.width, height: contextRect.height, body: contextBody },
+    theme,
+  );
+
+  const procedureW = Math.max(8, procedureRect.width - 4);
+  const workflowSel = clampIndex(m.workflowSelected, Math.max(1, procedures.length));
+  const procedureRoom = Math.max(1, procedureRect.height - 2);
+  const procedureOff = scrollOffset(workflowSel, procedureRoom, procedures.length);
+  const proceduresBody =
+    procedures.length > 0
+      ? procedures.slice(procedureOff, procedureOff + procedureRoom).map((procedure, i) => {
+          const isSelected = focused === "procedures" && procedureOff + i === workflowSel;
+          const row = renderProcedureRow(procedure, procedureW, isSelected, theme);
+          return isSelected ? highlightRow(padTo(row, procedureW), theme) : row;
         })
-      : [theme.fg("text.secondary") + "run `ebrain workflows ingest`" + theme.reset];
-  const workflowsPanel = panel(
-    { title: `workflows · ${workflows.length}`, focus: focused === "workflows", width: workflowRect.width, height: workflowRect.height, body: workflowsBody },
+      : [theme.fg("text.secondary") + "no reviewed procedures" + theme.reset];
+  const proceduresPanel = panel(
+    { title: `procedures · ${procedures.length}`, focus: focused === "procedures", width: procedureRect.width, height: procedureRect.height, body: proceduresBody },
     theme,
   );
 
@@ -2877,17 +2946,20 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
         })
       : [theme.fg("text.secondary") + "no sessions" + theme.reset];
   const rightPanel = panel(
-    { title: "session-logs", focus: focused === "logs", width: logsRect.width, height: logsRect.height, body: logsBody },
+    { title: `legacy session logs · ${sessions.length}`, focus: focused === "logs", width: logsRect.width, height: logsRect.height, body: logsBody },
     theme,
   );
 
+  const rightRows = [
+    ...contextsPanel,
+    " ".repeat(rightRect.width),
+    ...proceduresPanel,
+    " ".repeat(rightRect.width),
+    ...rightPanel,
+  ];
   const gap = " ".repeat(Math.max(0, cols - leftRect.width - rightRect.width));
   for (let i = 0; i < midRect.height; i++) {
-    const right = i < workflowRect.height
-      ? workflowsPanel[i] ?? ""
-      : i === workflowRect.height
-        ? " ".repeat(rightRect.width)
-        : rightPanel[i - workflowRect.height - 1] ?? "";
+    const right = rightRows[i] ?? " ".repeat(rightRect.width);
     out.push((leftPanel[i] ?? "") + gap + right);
   }
 
@@ -2896,7 +2968,7 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
   if (footRect.height > 0) {
     const hint = m.search
       ? "s search · esc back to recent · enter open result · ↑↓ focused box"
-      : "s search · r remember · enter run/open · a attach workflow · ↑↓ focused box";
+      : "s search · r remember · enter run/open · a attach procedure · ↑↓ focused box";
     const foot = theme.fg("text.muted") + hint + theme.reset;
     out.push(padTo(truncate(foot, cols), cols));
   }
@@ -3585,20 +3657,33 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       const cur = memoryOf(state);
       state = { ...state, memory: { ...cur, status: cur.data ? cur.status : "loading" } };
       if (state.tab === "memory") render();
-      const [r, workflows] = await Promise.all([fetchMemory(8), fetchWorkflows(8)]);
+      const [r, episodes, contexts, procedures] = await Promise.all([
+        fetchMemory(8),
+        fetchEpisodes(8),
+        fetchContextPacks(),
+        fetchProcedures(8),
+      ]);
       const m = memoryOf(state);
       if (r.ok) {
-        const nextWorkflows = workflows.ok ? workflows.data : m.workflows;
+        const nextEpisodes = episodes.ok ? episodes.data : m.episodes;
+        const nextContexts = contexts.ok ? contexts.data : m.contexts;
+        const nextProcedures = procedures.ok ? procedures.data : m.procedures;
+        const nextMemory: MemorySlice = {
+          ...m,
+          data: r.data,
+          episodes: nextEpisodes,
+          contexts: nextContexts,
+          procedures: nextProcedures,
+        };
+        const unavailable = [episodes, contexts, procedures].filter((result) => !result.ok).length;
         state = {
           ...state,
           memory: {
-            ...m,
-            data: r.data,
-            workflows: nextWorkflows,
-            selected: Math.min(m.selected, Math.max(0, r.data.learnings.length - 1)),
-            workflowSelected: Math.min(m.workflowSelected, Math.max(0, (nextWorkflows?.workflows.length ?? 0) - 1)),
+            ...nextMemory,
+            selected: Math.min(m.selected, Math.max(0, recallRows(nextMemory).length - 1)),
+            workflowSelected: Math.min(m.workflowSelected, Math.max(0, procedureRows(nextMemory).length - 1)),
             status: "ready",
-            error: workflows.ok ? undefined : `workflows: ${workflows.error}`,
+            error: unavailable > 0 ? "some memory metadata is unavailable" : undefined,
           },
         };
       } else {

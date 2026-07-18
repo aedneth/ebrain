@@ -16,12 +16,16 @@ const stripAnsi = (s: string) => s.replace(/\x1b(?:\[[0-9;]*[A-Za-z]|\][^\x07\x1
 const theme = makeTheme({ trueColor: true, ascii: false });
 const SIZE = { cols: 120, rows: 32 };
 
-function frameText(state: AppState): string {
-  const frame = buildFrame(state, SIZE, theme);
+function frameTextAt(state: AppState, size: { cols: number; rows: number }): string {
+  const frame = buildFrame(state, size, theme);
   // Width invariant every panel must uphold (a character buffer needs exact widths).
-  for (const row of frame) expect(displayWidth(row)).toBe(SIZE.cols);
-  expect(frame.length).toBe(SIZE.rows);
+  for (const row of frame) expect(displayWidth(row)).toBe(size.cols);
+  expect(frame.length).toBe(size.rows);
   return frame.map(stripAnsi).join("\n");
+}
+
+function frameText(state: AppState): string {
+  return frameTextAt(state, SIZE);
 }
 
 function base(tab: AppState["tab"], extra: Partial<AppState>): AppState {
@@ -65,8 +69,8 @@ describe("Overview panel (6.5.1) + lock banner (6.5.5)", () => {
   });
 });
 
-// ── Memory (6.5.2) ──────────────────────────────────────────────────────────
-describe("Memory panel (6.5.2)", () => {
+// ── Memory (F9.2) ───────────────────────────────────────────────────────────
+describe("Memory panel (F9.2)", () => {
   const state = base("memory", {
     memory: {
       data: {
@@ -79,24 +83,53 @@ describe("Memory panel (6.5.2)", () => {
       workflows: {
         workflows: [{ id: "second-brain-structured-agentic-development", title: "Structured Agentic Development", source: "second-brain", version: 2, trigger: "Use for software", summary: "Plan then verify", tags: ["sop"], steps: 4, gates: 2 }],
       },
+      episodes: {
+        episodes: [{ id: "episode-11111111-1111-4111-8111-111111111111", kind: "learning", source: "remember", createdAt: "2026-07-18T00:00:00.000Z", project: "ebrain", agent: "codex", chars: 84 }],
+      },
+      contexts: {
+        packs: [{ id: "operator", scope: "operator", version: 2, updatedAt: "2026-07-18T00:00:00.000Z", chars: 120 }],
+      },
+      procedures: {
+        procedures: [{ id: "second-brain-structured-agentic-development", title: "Structured Agentic Development", source: "second-brain", version: 2, trigger: "Use for software", summary: "Plan then verify", tags: ["sop"], steps: 4, gates: 2, state: "active", useCount: 3, skillified: true }],
+      },
       selected: 0,
       workflowSelected: 0,
       status: "ready",
     },
   });
 
-  it("renders results, workflows, session-logs, the search box and the remember hint", () => {
+  it("renders governed recall, passive context, procedures, legacy logs, and compact controls", () => {
     const t = frameText(state);
     expect(t).toContain("deepseek v3 falla con tool-use paralelo");
-    expect(t).toContain("results");
-    expect(t).toContain("session-logs");
-    expect(t).toContain("workflows");
-    expect(t).toContain("Structured Agentic Dev");
+    expect(t).toContain("recall · 1 episodes · 2 learnings");
+    expect(t).toContain("learning · ebrain");
+    expect(t).toContain("context · 1");
+    expect(t).toContain("operator · v2");
+    expect(t).toContain("procedures · 1");
+    expect(t).toContain("legacy session logs · 1");
+    expect(t).toContain("Structured Agentic");
+    expect(t).toContain("active · 3 uses · skill");
     expect(t).toContain("07-14 12:45");
     expect(t).toContain("refactor router");
     expect(t).toContain("r remember");
     expect(t).toContain("shared memory search");
     expect(t).toContain("s search");
+  });
+
+  it("keeps Recall usable at 80x24 and never exposes an episode body", () => {
+    const t = frameTextAt(state, { cols: 80, rows: 24 });
+    expect(t).toContain("recall");
+    expect(t).toContain("context");
+    expect(t).toContain("procedures");
+    expect(t).not.toContain("must not enter TUI state");
+  });
+
+  it("opens an episode as provenance only, never as hidden episode text", () => {
+    const next = reduce(state, { name: "enter" }).state;
+    const detail = next.overlay as { kind: string; body: string };
+    expect(detail.kind).toBe("detail");
+    expect(detail.body).toContain("Episode text is available only through explicit bounded retrieval.");
+    expect(detail.body).not.toContain("deepseek v3 falla");
   });
 });
 
@@ -373,12 +406,27 @@ describe("reduce — knowledge-panel keys", () => {
     expect(reduce({ ...s, memory: { ...s.memory!, selected: 1 } }, { name: "up" }).state.memory!.selected).toBe(0);
   });
 
-  it("memory workflow focus runs a materialized prompt or attaches it to Launch", () => {
+  it("memory Recall navigates passive episodes before legacy learnings", () => {
+    const s = base("memory", {
+      memory: {
+        data: { learnings: [{ project: "legacy", agent: "x", date: "d", tags: [], text: "legacy body" }], sessions: [] },
+        episodes: { episodes: [{ id: "episode-11111111-1111-4111-8111-111111111111", kind: "learning", source: "remember", createdAt: "2026-07-18T00:00:00.000Z", project: "episode", agent: "codex", chars: 12 }] },
+        selected: 0,
+        status: "ready",
+      },
+    });
+    const down = reduce(s, { name: "down" }).state;
+    expect(down.memory!.selected).toBe(1);
+    const detail = reduce(down, { name: "enter" }).state.overlay as { body: string };
+    expect(detail.body).toContain("legacy body");
+  });
+
+  it("memory procedure focus runs a materialized prompt or attaches it to Launch", () => {
     const s = base("memory", {
       focusRegion: 1,
       memory: {
         data: { learnings: [], sessions: [] },
-        workflows: { workflows: [{ id: "local-dev-sop", title: "Dev SOP", source: "local", version: 1, trigger: "Use it", summary: "Plan", tags: [], steps: 2, gates: 1 }] },
+        procedures: { procedures: [{ id: "local-dev-sop", title: "Dev SOP", source: "local", version: 1, trigger: "Use it", summary: "Plan", tags: [], steps: 2, gates: 1, state: "active", useCount: 0, skillified: false }] },
         selected: 0,
         workflowSelected: 0,
         logSelected: 0,

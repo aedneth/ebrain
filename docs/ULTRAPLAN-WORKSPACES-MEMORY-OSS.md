@@ -228,6 +228,10 @@ evidence is in `F9-CONTEXT-MAKER-REPORT.md`.
 
 ### F9.2 -- Episode, recall, procedure, and skill lifecycle
 
+**Status (2026-07-18):** implementation complete; independent checker review pending. The maker
+evidence is in `F9.2-EPISODES-PROCEDURES-MAKER-REPORT.md`. F9.3 remains the only migration and
+audit-closure phase; no private data migration was performed here.
+
 - Formalize summaries and explicit learnings as immutable scrubbed episode records with agent,
   session, and workspace provenance. Keep the daemon as semantic retrieval engine.
 - Redesign Memory around **Recall**, **Context**, and **Procedures**, following contour-only layout

@@ -4,6 +4,23 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-18 -- F9.2 Governed episodes and reviewed procedures
+
+- **Bounded local recall:** added immutable, scrubbed episode records with opaque identifiers,
+  safe provenance, private atomic storage, explicit bounded retrieval, and local lexical recall.
+  Passive list output is summary-only. A successful `ebrain remember` mirrors to an episode on a
+  best-effort basis, so a mirror failure cannot invalidate the original durable learning.
+- **Human-reviewed procedure lifecycle:** added path-free procedure summaries and a private
+  metadata sidecar for explicit use evidence and `active`/`stale`/`archived` review state. Existing
+  workflow records remain the content source of truth; procedure actions never execute commands,
+  infer success, choose providers, or create skills automatically.
+- **Memory cockpit consolidation:** Memory now presents episode-first Recall, metadata-only Context,
+  reviewed Procedures, and clearly-labelled legacy session logs. The TUI stores no episode/context
+  body, path, event history, command, model, or provider value; an episode detail shows provenance
+  only, while existing procedure materialization/attach behavior is preserved.
+- **Verification status:** focused CLI/TUI contracts and engines passed `154/0`; final full suites
+  passed CLI `264/0` and TUI `441/0`. Independent approval is still required by design.
+
 ## 2026-07-18 -- F9.1 Governed operating context packs
 
 - **Human-governed context:** added private local operator and registered-workspace Markdown packs

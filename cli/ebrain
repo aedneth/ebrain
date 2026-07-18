@@ -63,6 +63,8 @@ ebrain — unified harness + agentic-memory layer (provider-agnostic)
   ebrain routing [--json]                                    OpenRouter stack: chains, models and spend
   ebrain cost [--json]                                       unified ledger by provider/agent/model/session/workflow
   ebrain context <list|proposals|init|get|update|propose|review> [--json] reviewed local operating context packs
+  ebrain episodes <list|get|recall|record> [--json]          bounded local episode recall (no raw transcripts)
+  ebrain procedures <list|show|use|review> [--json]          reviewed lifecycle for local workflows/skills
   ebrain profiles <list|show|validate|init|catalog-add|create> [--json] user-chosen local OpenRouter profiles
   ebrain workspaces <list|add|rename|remove> [--json]            validated local directory registry
   ebrain targets <list|plan|launch> [--json]                  adapter targets with a declared model selector
@@ -106,6 +108,8 @@ case "$cmd" in
   routing)   run_bun "$EBRAIN_HOME/cli/routing.ts" "$@" ;;
   cost)      run_bun "$EBRAIN_HOME/cli/cost.ts" "$@" ;;
   context)   run_bun "$EBRAIN_HOME/cli/context.ts" "$@" ;;
+  episodes)  run_bun "$EBRAIN_HOME/cli/episodes.ts" "$@" ;;
+  procedures) run_bun "$EBRAIN_HOME/cli/procedures.ts" "$@" ;;
   profiles)  run_bun "$EBRAIN_HOME/cli/profiles.ts" "$@" ;;
   workspaces) run_bun "$EBRAIN_HOME/cli/workspaces.ts" "$@" ;;
   targets)   run_bun "$EBRAIN_HOME/cli/targets.ts" "$@" ;;

@@ -126,7 +126,7 @@ const MEMORY_HINTS: HintEntry[] = [
   { k: "tab", label: "focus box" },
   { k: "↑↓", label: "navigate" },
   { k: "enter", label: "open/run" },
-  { k: "a", label: "attach workflow" },
+  { k: "a", label: "attach procedure" },
   { k: "r", label: "remember" },
 ];
 const ROUTING_HINTS: HintEntry[] = [

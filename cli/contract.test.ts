@@ -625,6 +625,101 @@ describe("F9.1 context list --json", () => {
   });
 });
 
+// ── F9.2 ebrain episodes <list|get|recall|record> --json ───────────────────
+// Passive episode surfaces carry no body or filesystem path. `get` is intentionally the only
+// bounded explicit body response; recall carries a bounded excerpt, never the full `text` field.
+const EpisodeSummarySchema = z.object({
+  id: z.string().regex(/^episode-[a-f0-9-]{36}$/),
+  kind: z.enum(["learning", "session-summary"]),
+  source: z.enum(["remember", "explicit", "harness-summary"]),
+  created_at: z.string().datetime(),
+  project: z.string().min(1),
+  agent: z.string().min(1),
+  session: z.string().min(1).optional(),
+  workspace_id: z.string().min(1).optional(),
+  chars: z.number().int().nonnegative(),
+}).strict();
+const EpisodesListSchema = z.object({ episodes: z.array(EpisodeSummarySchema) }).strict();
+const EpisodeRecallSchema = z.object({
+  query: z.string().min(1),
+  episodes: z.array(EpisodeSummarySchema.extend({ score: z.number().int().positive(), excerpt: z.string().min(1) }).strict()),
+}).strict();
+const EpisodeGetSchema = z.object({ episode: EpisodeSummarySchema, text: z.string().min(1) }).strict();
+
+const episodeSummaryFixture = {
+  id: "episode-00000000-0000-4000-8000-000000000001",
+  kind: "learning",
+  source: "remember",
+  created_at: "2026-07-18T00:00:00.000Z",
+  project: "ebrain",
+  agent: "codex",
+  session: "ebr-codex-memory",
+  chars: 48,
+};
+
+describe("F9.2 episodes --json", () => {
+  test("summary list, bounded recall, and explicit get fixtures pass", () => {
+    expect(() => EpisodesListSchema.parse({ episodes: [episodeSummaryFixture] })).not.toThrow();
+    expect(() => EpisodeRecallSchema.parse({ query: "verification", episodes: [{ ...episodeSummaryFixture, score: 1, excerpt: "Prefer explicit verification." }] })).not.toThrow();
+    expect(() => EpisodeGetSchema.parse({ episode: episodeSummaryFixture, text: "Prefer explicit verification." })).not.toThrow();
+  });
+  test("passive list and recall reject full text, paths, and unrelated metadata", () => {
+    expect(EpisodesListSchema.safeParse({ episodes: [{ ...episodeSummaryFixture, text: "private episode body" }] }).success).toBe(false);
+    expect(EpisodesListSchema.safeParse({ episodes: [{ ...episodeSummaryFixture, path: "/private/episode.json" }] }).success).toBe(false);
+    expect(EpisodeRecallSchema.safeParse({ query: "verification", episodes: [{ ...episodeSummaryFixture, score: 1, excerpt: "safe", content: "private episode body" }] }).success).toBe(false);
+  });
+  test("explicit get still cannot carry a filesystem path", () => {
+    expect(EpisodeGetSchema.safeParse({ episode: { ...episodeSummaryFixture, path: "/private/episode.json" }, text: "safe" }).success).toBe(false);
+  });
+});
+
+// ── F9.2 ebrain procedures <list|show|use|review> --json ───────────────────
+// Procedure content remains in the workflow record. Lifecycle contracts carry only safe workflow
+// summaries plus explicit evidence; state is never an inferred success score or an execution plan.
+const ProcedureStateSchema = z.enum(["active", "stale", "archived"]);
+const ProcedureSummarySchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  source: z.enum(["second-brain", "company-brain", "local", "captured"]),
+  version: z.number().int().positive(),
+  trigger: z.string(),
+  summary: z.string(),
+  tags: z.array(z.string()),
+  steps: z.number().int().nonnegative(),
+  gates: z.number().int().nonnegative(),
+  state: ProcedureStateSchema,
+  use_count: z.number().int().nonnegative(),
+  last_used_at: z.string().datetime().optional(),
+  reviewed_at: z.string().datetime().optional(),
+  skillified: z.boolean(),
+}).strict();
+const ProcedureEventSchema = z.union([
+  z.object({ kind: z.literal("used"), at: z.string().datetime(), workflow_version: z.number().int().positive() }).strict(),
+  z.object({ kind: z.literal("reviewed"), at: z.string().datetime(), workflow_version: z.number().int().positive(), state: ProcedureStateSchema }).strict(),
+]);
+const ProceduresListSchema = z.object({ procedures: z.array(ProcedureSummarySchema) }).strict();
+const ProcedureShowSchema = ProcedureSummarySchema.extend({ events: z.array(ProcedureEventSchema) }).strict();
+
+const procedureFixture = {
+  id: "local-release", title: "Release checklist", source: "local", version: 1,
+  trigger: "Use before a reviewed release", summary: "Run the release verification sequence.",
+  tags: ["release", "checklist"], steps: 2, gates: 1,
+  state: "active", use_count: 1, last_used_at: "2026-07-18T00:00:00.000Z", skillified: false,
+};
+
+describe("F9.2 procedures --json", () => {
+  test("summary list and explicit lifecycle detail fixtures pass", () => {
+    expect(() => ProceduresListSchema.parse({ procedures: [procedureFixture] })).not.toThrow();
+    expect(() => ProcedureShowSchema.parse({ ...procedureFixture, events: [{ kind: "used", at: "2026-07-18T00:00:00.000Z", workflow_version: 1 }] })).not.toThrow();
+  });
+  test("contracts reject workflow bodies, paths, command fields, and malformed lifecycle events", () => {
+    expect(ProceduresListSchema.safeParse({ procedures: [{ ...procedureFixture, source_path: "/private/workflow.md" }] }).success).toBe(false);
+    expect(ProceduresListSchema.safeParse({ procedures: [{ ...procedureFixture, body: "private workflow body" }] }).success).toBe(false);
+    expect(ProceduresListSchema.safeParse({ procedures: [{ ...procedureFixture, command: "run something" }] }).success).toBe(false);
+    expect(ProcedureShowSchema.safeParse({ ...procedureFixture, events: [{ kind: "reviewed", at: "2026-07-18T00:00:00.000Z", workflow_version: 1 }] }).success).toBe(false);
+  });
+});
+
 // ── 6.1.6 ebrain sessions <list|peek|new|send|kill> --json ─────────────────────────────────
 const SessionRowSchema = z.object({
   name: z.string().regex(/^ebr-/, "prefijo ebr- obligatorio"),

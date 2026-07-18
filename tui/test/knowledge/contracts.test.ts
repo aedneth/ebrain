@@ -19,7 +19,9 @@ import {
   parseTaskProfile,
   parseRouteRun,
   parseMemory,
+  parseEpisodes,
   parseWorkflows,
+  parseProcedures,
   parseWorkflowRun,
   parseCost,
   parseSearch,
@@ -303,6 +305,42 @@ describe("parseMemory (memory recent --json)", () => {
       ...fx,
       sessions: [{ ...fx.sessions[0], path: "/private/session-log.md" }],
     })).toBeNull();
+  });
+});
+
+describe("F9.2 passive episode and procedure summaries", () => {
+  const episode = {
+    id: "episode-11111111-1111-4111-8111-111111111111",
+    kind: "learning",
+    source: "remember",
+    created_at: "2026-07-18T00:00:00.000Z",
+    project: "ebrain",
+    agent: "codex",
+    workspace_id: "ebrain",
+    chars: 42,
+  };
+  const procedure = {
+    id: "local-dev-sop", title: "Dev SOP", source: "local", version: 1,
+    trigger: "Build safely", summary: "Plan then verify", tags: ["sop"], steps: 2, gates: 1,
+    state: "active", use_count: 3, last_used_at: "2026-07-18T00:00:00.000Z", skillified: true,
+  };
+
+  test("accepts strict summary-only rows", () => {
+    expect(parseEpisodes({ episodes: [episode] })?.episodes[0]).toEqual({
+      id: episode.id, kind: "learning", source: "remember", createdAt: episode.created_at,
+      project: "ebrain", agent: "codex", workspaceId: "ebrain", chars: 42,
+    });
+    expect(parseProcedures({ procedures: [procedure] })?.procedures[0]).toMatchObject({
+      id: "local-dev-sop", state: "active", useCount: 3, skillified: true,
+    });
+  });
+
+  test("rejects passive bodies, paths, events, commands, and model/provider fields", () => {
+    expect(parseEpisodes({ episodes: [{ ...episode, text: "must not enter TUI state" }] })).toBeNull();
+    expect(parseEpisodes({ episodes: [{ ...episode, path: "/private/episode.json" }] })).toBeNull();
+    expect(parseProcedures({ procedures: [{ ...procedure, events: [] }] })).toBeNull();
+    expect(parseProcedures({ procedures: [{ ...procedure, command: "run" }] })).toBeNull();
+    expect(parseProcedures({ procedures: [{ ...procedure, model: "not a UI concern" }] })).toBeNull();
   });
 });
 

@@ -540,6 +540,46 @@ export function parseMemory(j: unknown): MemoryData | null {
 }
 
 // ---------------------------------------------------------------------------
+// Episodes (episodes list --json) -- summary-only local recall records (F9.2)
+// ---------------------------------------------------------------------------
+
+export interface EpisodeSummaryData {
+  id: string;
+  kind: "learning" | "session-summary";
+  source: "remember" | "explicit" | "harness-summary";
+  createdAt: string;
+  project: string;
+  agent: string;
+  session?: string;
+  workspaceId?: string;
+  chars: number;
+}
+
+export interface EpisodesData { episodes: EpisodeSummaryData[] }
+
+/** Passive episode reads must never carry an episode body, content hash, or filesystem path. */
+export function parseEpisodes(j: unknown): EpisodesData | null {
+  if (!isObj(j) || !Object.keys(j).every((key) => key === "episodes") || !Array.isArray(j.episodes)) return null;
+  const episodes: EpisodeSummaryData[] = [];
+  for (const value of j.episodes) {
+    const allowed = ["id", "kind", "source", "created_at", "project", "agent", "session", "workspace_id", "chars"];
+    if (!isObj(value) || !Object.keys(value).every((key) => allowed.includes(key))) return null;
+    const id = asStr(value.id);
+    const kind = value.kind;
+    const source = value.source;
+    const createdAt = asStr(value.created_at);
+    const project = asStr(value.project);
+    const agent = asStr(value.agent);
+    const session = typeof value.session === "string" ? value.session : undefined;
+    const workspaceId = typeof value.workspace_id === "string" ? value.workspace_id : undefined;
+    const chars = asNum(value.chars, -1);
+    if (!/^episode-[a-f0-9-]{36}$/.test(id) || (kind !== "learning" && kind !== "session-summary") || (source !== "remember" && source !== "explicit" && source !== "harness-summary") || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(createdAt) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/.test(project) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/.test(agent) || (session !== undefined && !/^[a-z][a-z0-9-]{0,63}$/.test(session)) || (workspaceId !== undefined && !/^[a-z][a-z0-9-]{0,63}$/.test(workspaceId)) || !Number.isInteger(chars) || chars < 0) return null;
+    episodes.push({ id, kind, source, createdAt, project, agent, ...(session ? { session } : {}), ...(workspaceId ? { workspaceId } : {}), chars });
+  }
+  return { episodes };
+}
+
+// ---------------------------------------------------------------------------
 // Workflows (workflows list/run --json) — user-local SOPs with explicit execution
 // ---------------------------------------------------------------------------
 
@@ -591,6 +631,46 @@ export function parseWorkflows(j: unknown): WorkflowsData | null {
   return {
     workflows: asArr(j.workflows).map(parseWorkflowSummary).filter((w): w is WorkflowSummaryData => w !== null),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Procedures (procedures list --json) -- workflow summaries plus reviewed state
+// ---------------------------------------------------------------------------
+
+export interface ProcedureSummaryData extends WorkflowSummaryData {
+  state: "active" | "stale" | "archived";
+  useCount: number;
+  lastUsedAt?: string;
+  reviewedAt?: string;
+  skillified: boolean;
+}
+
+export interface ProceduresData { procedures: ProcedureSummaryData[] }
+
+/** Passive procedure rows intentionally exclude events, source paths, prompts, commands, and models. */
+export function parseProcedures(j: unknown): ProceduresData | null {
+  if (!isObj(j) || !Object.keys(j).every((key) => key === "procedures") || !Array.isArray(j.procedures)) return null;
+  const procedures: ProcedureSummaryData[] = [];
+  for (const value of j.procedures) {
+    const allowed = ["id", "title", "source", "version", "trigger", "summary", "tags", "steps", "gates", "state", "use_count", "last_used_at", "reviewed_at", "skillified"];
+    if (!isObj(value) || !Object.keys(value).every((key) => allowed.includes(key)) || !Array.isArray(value.tags)) return null;
+    const id = asStr(value.id);
+    const title = scrubSecrets(asStr(value.title));
+    const source = scrubSecrets(asStr(value.source));
+    const version = asNum(value.version, -1);
+    const trigger = scrubSecrets(asStr(value.trigger));
+    const summary = scrubSecrets(asStr(value.summary));
+    const tags = value.tags.map((tag) => scrubSecrets(asStr(tag)));
+    const steps = asNum(value.steps, -1);
+    const gates = asNum(value.gates, -1);
+    const state = value.state;
+    const useCount = asNum(value.use_count, -1);
+    const lastUsedAt = typeof value.last_used_at === "string" ? value.last_used_at : undefined;
+    const reviewedAt = typeof value.reviewed_at === "string" ? value.reviewed_at : undefined;
+    if (!/^[a-z][a-z0-9-]{0,127}$/.test(id) || !title || !source || !Number.isInteger(version) || version < 1 || tags.some((tag) => !tag) || !Number.isInteger(steps) || steps < 0 || !Number.isInteger(gates) || gates < 0 || (state !== "active" && state !== "stale" && state !== "archived") || !Number.isInteger(useCount) || useCount < 0 || typeof value.skillified !== "boolean" || (lastUsedAt !== undefined && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(lastUsedAt)) || (reviewedAt !== undefined && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(reviewedAt))) return null;
+    procedures.push({ id, title, source, version, trigger, summary, tags, steps, gates, state, useCount, ...(lastUsedAt ? { lastUsedAt } : {}), ...(reviewedAt ? { reviewedAt } : {}), skillified: value.skillified });
+  }
+  return { procedures };
 }
 
 /** Parse `ebrain workflows run <id> --json`; run only materializes a prompt, never executes it. */
