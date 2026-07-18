@@ -45,6 +45,7 @@ const SURFACES = [
   "cli/task-profile.ts",
   "cli/sessions.ts",
   "cli/profiles.ts",
+  "cli/context.ts",
   "cli/targets.ts",
   "cli/workflows.ts",
   "tui/src/knowledge/run.ts",

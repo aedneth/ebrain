@@ -211,13 +211,20 @@ not dependencies.
 
 ### F9.1 -- Context packs and reviewed learning proposals
 
+**Status (2026-07-18):** implementation complete; independent checker review pending. The maker
+evidence is in `F9-CONTEXT-MAKER-REPORT.md`.
+
 - Add an explicit local operator pack and optional workspace pack, human-approved scrubbed Markdown
   under private local permissions.
+- Give the operator an explicit versioned update command, so manual edits do not require hand
+  recalculating hashes and automatically make older proposals stale.
 - Launch preview identifies available packs without dumping all content into the base TUI. Agents use
   bounded MCP/CLI retrieval instead of global unbounded prompt injection.
 - A proposal carries source session, scrubbed evidence, scope, and diff. Accept/reject is explicit;
   an agent cannot alter active context directly.
 - Reject malformed, oversized, secret-shaped, denied-client, or partial proposals safely.
+- Correct `memory recent --json` so its public learning/session entries cannot expose local record
+  paths; TUI parsing must reject a path rather than silently discard it.
 
 ### F9.2 -- Episode, recall, procedure, and skill lifecycle
 

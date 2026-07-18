@@ -27,6 +27,7 @@ import {
   parseWorkspaceValidation,
   parseWorkspaceMutation,
   parseWorkspaceRemoval,
+  parseContextPacks,
 } from "../../src/knowledge/contracts.ts";
 
 describe("parseStatus (status --json)", () => {
@@ -217,6 +218,22 @@ describe("workspace registry contracts", () => {
   });
 });
 
+describe("context pack summaries", () => {
+  test("accepts only summary metadata and never a context body", () => {
+    expect(parseContextPacks({ packs: [
+      { id: "operator", scope: "operator", version: 2, updated_at: "2026-07-18T00:01:00.000Z", chars: 81 },
+      { id: "workspace-api", scope: "workspace", workspace_id: "api", version: 1, updated_at: "2026-07-18T00:00:00.000Z", chars: 42 },
+    ] })).toEqual({ packs: [
+      { id: "operator", scope: "operator", version: 2, updatedAt: "2026-07-18T00:01:00.000Z", chars: 81 },
+      { id: "workspace-api", scope: "workspace", workspaceId: "api", version: 1, updatedAt: "2026-07-18T00:00:00.000Z", chars: 42 },
+    ] });
+    expect(parseContextPacks({ packs: [{ id: "operator", scope: "operator", version: 1, updated_at: "2026-07-18T00:00:00.000Z", chars: 1, content: "must not enter TUI state" }] })).toBeNull();
+    expect(parseContextPacks({ packs: [{ id: "workspace-api", scope: "workspace", version: 1, updated_at: "2026-07-18T00:00:00.000Z", chars: 1 }] })).toBeNull();
+    expect(parseContextPacks({ packs: [{ id: "operator", scope: "workspace", workspace_id: "api", version: 1, updated_at: "2026-07-18T00:00:00.000Z", chars: 1 }] })).toBeNull();
+    expect(parseContextPacks({ packs: [], content: "must not enter TUI state" })).toBeNull();
+  });
+});
+
 describe("parseSearch (q --json)", () => {
   test("normalizes cross-source result rows", () => {
     expect(parseSearch({ query: "daemon lock", results: [{ score: 0.91, source: "agent-memory", slug: "learning-1", snippet: "Use the daemon" }] })).toEqual({ query: "daemon lock", results: [{ score: 0.91, source: "agent-memory", slug: "learning-1", snippet: "Use the daemon" }] });
@@ -280,6 +297,12 @@ describe("parseMemory (memory recent --json)", () => {
     const p = parseMemory({})!;
     expect(p.learnings).toEqual([]);
     expect(p.sessions).toEqual([]);
+  });
+  test("rejects a leaked filesystem path instead of silently dropping it", () => {
+    expect(parseMemory({
+      ...fx,
+      sessions: [{ ...fx.sessions[0], path: "/private/session-log.md" }],
+    })).toBeNull();
   });
 });
 

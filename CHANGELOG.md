@@ -4,6 +4,21 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-18 -- F9.1 Governed operating context packs
+
+- **Human-governed context:** added private local operator and registered-workspace Markdown packs
+  with bounded explicit retrieval, strict metadata, atomic private writes, explicit versioned human
+  updates, and reviewable proposals. A proposal carries safe agent/session provenance and a base
+  version/hash; it never alters active context until `review accept --yes`, and a stale base fails
+  rather than overwriting a human update.
+- **Summary-only Launch:** Launch reads only context identity/version metadata and shows eligible
+  operator/workspace packs. Pack bodies are neither loaded into TUI state nor injected into prompts.
+- **Path-free public memory:** `memory recent --json` no longer returns local learning/session paths.
+  The CLI contract and TUI parser reject any future path field rather than silently accepting it.
+- **Verification status:** focused contracts passed `164/0`; an isolated dispatcher/TUI smoke passed
+  at `100x30` and `80x24`; final post-hardening suites passed CLI `242/0` and TUI `436/0`.
+  `docs/F9-CONTEXT-MAKER-REPORT.md` records the independent-checker reproduction focus.
+
 ## 2026-07-18 -- F9.0 Governed agent-memory contract
 
 - **Four explicit layers:** ADR-008 separates human-governed operating context, immutable scrubbed

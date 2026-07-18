@@ -29,6 +29,7 @@ import {
   parseWorkspaceValidation,
   parseWorkspaceMutation,
   parseWorkspaceRemoval,
+  parseContextPacks,
   parseProfiles,
   parseTargets,
   parseTargetPlan,
@@ -46,6 +47,7 @@ import {
   type TaskProfileData,
   type WorkspacesData,
   type WorkspaceData,
+  type ContextPacksData,
   type ProfilesData,
   type TargetData,
   type TargetPlanData,
@@ -164,6 +166,10 @@ export function renameWorkspace(input: { id: string; label: string }): Promise<K
 }
 export function removeWorkspace(id: string): Promise<KResult<{ removed: string }>> {
   return fetchParsed(["workspaces", "remove", "--id", id, "--yes", "--json"], 15000, parseWorkspaceRemoval);
+}
+/** The TUI asks only for pack summaries. Context bodies require an explicit bounded CLI read. */
+export function fetchContextPacks(): Promise<KResult<ContextPacksData>> {
+  return fetchParsed(["context", "list", "--json"], 15000, parseContextPacks);
 }
 export function fetchProfiles(): Promise<KResult<ProfilesData>> { return fetchParsed(["profiles", "list", "--json"], 15000, parseProfiles); }
 /** Explicit first-use migration of the user's existing local routing into a profile. */

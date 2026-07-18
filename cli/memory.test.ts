@@ -84,7 +84,7 @@ test("parseSessionLine: estilo nuevo (duration '-', agente en [bracket] del summ
   expect(r!.agent).toBe("codex");
   expect(r!.commit).toBe("5373307");
   expect(r!.summary).toBe("seed commit");
-  expect(r!.path).toBe("/tmp/x/.brain/sessions/y.md");
+  expect(r).not.toHaveProperty("path");
 });
 
 test("parseSessionLine: estilo viejo (agente crudo en field3, sin bracket en summary)", () => {

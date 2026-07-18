@@ -536,20 +536,18 @@ const LearningEntrySchema = z.object({
   date: z.string(),
   tags: z.array(z.string()),
   text: z.string(),
-  path: z.string(),
-});
+}).strict();
 const SessionEntrySchema = z.object({
   ts: z.string(),
   project: z.string(),
   agent: z.string(),
   commit: z.string(),
   summary: z.string(),
-  path: z.string(),
-});
+}).strict();
 const MemorySchema = z.object({
   learnings: z.array(LearningEntrySchema),
   sessions: z.array(SessionEntrySchema),
-});
+}).strict();
 
 // Fixture = captura real de `bun run cli/memory.ts recent --json --limit 3` (2026-07-12).
 const memoryFixture = {
@@ -558,14 +556,12 @@ const memoryFixture = {
       project: "ebrain", agent: "opencode", date: "2026-07-11",
       tags: ["learning", "ebrain", "opencode"],
       text: "Cross-provider test: OpenCode escribió esto en la MISMA memoria.",
-      path: "/home/eduardo.borjas/eBrain/memory/learnings/ebrain/2026-07-11-2333-opencode-e9b2eafb.md",
     },
   ],
   sessions: [
     {
       ts: "2026-07-13T04:37:43Z", project: "second-brain", agent: "unknown", commit: "7d7ef00",
       summary: "CLI-first --json (D3)…",
-      path: "/home/eduardo.borjas/Documents/Second Brain/02-daily/logs/2026-07-12.md",
     },
   ],
 };
@@ -584,6 +580,48 @@ describe("6.1.5 memory recent --json", () => {
   });
   test("learnings/sessions vacíos son válidos (vault recién creado, sin historia aún)", () => {
     expect(MemorySchema.safeParse({ learnings: [], sessions: [] }).success).toBe(true);
+  });
+  test("una ruta de filesystem es una regresión de contrato y falla cerrada", () => {
+    const leaked = { ...memoryFixture, sessions: [{ ...memoryFixture.sessions[0], path: "/private/session-log.md" }] };
+    expect(MemorySchema.safeParse(leaked).success).toBe(false);
+  });
+});
+
+// ── F9.1 ebrain context list --json ────────────────────────────────────────
+// This public surface deliberately exposes summaries only. A pack body is available solely via
+// the bounded explicit `context get` operation and must never reach a passive list consumer.
+const ContextPackSummarySchema = z.object({
+  id: z.string().regex(/^(?:operator|workspace-[a-z][a-z0-9-]{0,63})$/),
+  scope: z.enum(["operator", "workspace"]),
+  workspace_id: z.string().regex(/^[a-z][a-z0-9-]{0,63}$/).optional(),
+  version: z.number().int().positive(),
+  updated_at: z.string().datetime(),
+  chars: z.number().int().nonnegative(),
+}).strict().superRefine((value, context) => {
+  if (value.scope === "operator" && (value.id !== "operator" || value.workspace_id !== undefined)) context.addIssue({ code: z.ZodIssueCode.custom, message: "operator identity mismatch" });
+  if (value.scope === "workspace" && (value.workspace_id === undefined || value.id !== `workspace-${value.workspace_id}`)) context.addIssue({ code: z.ZodIssueCode.custom, message: "workspace identity mismatch" });
+});
+const ContextListSchema = z.object({ packs: z.array(ContextPackSummarySchema) }).strict();
+
+const contextListFixture = {
+  packs: [
+    { id: "operator", scope: "operator", version: 2, updated_at: "2026-07-18T00:01:00.000Z", chars: 81 },
+    { id: "workspace-api", scope: "workspace", workspace_id: "api", version: 1, updated_at: "2026-07-18T00:00:00.000Z", chars: 42 },
+  ],
+};
+
+describe("F9.1 context list --json", () => {
+  test("summary-only fixture passes the public contract", () => {
+    expect(() => ContextListSchema.parse(contextListFixture)).not.toThrow();
+  });
+  test("body, path, and arbitrary metadata cannot leak through the list contract", () => {
+    expect(ContextListSchema.safeParse({ packs: [{ ...contextListFixture.packs[0], content: "private body" }] }).success).toBe(false);
+    expect(ContextListSchema.safeParse({ packs: [{ ...contextListFixture.packs[0], path: "/private/context.md" }] }).success).toBe(false);
+  });
+  test("workspace identity must agree with scope", () => {
+    expect(ContextListSchema.safeParse({ packs: [{ ...contextListFixture.packs[0], workspace_id: "api" }] }).success).toBe(false);
+    expect(ContextListSchema.safeParse({ packs: [{ id: "workspace-api", scope: "workspace", version: 1, updated_at: "2026-07-18T00:00:00.000Z", chars: 1 }] }).success).toBe(false);
+    expect(ContextListSchema.safeParse({ packs: [{ id: "operator", scope: "workspace", workspace_id: "api", version: 1, updated_at: "2026-07-18T00:00:00.000Z", chars: 1 }] }).success).toBe(false);
   });
 });
 

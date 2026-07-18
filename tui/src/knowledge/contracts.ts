@@ -396,6 +396,39 @@ export function parseWorkspaceRemoval(j: unknown): { removed: string } | null {
   return /^[a-z][a-z0-9-]{0,63}$/.test(removed) ? { removed } : null;
 }
 
+// ---------------------------------------------------------------------------
+// Context packs (ADR-008 / F9.1) -- summaries only. Pack bodies remain behind an
+// explicit bounded CLI retrieval and are never stored in the TUI state.
+// ---------------------------------------------------------------------------
+
+export interface ContextPackData {
+  id: string;
+  scope: "operator" | "workspace";
+  workspaceId?: string;
+  version: number;
+  updatedAt: string;
+  chars: number;
+}
+export interface ContextPacksData { packs: ContextPackData[] }
+
+export function parseContextPacks(j: unknown): ContextPacksData | null {
+  if (!isObj(j) || !Object.keys(j).every((key) => key === "packs") || !Array.isArray(j.packs)) return null;
+  const packs: ContextPackData[] = [];
+  for (const value of j.packs) {
+    if (!isObj(value) || !Object.keys(value).every((key) => ["id", "scope", "workspace_id", "version", "updated_at", "chars"].includes(key))) return null;
+    const id = asStr(value.id);
+    const scope = value.scope;
+    const workspaceId = typeof value.workspace_id === "string" ? value.workspace_id : undefined;
+    const version = asNum(value.version);
+    const updatedAt = asStr(value.updated_at);
+    const chars = asNum(value.chars, -1);
+    if (!/^(?:operator|workspace-[a-z][a-z0-9-]{0,63})$/.test(id) || (scope !== "operator" && scope !== "workspace") || !Number.isInteger(version) || version < 1 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(updatedAt) || !Number.isInteger(chars) || chars < 0) return null;
+    if ((scope === "operator" && (id !== "operator" || workspaceId !== undefined)) || (scope === "workspace" && (!workspaceId || id !== `workspace-${workspaceId}` || !/^[a-z][a-z0-9-]{0,63}$/.test(workspaceId)))) return null;
+    packs.push({ id, scope, ...(workspaceId ? { workspaceId } : {}), version, updatedAt, chars });
+  }
+  return { packs };
+}
+
 export interface ProfileSummaryData {
   id: string;
   label: string;
@@ -489,25 +522,20 @@ export interface MemoryData {
 }
 
 export function parseMemory(j: unknown): MemoryData | null {
-  if (!isObj(j)) return null;
-  const learnings: MemoryLearning[] = asArr(j.learnings)
-    .filter(isObj)
-    .map((l) => ({
-      project: asStr(l.project, "?"),
-      agent: asStr(l.agent, "unknown"),
-      date: asStr(l.date),
-      tags: asArr(l.tags).map((t) => asStr(t)).filter(Boolean),
-      text: asStr(l.text),
-    }));
-  const sessions: MemorySession[] = asArr(j.sessions)
-    .filter(isObj)
-    .map((s) => ({
-      ts: asStr(s.ts),
-      project: asStr(s.project, "?"),
-      agent: asStr(s.agent, "unknown"),
-      commit: asStr(s.commit),
-      summary: asStr(s.summary),
-    }));
+  if (!isObj(j) || !Object.keys(j).every((key) => ["learnings", "sessions"].includes(key))) return null;
+  if ((j.learnings !== undefined && !Array.isArray(j.learnings)) || (j.sessions !== undefined && !Array.isArray(j.sessions))) return null;
+  const learnings: MemoryLearning[] = [];
+  for (const value of asArr(j.learnings)) {
+    if (!isObj(value) || !Object.keys(value).every((key) => ["project", "agent", "date", "tags", "text"].includes(key))) return null;
+    if (typeof value.project !== "string" || typeof value.agent !== "string" || typeof value.date !== "string" || !Array.isArray(value.tags) || !value.tags.every((tag) => typeof tag === "string") || typeof value.text !== "string") return null;
+    learnings.push({ project: value.project, agent: value.agent, date: value.date, tags: value.tags, text: value.text });
+  }
+  const sessions: MemorySession[] = [];
+  for (const value of asArr(j.sessions)) {
+    if (!isObj(value) || !Object.keys(value).every((key) => ["ts", "project", "agent", "commit", "summary"].includes(key))) return null;
+    if (typeof value.ts !== "string" || typeof value.project !== "string" || typeof value.agent !== "string" || typeof value.commit !== "string" || typeof value.summary !== "string") return null;
+    sessions.push({ ts: value.ts, project: value.project, agent: value.agent, commit: value.commit, summary: value.summary });
+  }
   return { learnings, sessions };
 }
 

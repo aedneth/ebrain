@@ -73,6 +73,7 @@ import type {
   ProfilesData,
   WorkspacesData,
   WorkspaceData,
+  ContextPacksData,
   TargetData,
   TargetPlanData,
   ProfileSummaryData,
@@ -103,6 +104,7 @@ import {
   createWorkspace,
   renameWorkspace,
   removeWorkspace,
+  fetchContextPacks,
 } from "./knowledge/run.js";
 
 // Sessions data plane (F6.4) — REUSED from cli/sessions.ts via the control-plane
@@ -346,6 +348,10 @@ export interface LaunchSlice {
   /** Workflow attribution survives attach -> the explicit wizard in F6.6.4. */
   workflowId?: string;
   wizard: LaunchWizard | null;
+  /** Summary-only context metadata. Pack bodies never enter the TUI state. */
+  contexts: ContextPacksData | null;
+  contextStatus: LoadStatus;
+  contextError?: string;
   status: LoadStatus | "running";
   error?: string;
 }
@@ -363,11 +369,11 @@ export interface LaunchWizard {
 }
 
 export function emptyLaunch(): LaunchSlice {
-  return { selected: 0, task: "", taskCapability: "general", wizard: null, status: "idle" };
+  return { selected: 0, task: "", taskCapability: "general", wizard: null, contexts: null, contextStatus: "idle", status: "idle" };
 }
 
 function launchOf(state: AppState): LaunchSlice {
-  return state.launch ?? emptyLaunch();
+  return state.launch ? { ...emptyLaunch(), ...state.launch } : emptyLaunch();
 }
 
 /** Older in-memory fixtures and pre-F7 state have no explicit setup yet. Treat that as General
@@ -632,6 +638,7 @@ export type AppEffect =
   /** Launch confirmed through the governor's dialog (an override that gets logged). */
   | { type: "launchConfirmed"; agent: string; cwd: string; reason: string; prompt?: string }
   | { type: "openLaunchWizard" }
+  | { type: "refreshLaunchContext" }
   | { type: "openWorkspacePicker"; returnToWizard: boolean }
   | { type: "refreshWorkspaces" }
   | { type: "addWorkspace"; cwd: string; label: string; returnToWizard: boolean; origin: "picker" | "cockpit" }
@@ -679,6 +686,8 @@ function goTab(state: AppState, tab: TabName): ReduceResult {
 
 function refreshEffectFor(tab: TabName): AppEffect | undefined {
   switch (tab) {
+    case "launch":
+      return { type: "refreshLaunchContext" };
     case "sessions":
       return { type: "refreshSessions" };
     case "workspaces":
@@ -2610,6 +2619,18 @@ function buildLaunchView(launch: LaunchSlice, workspace: WorkspaceSelection, cal
   const target = wizard ? selectedWizardTarget(wizard) : undefined;
   const selectedProfile = wizard ? selectedWizardProfile(wizard) : undefined;
   const selected = Math.min(Math.max(0, launch.selected), LAUNCHABLE.length - 1);
+  // Context is deliberately summary-only here. It tells the user which bounded, reviewed packs
+  // are available to the next launch without copying a pack body into terminal state or prompts.
+  const contextPacks = launch.contexts?.packs.filter((pack) =>
+    pack.scope === "operator" || (pack.scope === "workspace" && workspace.persistent && pack.workspaceId === workspace.id),
+  ) ?? [];
+  const contextLine = launch.contextStatus === "loading"
+    ? "context packs loading..."
+    : launch.contextStatus === "error"
+      ? "context packs unavailable"
+      : contextPacks.length === 0
+        ? "context  no reviewed packs"
+        : `context  ${contextPacks.map((pack) => `${pack.id} v${pack.version}`).join(" · ")}`;
 
   const manualPanel = (panelRect: Rect): string[] => {
     const contentW = Math.max(0, panelRect.width - 4);
@@ -2636,6 +2657,7 @@ function buildLaunchView(launch: LaunchSlice, workspace: WorkspaceSelection, cal
     const selectedAgent = LAUNCHABLE[selected]!.agent;
     const body = [
       keyHint({ k: "g", label: "workspace" }, theme) + "  " + theme.fg("text.secondary") + truncate(workspaceDisplay(workspace, callerDisplayCwd), Math.max(0, contentW - 14)) + reset,
+      theme.fg(launch.contextStatus === "error" ? "semantic.warn" : "text.muted") + truncate(contextLine, contentW) + reset,
       ...grid,
       theme.fg("text.muted") + (launch.task ? "Task will be sent to " : "New session with ") + reset + theme.fg("text.primary") + selectedAgent + reset,
     ];
@@ -3227,6 +3249,9 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
     /** Monotonic local request guard. A dismissed picker or older registry response may update
      * cached data, but it must never restore an overlay or overwrite a newer mutation. */
     let workspaceRequest = 0;
+    /** Context summaries are read-only, but stale responses still must not overwrite a newer
+     * launch landing. Pack bodies are never requested by this loop. */
+    let contextRequest = 0;
     let attaching = false;
     // Set once the loop is torn down (quit / signal / crash) so an in-flight attach
     // handoff never re-enters the alt-screen after cleanup already ran.
@@ -3743,6 +3768,20 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       await refreshWorkspaceRegistry();
     }
 
+    async function refreshLaunchContext(): Promise<void> {
+      const request = ++contextRequest;
+      const launch = launchOf(state);
+      state = { ...state, launch: { ...launch, contextStatus: "loading", contextError: undefined } };
+      if (state.tab === "launch") render();
+      const result = await fetchContextPacks();
+      if (disposed || request !== contextRequest) return;
+      const current = launchOf(state);
+      state = result.ok
+        ? { ...state, launch: { ...current, contexts: result.data, contextStatus: "ready", contextError: undefined } }
+        : { ...state, launch: { ...current, contextStatus: "error", contextError: result.error } };
+      if (state.tab === "launch") render();
+    }
+
     async function openLaunchWizard(): Promise<void> {
       const launch = launchOf(state);
       state = { ...state, launch: { ...launch, status: "loading", error: undefined } };
@@ -3961,6 +4000,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
           await performLaunch(effect.agent, effect.cwd, effect.reason, effect.prompt ?? "");
           break;
         case "openLaunchWizard": await openLaunchWizard(); break;
+        case "refreshLaunchContext": await refreshLaunchContext(); break;
         case "openWorkspacePicker": await openWorkspacePicker(effect.returnToWizard); break;
         case "refreshWorkspaces": await refreshWorkspaceRegistry(); break;
         case "addWorkspace": await addWorkspaceFromUi(effect.cwd, effect.label, effect.returnToWizard, effect.origin); break;

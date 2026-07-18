@@ -41,6 +41,32 @@ describe("buildLaunchView — workspace-first information hierarchy", () => {
     expect(frame).toContain("Current directory");
   });
 
+  test("shows only reviewed context-pack identities and versions, never a pack body", () => {
+    const state = launchState();
+    state.workspace = {
+      data: { schemaVersion: 1, workspaces: [{ id: "api", label: "API", cwd: "/tmp/api" }] },
+      current: { label: "Current directory", cwd: "/tmp/current", persistent: false, validated: true },
+      active: { id: "api", label: "API", cwd: "/tmp/api", persistent: true, validated: true },
+      selected: 1,
+      activitySelected: 0,
+      status: "ready",
+    };
+    state.launch = {
+      ...state.launch!,
+      contexts: { packs: [
+        { id: "operator", scope: "operator", version: 2, updatedAt: "2026-07-18T00:01:00.000Z", chars: 81 },
+        { id: "workspace-api", scope: "workspace", workspaceId: "api", version: 1, updatedAt: "2026-07-18T00:00:00.000Z", chars: 42 },
+      ] },
+      contextStatus: "ready",
+    };
+    for (const frameSize of [{ cols: 80, rows: 24 }, size, { cols: 160, rows: 48 }]) {
+      const frame = buildFrame(state, frameSize, t).map(strip).join("\n");
+      expect(frame).toContain("context  operator v2");
+      expect(frame).not.toContain("must not enter TUI state");
+      for (const row of buildFrame(state, frameSize, t)) expect(displayWidth(row)).toBe(frameSize.cols);
+    }
+  });
+
   test("shows heavy vs light class per agent", () => {
     const frame = buildFrame(launchState(), size, t).map(strip).join("\n");
     expect(frame).toContain("heavy");
@@ -92,8 +118,10 @@ describe("buildLaunchView — workspace-first information hierarchy", () => {
 });
 
 describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
-  test("l opens the launch tab", () => {
-    expect(reduce(initialState(), parseKey("l")).state.tab).toBe("launch");
+  test("l opens the launch tab and refreshes only context-pack summaries", () => {
+    const result = reduce(initialState(), parseKey("l"));
+    expect(result.state.tab).toBe("launch");
+    expect(result.effect).toEqual({ type: "refreshLaunchContext" });
   });
 
   test("arrows move the selection only while the manual-agent box is focused", () => {

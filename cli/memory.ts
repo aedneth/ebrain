@@ -28,10 +28,10 @@ const SESSIONS_INDEX = join(DEV_BRAIN, "sessions", "index.md");
 const DEFAULT_LIMIT = 10;
 
 export interface LearningEntry {
-  project: string; agent: string; date: string; tags: string[]; text: string; path: string;
+  project: string; agent: string; date: string; tags: string[]; text: string;
 }
 export interface SessionEntry {
-  ts: string; project: string; agent: string; commit: string; summary: string; path: string;
+  ts: string; project: string; agent: string; commit: string; summary: string;
 }
 
 // Frontmatter YAML entre '---'. Reusa Bun.YAML (misma primitiva que manifest-get.ts) — nada de
@@ -86,7 +86,6 @@ export async function recentLearnings(dir = LEARNINGS_DIR, limit = DEFAULT_LIMIT
       date: typeof meta.date === "string" ? meta.date : "",
       tags: Array.isArray(meta.tags) ? meta.tags.map(String) : [],
       text: bodyText(body),
-      path,
       sortKey,
     });
   }
@@ -100,12 +99,11 @@ export function parseSessionLine(line: string): SessionEntry | null {
   if (parts.length < 6) return null;
   const [ts, project, field3, commit, ...rest] = parts;
   if (rest.length < 2) return null;
-  const path = rest[rest.length - 1];
   let summary = rest.slice(0, -1).join(" | ");
   let agent = field3;
   const bracket = summary.match(/^\[([^\]]+)\]\s*(.*)$/);
   if (bracket) { agent = bracket[1]; summary = bracket[2]; }
-  return { ts, project, agent, commit, summary, path };
+  return { ts, project, agent, commit, summary };
 }
 
 // El índice es append-only en orden cronológico → las últimas N líneas del archivo SON las más
