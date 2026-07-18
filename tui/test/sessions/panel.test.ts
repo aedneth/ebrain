@@ -170,6 +170,23 @@ describe("reduce — sessions nav & actions emit effects (pure, no tmux)", () =>
     expect(review.state.sessions?.rows[0]?.name).toBe("ebr-claude-korvex");
   });
 
+  test("multiline editor grows, keeps both ends reachable, and preserves exact compact geometry", () => {
+    const text = Array.from({ length: 30 }, (_, index) => `line-${String(index + 1).padStart(2, "0")} detailed prompt body`).join("\n");
+    const opened = reduce(base, parseKey("p")).state;
+    const draft = opened.overlay as { kind: "prompt"; name: string; draft: { text: string; cursor: number } };
+    const tail: AppState = { ...opened, overlay: { ...draft, draft: { ...draft.draft, text, cursor: text.length } } };
+    const head: AppState = { ...tail, overlay: { ...draft, draft: { ...draft.draft, text, cursor: 0 } } };
+
+    for (const viewport of [{ cols: 80, rows: 24 }, { cols: 100, rows: 30 }, { cols: 160, rows: 48 }]) {
+      const lastFrame = buildFrame(tail, viewport, t).map(strip).join("\n");
+      const firstFrame = buildFrame(head, viewport, t).map(strip).join("\n");
+      expect(lastFrame).toContain("line-30 detailed prompt body");
+      expect(firstFrame).toContain("line-01 detailed prompt body");
+      expect(lastFrame).toContain("Draft stays in memory until you review it.");
+      for (const row of buildFrame(tail, viewport, t)) expect(displayWidth(row)).toBe(viewport.cols);
+    }
+  });
+
   test("prompt: esc cancels without sending; empty + enter just closes", () => {
     const opened = reduce(base, parseKey("p"));
     const esc = reduce(opened.state, { name: "escape" });

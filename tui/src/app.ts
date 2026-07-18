@@ -31,7 +31,7 @@ import { Screen } from "./kit/screen.js";
 import { splitV, splitH, type Rect } from "./kit/layout.js";
 import { padTo, truncate, displayWidth } from "./kit/draw.js";
 import { startNavReader, type Key } from "./kit/input.js";
-import { composerApplyKey, composerFrom, type ComposerState } from "./kit/composer.js";
+import { composerApplyKey, composerFrom, composerViewport, type ComposerGeometry, type ComposerState, type ComposerVisualRow } from "./kit/composer.js";
 
 import { wordmark } from "./widgets/brand/wordmark.js";
 import { statusBar, statusSep, tabBar, hintBar, footer, keyHint } from "./widgets/chrome/index.js";
@@ -152,6 +152,12 @@ const CTRL_L = "\x0c";
 export interface FrameSize {
   cols: number;
   rows: number;
+}
+
+/** Explicit display input to the pure reducer. The runtime supplies current terminal geometry;
+ * unit callers can omit it and get the conservative editor default. */
+export interface ReduceOptions {
+  composer?: ComposerGeometry;
 }
 
 // ── Sessions panel state (F6.4.3) ──────────────────────────────────────────
@@ -975,7 +981,7 @@ function actionReferenceFor(state: AppState): HelpContext {
  * key-handling switch in FlowClock's runDashboardApp, but as a standalone function
  * so app.test.ts can drive it directly without a fake TTY.
  */
-export function reduce(state: AppState, key: Key): ReduceResult {
+export function reduce(state: AppState, key: Key, options: ReduceOptions = {}): ReduceResult {
   // Overlay routing takes precedence over every base keybind while open.
   if (state.overlay) {
     const ov = state.overlay;
@@ -1240,7 +1246,7 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       if (text.length === 0) return settle({ ...state, overlay: null }); // empty → just close
       return settle({ ...state, overlay: { kind: "confirmSend", name: ov.name, text } });
     }
-    const edited = composerApplyKey(ov.draft, key);
+    const edited = composerApplyKey(ov.draft, key, options.composer);
     if (edited.handled) return settle({ ...state, overlay: { kind: "prompt", name: ov.name, draft: edited.state } });
     return settle(state);
   }
@@ -1465,7 +1471,7 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
 
   if (overlay.kind === "prompt") {
     const width = Math.min(64, Math.max(30, cols - 6));
-    const box = buildPromptBox(overlay, width, theme);
+    const box = buildPromptBox(overlay, width, maxDialogHeight, theme);
     const left = Math.max(0, Math.floor((cols - width) / 2));
     const top = Math.max(0, Math.min(Math.floor(rows * 0.4), rows - box.length));
     return { box, top, left };
@@ -1563,18 +1569,66 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
   return { box, top, left };
 }
 
-/** Prompt overlay box: a square dialog panel wrapping a single PromptBox row. Mid-line
- * caret is F6.6.3's composer; here the caret trails (single-line append is the case). */
-function buildPromptBox(overlay: Extract<Overlay, { kind: "prompt" }>, width: number, theme: Theme): string[] {
-  const lines = overlay.draft.text.split("\n");
-  const visible = lines.slice(Math.max(0, lines.length - 4));
-  const field = visible.map((line, index) => promptBox(
-    { value: line, focus: index === visible.length - 1, placeholder: "write prompt", hint: index === visible.length - 1 ? "alt+enter line · enter preview" : undefined, width: width - 4 },
-    theme,
-  ));
+/** The prompt bar and cursor consume three cells inside a panel's content area. Keep the
+ * geometry shared between rendering and the key reducer so Up/Down always mean visual rows. */
+function promptComposerGeometry(width: number, maxDialogHeight: number): ComposerGeometry {
+  const contentWidth = Math.max(1, width - 4); // two borders + horizontal panel padding
+  return {
+    textWidth: Math.max(2, contentWidth - 3), // `┃ ` plus a one-cell caret
+    // Two immutable instruction rows and two panel borders are reserved before the editor grows.
+    viewportRows: Math.max(1, Math.floor(maxDialogHeight) - 4),
+  };
+}
+
+function promptComposerGeometryForFrame(size: FrameSize): ComposerGeometry {
+  const width = Math.min(64, Math.max(30, size.cols - 6));
+  return promptComposerGeometry(width, Math.max(6, size.rows - 4));
+}
+
+function composerInputRow(
+  row: ComposerVisualRow,
+  rowIndex: number,
+  cursorRow: number,
+  cursor: number,
+  theme: Theme,
+): string {
+  const active = rowIndex === cursorRow;
+  const localCursor = Math.max(0, Math.min(cursor - row.start, row.text.length));
+  const before = active ? row.text.slice(0, localCursor) : row.text;
+  const after = active ? row.text.slice(localCursor) : "";
+  const bar = theme.fg(active ? "accent.teal" : "background.border") + "┃" + theme.reset;
+  const text = theme.fg("text.primary") + before + theme.reset;
+  const caret = active ? theme.fg("accent.teal") + "▏" + theme.reset : "";
+  return bar + " " + text + caret + (after ? theme.fg("text.primary") + after + theme.reset : "");
+}
+
+/** Prompt overlay: an editor, not a clipped stack of PromptBox rows. The exact draft remains
+ * memory-only until the existing y-only confirmation boundary. */
+function buildPromptBox(
+  overlay: Extract<Overlay, { kind: "prompt" }>,
+  width: number,
+  maxDialogHeight: number,
+  theme: Theme,
+): string[] {
+  const maximum = promptComposerGeometry(width, maxDialogHeight);
+  // Grow from one row to the safe cap. Recompute the viewport with that actual height so a
+  // resize or shorter draft never reserves a blank modal and a long draft keeps its cursor seen.
+  const all = composerViewport(overlay.draft, { ...maximum, viewportRows: Number.MAX_SAFE_INTEGER });
+  const viewportRows = Math.max(1, Math.min(maximum.viewportRows, all.rows.length));
+  const viewport = composerViewport(overlay.draft, { ...maximum, viewportRows });
+  const start = viewport.scrollTop;
+  const editorRows = viewport.visibleRows.map((row, index) => composerInputRow(row, start + index, viewport.cursorRow, overlay.draft.cursor, theme));
+  const position = viewport.maxScroll > 0
+    ? `Visual rows ${start + 1}-${Math.min(viewport.rows.length, start + viewportRows)} of ${viewport.rows.length} · arrows move the cursor`
+    : "Alt+Enter adds a line · arrows move the cursor";
+  const field = [
+    theme.fg("text.muted") + "Draft stays in memory until you review it." + theme.reset,
+    ...editorRows,
+    theme.fg("text.muted") + position + theme.reset,
+  ];
   const target = overlay.name.startsWith("ebr-") ? overlay.name.slice(4) : overlay.name;
   return panel(
-    { title: `prompt → ${target}`, dialog: true, width, height: field.length + 2, body: field },
+    { title: `prompt → ${target}`, dialog: true, focus: true, width, height: field.length + 2, body: field },
     theme,
   );
 }
@@ -2887,7 +2941,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
     }
 
     function onKey(key: Key): void {
-      const result = reduce(state, key);
+      const result = reduce(state, key, { composer: promptComposerGeometryForFrame(getSize()) });
       state = result.state;
       if (result.quit) {
         cleanup();

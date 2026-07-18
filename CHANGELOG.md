@@ -4,6 +4,19 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-18 -- F8.1 Sessions multiline prompt editor
+
+- **Complete editor model:** Sessions `p` now opens a cursor-aware multiline editor instead of
+  showing only the last four lines. It preserves exact in-memory draft bytes, supports bracketed
+  paste and `Alt+Enter`, uses logical Home/End and visual-row arrows, grows until its safe terminal
+  cap, then follows the cursor through a truthful viewport.
+- **Safety unchanged:** plain Enter still opens exact-payload review; only `y` sends literally to
+  tmux. Drafts remain outside session logs, memory, telemetry, workspaces, cost records, and
+  history.
+- **Verification:** pure editor edge cases, compact/normal/wide frames, real tmux fake-agent smoke,
+  TUI suite `425/0`, and the F8.0 baseline are recorded in `docs/F8-COMPOSER-MAKER-REPORT.md`.
+  Independent checker review remains pending.
+
 ## 2026-07-18 -- Workspace, memory, and OSS program planned
 
 - **Product program:** added `docs/ULTRAPLAN-WORKSPACES-MEMORY-OSS.md`, the implementation
