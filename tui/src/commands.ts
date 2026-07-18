@@ -14,11 +14,11 @@
  * be dead code with no caller. Until then it stays `undefined` for every entry.
  */
 
-/** The 6 top-level views, in tab order (1-based key = index+1). Mirrors the
+/** The 7 top-level views, in tab order (1-based key = index+1). Mirrors the
  * mockup's `TABS` in design-system/ui_kits/ebrain/shell.jsx exactly. */
-export type TabName = "home" | "sessions" | "launch" | "memory" | "routing" | "doctor";
+export type TabName = "home" | "sessions" | "launch" | "workspaces" | "memory" | "routing" | "doctor";
 
-export const TABS: readonly TabName[] = ["home", "launch", "sessions", "memory", "routing", "doctor"];
+export const TABS: readonly TabName[] = ["home", "launch", "sessions", "workspaces", "memory", "routing", "doctor"];
 
 export interface Command {
   id: string;
@@ -27,7 +27,7 @@ export interface Command {
   /** The literal key that triggers it (e.g. "1", "tab", "shift+tab", "ctrl+l"). */
   key?: string;
   /** Display-only override for the hint bar when `key` isn't the compact form
-   * shown to the user (e.g. six per-tab jump commands collapse to one "1-6" hint). */
+   * shown to the user (e.g. seven per-tab jump commands collapse to one "1-7" hint). */
   hintKey?: string;
   group?: "nav" | "global";
   /** Whether this command's key/title pair appears in the bottom hint bar.
@@ -38,22 +38,23 @@ export interface Command {
 }
 
 export const COMMANDS: Command[] = [
-  // ── per-tab direct-jump (1..6) — individually addressable for the future
-  // help overlay (6.3.5), collapsed to one "1-6" entry below for the hint bar.
+  // ── per-tab direct-jump (1..7) — individually addressable for the future
+  // help overlay (6.3.5), collapsed to one "1-7" entry below for the hint bar.
   { id: "nav.home", title: "home", summary: "go to the home view", key: "1", group: "nav" },
   { id: "nav.launch", title: "launch", summary: "go to the launch view", key: "2", group: "nav" },
   { id: "nav.sessions", title: "sessions", summary: "go to the sessions view", key: "3", group: "nav" },
-  { id: "nav.memory", title: "memory", summary: "go to the memory view", key: "4", group: "nav" },
-  { id: "nav.routing", title: "routing", summary: "go to the routing view", key: "5", group: "nav" },
-  { id: "nav.doctor", title: "doctor", summary: "go to the doctor view", key: "6", group: "nav" },
+  { id: "nav.workspaces", title: "workspaces", summary: "organize validated project directories", key: "4", group: "nav" },
+  { id: "nav.memory", title: "memory", summary: "go to the memory view", key: "5", group: "nav" },
+  { id: "nav.routing", title: "routing", summary: "go to the routing view", key: "6", group: "nav" },
+  { id: "nav.doctor", title: "doctor", summary: "go to the doctor view", key: "7", group: "nav" },
 
   // ── compact hint-bar entry for the six jumps above (matches HomeScreen's
-  // {k:'1-6', label:'vistas'} in screens-a.jsx) — not itself a dispatchable key.
+  // {k:'1-7', label:'views'} in screens-a.jsx) — not itself a dispatchable key.
   {
     id: "nav.tabs",
     title: "views",
-    summary: "jump to a view by number (1-6), or cycle with tab / shift+tab",
-    key: "1-6",
+    summary: "jump to a view by number (1-7), or cycle with tab / shift+tab",
+    key: "1-7",
     group: "nav",
     showInHintBar: true,
   },
@@ -62,7 +63,7 @@ export const COMMANDS: Command[] = [
   { id: "focus.prev", title: "focus previous box", summary: "move the focus ring to the previous box in this view", key: "shift+tab", group: "nav" },
   { id: "focus.drill", title: "open / attach", summary: "act on the focused box (attach a session, open a memory, …)", key: "enter", group: "nav" },
 
-  // ── global. Order matches screens-a.jsx HomeScreen hints exactly: 1-6 views ·
+  // ── global. Order matches screens-a.jsx HomeScreen hints exactly: 1-7 views ·
   // / palette · l launch · ? help — hintsForTab() preserves COMMANDS array order below.
   { id: "palette.open", title: "palette", summary: "open the command palette", key: "/", group: "global", showInHintBar: true },
   { id: "nav.launchShortcut", title: "launch", summary: "jump straight to the launch view", key: "l", group: "global", showInHintBar: true },
@@ -94,7 +95,7 @@ const SESSION_HINTS: HintEntry[] = [
 
 /** Home is multi-box: Tab moves focus between active-sessions / memories / system. */
 const HOME_HINTS: HintEntry[] = [
-  { k: "1-6", label: "views" },
+  { k: "1-7", label: "views" },
   { k: "tab", label: "focus box" },
   { k: "↑↓", label: "select" },
   { k: "enter", label: "open" },
@@ -107,6 +108,14 @@ const LAUNCH_HINTS: HintEntry[] = [
   { k: "t", label: "task" },
   { k: "w", label: "guided launch" },
   { k: "tab", label: "focus box" },
+  { k: "?", label: "actions" },
+];
+const WORKSPACE_HINTS: HintEntry[] = [
+  { k: "↑↓", label: "select" },
+  { k: "enter", label: "use in launch" },
+  { k: "a", label: "add" },
+  { k: "e", label: "rename" },
+  { k: "x", label: "remove" },
   { k: "?", label: "actions" },
 ];
 
@@ -143,6 +152,7 @@ export function hintsForTab(tab: TabName): HintEntry[] {
   if (tab === "home") return HOME_HINTS;
   if (tab === "sessions") return SESSION_HINTS;
   if (tab === "launch") return LAUNCH_HINTS;
+  if (tab === "workspaces") return WORKSPACE_HINTS;
   if (tab === "memory") return MEMORY_HINTS;
   if (tab === "routing") return ROUTING_HINTS;
   if (tab === "doctor") return DOCTOR_HINTS;

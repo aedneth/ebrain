@@ -28,6 +28,7 @@ import {
   parseWorkspaces,
   parseWorkspaceValidation,
   parseWorkspaceMutation,
+  parseWorkspaceRemoval,
   parseProfiles,
   parseTargets,
   parseTargetPlan,
@@ -156,6 +157,13 @@ export function validateWorkspace(cwd: string): Promise<KResult<{ cwd: string }>
  * never an ambient or implicit configuration write. */
 export function createWorkspace(input: { cwd: string; label: string }): Promise<KResult<WorkspaceData>> {
   return fetchParsed(["workspaces", "add", "--cwd", input.cwd, "--label", input.label, "--yes", "--json"], 15000, parseWorkspaceMutation);
+}
+/** Both mutations are deliberate TUI actions; the subprocess receives structured argv only. */
+export function renameWorkspace(input: { id: string; label: string }): Promise<KResult<WorkspaceData>> {
+  return fetchParsed(["workspaces", "rename", "--id", input.id, "--label", input.label, "--yes", "--json"], 15000, parseWorkspaceMutation);
+}
+export function removeWorkspace(id: string): Promise<KResult<{ removed: string }>> {
+  return fetchParsed(["workspaces", "remove", "--id", id, "--yes", "--json"], 15000, parseWorkspaceRemoval);
 }
 export function fetchProfiles(): Promise<KResult<ProfilesData>> { return fetchParsed(["profiles", "list", "--json"], 15000, parseProfiles); }
 /** Explicit first-use migration of the user's existing local routing into a profile. */

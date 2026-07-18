@@ -101,6 +101,8 @@ import {
   fetchWorkspaces,
   validateWorkspace,
   createWorkspace,
+  renameWorkspace,
+  removeWorkspace,
 } from "./knowledge/run.js";
 
 // Sessions data plane (F6.4) — REUSED from cli/sessions.ts via the control-plane
@@ -170,6 +172,12 @@ export interface SessionListItem {
   agent: string;
   uptime: string;
   attached: boolean;
+  /** Immutable tmux creation timestamp, used only for live workspace detail. */
+  created?: string;
+  /** Ephemeral tmux snapshot used only for workspace activity grouping. */
+  cwd?: string;
+  /** Present only when immutable cwd matches a registered canonical workspace. */
+  workspaceLabel?: string;
 }
 
 /** Scrubbed capture of the selected session's pane (peekSession already scrubs it). */
@@ -312,7 +320,11 @@ export type Overlay = { scroll?: number } & (
   /** Searchable picker backed by the validated local workspace registry. */
   | { kind: "workspacePicker"; selected: number; query: string; search: LineState | null; returnToWizard: boolean }
   /** Two explicit fields: a path is validated by the CLI before it can become selectable. */
-  | { kind: "workspaceAdd"; cwd: LineState; label: LineState; focus: "cwd" | "label"; returnToWizard: boolean }
+  | { kind: "workspaceAdd"; cwd: LineState; label: LineState; focus: "cwd" | "label"; returnToWizard: boolean; origin?: "picker" | "cockpit" }
+  /** Label-only change over the same strict workspace CLI contract. */
+  | { kind: "workspaceRename"; id: string; label: LineState }
+  /** Removal is destructive only to the local registry entry, never to the directory or sessions. */
+  | { kind: "confirmWorkspaceRemove"; id: string; label: string }
   | { kind: "confirmTargetLaunch"; plan: TargetPlanData; intent: LaunchIntent }
   | { kind: "confirmTargetGovernor"; plan: TargetPlanData; intent: LaunchIntent; reason: string }
   | { kind: "confirmProfilesInit" }
@@ -381,6 +393,9 @@ export interface WorkspaceSlice {
   current: WorkspaceSelection;
   /** The directory snapshotted by the next launch; existing sessions never observe changes here. */
   active: WorkspaceSelection;
+  /** Selected rows are transient navigation state, never registry fields. */
+  selected: number;
+  activitySelected: number;
   status: LoadStatus;
   error?: string;
 }
@@ -391,13 +406,17 @@ function currentWorkspace(cwd: string, validated = false): WorkspaceSelection {
 
 export function emptyWorkspace(cwd: string): WorkspaceSlice {
   const current = currentWorkspace(cwd);
-  return { data: null, current, active: current, status: "idle" };
+  return { data: null, current, active: current, selected: 0, activitySelected: 0, status: "idle" };
 }
 
 /** This fallback is pure for legacy test fixtures. Real runtime state always initializes an
  * absolute caller cwd in initialState(), then validates it before any launch. */
 function workspaceOf(state: AppState): WorkspaceSlice {
-  return state.workspace ?? emptyWorkspace(state.cwd);
+  const empty = emptyWorkspace(state.cwd);
+  const workspace = state.workspace;
+  return workspace
+    ? { ...empty, ...workspace, selected: workspace.selected ?? 0, activitySelected: workspace.activitySelected ?? 0 }
+    : empty;
 }
 
 function selectionFromRecord(workspace: WorkspaceData): WorkspaceSelection {
@@ -406,8 +425,7 @@ function selectionFromRecord(workspace: WorkspaceData): WorkspaceSelection {
 
 /** Current first, then registered workspaces. Duplicate canonical directories are impossible in
  * the store, but the current directory can equal one of them, so suppress its duplicate row. */
-function workspaceCandidates(state: AppState): WorkspaceSelection[] {
-  const workspace = workspaceOf(state);
+function workspaceCandidatesFromSlice(workspace: WorkspaceSlice): WorkspaceSelection[] {
   const candidates: WorkspaceSelection[] = workspace.current.validated ? [workspace.current] : [];
   for (const entry of workspace.data?.workspaces ?? []) {
     if (!candidates.some((candidate) => candidate.cwd === entry.cwd)) candidates.push(selectionFromRecord(entry));
@@ -416,10 +434,60 @@ function workspaceCandidates(state: AppState): WorkspaceSelection[] {
   return candidates;
 }
 
+function workspaceCandidates(state: AppState): WorkspaceSelection[] {
+  return workspaceCandidatesFromSlice(workspaceOf(state));
+}
+
 function workspaceDisplay(workspace: WorkspaceSelection, fallbackCwd: string): string {
   if (!workspace.validated) return `${workspace.label} · validating…`;
   const cwd = workspace.persistent ? workspace.cwd : fallbackCwd;
   return `${workspace.label} · ${cwd}`;
+}
+
+/** A Sessions row may name a workspace only after the immutable tmux cwd exactly matches a
+ * registered canonical directory. The caller directory is intentionally not a label source. */
+function registeredWorkspaceLabel(cwd: string | undefined, workspace: WorkspaceSlice): string | undefined {
+  if (!cwd) return undefined;
+  return workspace.data?.workspaces.find((entry) => entry.cwd === cwd)?.label;
+}
+
+function relabelSessionRows(rows: SessionListItem[], workspace: WorkspaceSlice): SessionListItem[] {
+  return rows.map((row) => ({ ...row, workspaceLabel: registeredWorkspaceLabel(row.cwd, workspace) }));
+}
+
+export interface WorkspaceActivity {
+  cwd: string;
+  label?: string;
+  sessions: SessionListItem[];
+  /** Latest live tmux creation timestamp, never persisted as activity history. */
+  latestCreated?: string;
+  selection?: WorkspaceSelection;
+}
+
+/** Activity is an ephemeral projection of the tmux list, not a history store. Empty registered
+ * workspaces are shown so the cockpit can still describe their current live count as zero. */
+export function workspaceActivity(workspace: WorkspaceSlice, sessions: SessionListItem[]): WorkspaceActivity[] {
+  const candidates = workspaceCandidatesFromSlice(workspace);
+  const known = candidates.map((candidate) => ({
+    cwd: candidate.cwd,
+    // The caller directory is valid for the next launch but deliberately not a registered
+    // workspace. Naming it here makes the live projection legible without granting a Sessions
+    // row a workspace label (that stricter rule remains in registeredWorkspaceLabel()).
+    label: candidate.label,
+    sessions: sessions.filter((session) => session.cwd === candidate.cwd),
+    selection: candidate,
+  }));
+  const unknown = new Map<string, SessionListItem[]>();
+  for (const session of sessions) {
+    if (!session.cwd || candidates.some((candidate) => candidate.cwd === session.cwd)) continue;
+    const group = unknown.get(session.cwd) ?? [];
+    group.push(session);
+    unknown.set(session.cwd, group);
+  }
+  return [...known, ...[...unknown.entries()].map(([cwd, grouped]) => ({ cwd, sessions: grouped }))].map((entry) => ({
+    ...entry,
+    latestCreated: entry.sessions.map((session) => session.created).filter((created): created is string => Boolean(created)).sort().at(-1),
+  }));
 }
 
 /**
@@ -518,8 +586,8 @@ export function initialState(): AppState {
   };
 }
 
-// ── Focus model (F6.6): a two-level model over the single-key view jump (1-6) ──
-// `1-6` jumps views; Tab/Shift+Tab move the focus RING between the boxes of the current
+// ── Focus model (F6.6): a two-level model over the single-key view jump (1-7) ──
+// `1-7` jumps views; Tab/Shift+Tab move the focus RING between the boxes of the current
 // view; ↑↓ navigate items in the focused box; Enter drills into the focused box. Each
 // view lists its focusable regions in view order (left→right, top→bottom).
 
@@ -527,6 +595,7 @@ const REGIONS: Record<TabName, readonly string[]> = {
   home: ["sessions", "memories", "system"],
   sessions: ["list"],
   launch: ["agents", "guided", "task"],
+  workspaces: ["registry", "activity", "detail"],
   memory: ["results", "workflows", "logs"],
   routing: ["caps"],
   doctor: ["checks", "fleet"],
@@ -564,7 +633,10 @@ export type AppEffect =
   | { type: "launchConfirmed"; agent: string; cwd: string; reason: string; prompt?: string }
   | { type: "openLaunchWizard" }
   | { type: "openWorkspacePicker"; returnToWizard: boolean }
-  | { type: "addWorkspace"; cwd: string; label: string; returnToWizard: boolean }
+  | { type: "refreshWorkspaces" }
+  | { type: "addWorkspace"; cwd: string; label: string; returnToWizard: boolean; origin: "picker" | "cockpit" }
+  | { type: "renameWorkspace"; id: string; label: string }
+  | { type: "removeWorkspace"; id: string }
   | { type: "initializeProfiles" }
   | { type: "planLaunchWizard" }
   | { type: "requestTargetLaunch"; plan: TargetPlanData; intent: LaunchIntent }
@@ -609,6 +681,8 @@ function refreshEffectFor(tab: TabName): AppEffect | undefined {
   switch (tab) {
     case "sessions":
       return { type: "refreshSessions" };
+    case "workspaces":
+      return { type: "refreshWorkspaces" };
     case "home":
       return { type: "refreshStatus" };
     case "memory":
@@ -697,6 +771,21 @@ function moveSelection(state: AppState, delta: number): ReduceResult {
     return settle({ ...clear, overview: { ...o, memSelected: clampIndex(o.memSelected + delta, n) } });
   }
 
+  if (state.tab === "workspaces") {
+    const workspace = workspaceOf(state);
+    if (region === "registry") {
+      const candidates = workspaceCandidates(state);
+      if (candidates.length === 0) return settle(clear);
+      return settle({ ...clear, workspace: { ...workspace, selected: clampIndex(workspace.selected + delta, candidates.length) } });
+    }
+    if (region === "activity") {
+      const activity = workspaceActivity(workspace, sessionsOf(state).rows);
+      if (activity.length === 0) return settle(clear);
+      return settle({ ...clear, workspace: { ...workspace, activitySelected: clampIndex(workspace.activitySelected + delta, activity.length) } });
+    }
+    return settle(clear);
+  }
+
   if (state.tab === "memory") {
     const m = memoryOf(state);
     if (region === "workflows") {
@@ -760,6 +849,20 @@ function drillIn(state: AppState): ReduceResult {
     if (region === "agents") return launchEnter(state);
     if (region === "guided") return settle(clear, { type: "openLaunchWizard" });
     if (region === "task") return settle({ ...clear, overlay: { kind: "taskSetup", selected: taskSetupIndex(taskCapabilityOf(launchOf(state))) } });
+  }
+
+  if (state.tab === "workspaces") {
+    const workspace = workspaceOf(state);
+    if (region === "activity") {
+      const activity = workspaceActivity(workspace, sessionsOf(state).rows);
+      const selected = activity[clampIndex(workspace.activitySelected, activity.length)];
+      if (!selected?.selection) return settle(clear);
+      const candidates = workspaceCandidates(state);
+      const index = candidates.findIndex((candidate) => candidate.cwd === selected.selection!.cwd);
+      return settle({ ...clear, workspace: { ...workspace, selected: Math.max(0, index) } });
+    }
+    const selected = selectedCockpitWorkspace(state);
+    return selected ? settle(selectWorkspace(clear, selected, false)) : settle(clear);
   }
 
   // Attach the selected session — from the Sessions list OR home's active-sessions box.
@@ -840,11 +943,17 @@ function filteredWorkspaces(state: AppState, query: string): WorkspaceSelection[
   return candidates.filter((workspace) => `${workspace.label}\n${workspace.cwd}`.toLowerCase().includes(needle));
 }
 
+function selectedCockpitWorkspace(state: AppState): WorkspaceSelection | null {
+  const candidates = workspaceCandidates(state);
+  return candidates[clampIndex(workspaceOf(state).selected, candidates.length)] ?? null;
+}
+
 /** Select through a known candidate only. Guided Launch receives a validated snapshot rather
  * than a free-form directory, so its plan cannot escape the workspace contract. */
 function selectWorkspace(state: AppState, candidate: WorkspaceSelection, returnToWizard: boolean): AppState {
   const workspace = workspaceOf(state);
-  const nextWorkspace: WorkspaceSlice = { ...workspace, active: candidate, status: "ready", error: undefined };
+  const selected = Math.max(0, workspaceCandidates(state).findIndex((entry) => entry.cwd === candidate.cwd));
+  const nextWorkspace: WorkspaceSlice = { ...workspace, active: candidate, selected, status: "ready", error: undefined };
   if (!returnToWizard) return { ...state, workspace: nextWorkspace, overlay: null };
   const launch = launchOf(state);
   const wizard = wizardOf(launch);
@@ -877,9 +986,10 @@ export function hintsForState(state: AppState): HintEntry[] {
     return [{ k: "↑↓", label: "choose" }, { k: "enter", label: "select" }, { k: "s", label: "filter" }, { k: "a", label: "add" }, { k: "esc", label: "cancel" }];
   }
   if (overlay?.kind === "workspaceAdd") return [{ k: "tab", label: "field" }, { k: "enter", label: overlay.focus === "cwd" ? "next" : "add" }, { k: "esc", label: "back" }];
+  if (overlay?.kind === "workspaceRename") return [{ k: "enter", label: "rename" }, { k: "esc", label: "cancel" }];
   if (overlay?.kind === "taskSetup") return [{ k: "↑↓", label: "choose type" }, { k: "enter", label: "add task" }, { k: "esc", label: "cancel" }];
   if (overlay?.kind === "taskPrompt") return [{ k: "↑↓", label: "scroll" }, { k: "enter", label: "save" }, { k: "esc", label: "back" }];
-  if (overlay?.kind === "confirmKill" || overlay?.kind === "confirmLaunch" || overlay?.kind === "confirmSend" || overlay?.kind === "confirmTargetLaunch" || overlay?.kind === "confirmTargetGovernor" || overlay?.kind === "confirmProfilesInit") {
+  if (overlay?.kind === "confirmKill" || overlay?.kind === "confirmLaunch" || overlay?.kind === "confirmSend" || overlay?.kind === "confirmTargetLaunch" || overlay?.kind === "confirmTargetGovernor" || overlay?.kind === "confirmProfilesInit" || overlay?.kind === "confirmWorkspaceRemove") {
     return [{ k: "y", label: "confirm" }, { k: "n", label: "cancel" }];
   }
   if (overlay?.kind === "palette") return [{ k: "↑↓", label: "select" }, { k: "enter", label: "run" }, { k: "esc", label: "close" }];
@@ -917,6 +1027,14 @@ export function hintsForState(state: AppState): HintEntry[] {
           { k: "?", label: "actions" },
         ];
     }
+  }
+  if (state.tab === "workspaces") {
+    const region = focusedRegion(state);
+    return region === "registry"
+      ? [{ k: "↑↓", label: "select" }, { k: "enter", label: "use in launch" }, { k: "a", label: "add" }, { k: "e", label: "rename" }, { k: "x", label: "remove" }, { k: "?", label: "actions" }]
+      : region === "activity"
+        ? [{ k: "↑↓", label: "select activity" }, { k: "enter", label: "show workspace" }, { k: "r", label: "refresh" }, { k: "tab", label: "next box" }, { k: "?", label: "actions" }]
+        : [{ k: "enter", label: "use in launch" }, { k: "g", label: "open launch" }, { k: "tab", label: "next box" }, { k: "?", label: "actions" }];
   }
   return hintsForTab(state.tab).slice(0, 6);
 }
@@ -967,6 +1085,21 @@ function actionReferenceFor(state: AppState): HelpContext {
         { key: "p", title: "prompt", summary: "review before sending a literal prompt" },
         { key: "k", title: "kill", summary: "request an explicit destructive confirmation" },
         { key: "r", title: "refresh", summary: "refresh the active session list" },
+      ],
+    };
+  }
+  if (state.tab === "workspaces") {
+    return {
+      title: "workspace actions",
+      actions: [
+        { key: "↑↓", title: "select", summary: "move within the focused workspace collection" },
+        { key: "tab", title: "focus box", summary: "move between registry, activity, and details" },
+        { key: "enter", title: "use in launch", summary: "make the selected validated directory the next launch workspace" },
+        { key: "a", title: "add", summary: "register a directory after strict validation" },
+        { key: "e", title: "rename", summary: "change only a registered workspace label" },
+        { key: "x", title: "remove", summary: "remove only the registry entry after explicit confirmation" },
+        { key: "r", title: "refresh", summary: "re-read the local workspace registry and live sessions" },
+        { key: "g", title: "open launch", summary: "go to Launch with the selected workspace available" },
       ],
     };
   }
@@ -1130,7 +1263,7 @@ export function reduce(state: AppState, key: Key, options: ReduceOptions = {}): 
       }
       if (key.name === "char" && key.char === "s") return settle({ ...state, overlay: { ...ov, search: lineFrom(ov.query) } });
       if (key.name === "char" && key.char === "a") {
-        return settle({ ...state, overlay: { kind: "workspaceAdd", cwd: lineFrom(""), label: lineFrom(""), focus: "cwd", returnToWizard: ov.returnToWizard } });
+        return settle({ ...state, overlay: { kind: "workspaceAdd", cwd: lineFrom(""), label: lineFrom(""), focus: "cwd", returnToWizard: ov.returnToWizard, origin: "picker" } });
       }
       if (key.name === "char" && key.char === "r") {
         return settle({ ...state, workspace: { ...workspaceOf(state), status: "loading", error: undefined } }, { type: "openWorkspacePicker", returnToWizard: ov.returnToWizard });
@@ -1140,7 +1273,7 @@ export function reduce(state: AppState, key: Key, options: ReduceOptions = {}): 
 
     if (ov.kind === "workspaceAdd") {
       if (key.name === "escape") {
-        return settle({ ...state, overlay: { kind: "workspacePicker", selected: 0, query: "", search: null, returnToWizard: ov.returnToWizard } });
+        return settle({ ...state, overlay: ov.origin === "cockpit" ? null : { kind: "workspacePicker", selected: 0, query: "", search: null, returnToWizard: ov.returnToWizard } });
       }
       if (key.name === "tab" || key.name === "shifttab") {
         const focus = ov.focus === "cwd" ? "label" : "cwd";
@@ -1151,12 +1284,29 @@ export function reduce(state: AppState, key: Key, options: ReduceOptions = {}): 
         const cwd = ov.cwd.text.trim();
         const label = ov.label.text.trim();
         if (!cwd || !label) return settle({ ...state, workspace: { ...workspaceOf(state), status: "error", error: "Enter both a directory and a label." } });
-        return settle({ ...state, workspace: { ...workspaceOf(state), status: "loading", error: undefined } }, { type: "addWorkspace", cwd, label, returnToWizard: ov.returnToWizard });
+        return settle({ ...state, workspace: { ...workspaceOf(state), status: "loading", error: undefined } }, { type: "addWorkspace", cwd, label, returnToWizard: ov.returnToWizard, origin: ov.origin ?? "picker" });
       }
       const line = ov.focus === "cwd" ? ov.cwd : ov.label;
       const edited = lineApplyKey(line, key);
       if (!edited.handled) return settle(state);
       return settle({ ...state, overlay: ov.focus === "cwd" ? { ...ov, cwd: edited.state } : { ...ov, label: edited.state } });
+    }
+
+    if (ov.kind === "workspaceRename") {
+      if (key.name === "escape" || (key.name === "char" && key.char === "q")) return settle({ ...state, overlay: null });
+      if (key.name === "enter") {
+        const label = ov.label.text.trim();
+        if (!label) return settle({ ...state, workspace: { ...workspaceOf(state), status: "error", error: "Enter a workspace label." } });
+        return settle({ ...state, overlay: null, workspace: { ...workspaceOf(state), status: "loading", error: undefined } }, { type: "renameWorkspace", id: ov.id, label });
+      }
+      const edited = lineApplyKey(ov.label, key);
+      return edited.handled ? settle({ ...state, overlay: { ...ov, label: edited.state } }) : settle(state);
+    }
+
+    if (ov.kind === "confirmWorkspaceRemove") {
+      if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "removeWorkspace", id: ov.id });
+      if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: null });
+      return settle(state);
     }
 
     if (ov.kind === "confirmTargetLaunch") {
@@ -1252,7 +1402,7 @@ export function reduce(state: AppState, key: Key, options: ReduceOptions = {}): 
   }
 
   // Tab / Shift+Tab move the focus RING between the boxes of the current view — they no
-  // longer switch views (1-6 does that). Single-region views: a harmless no-op.
+  // longer switch views (1-7 does that). Single-region views: a harmless no-op.
   if (key.name === "tab" || key.name === "shifttab") {
     const regions = regionsFor(state.tab);
     if (regions.length <= 1) return settle({ ...state, confirmQuit: false });
@@ -1297,7 +1447,7 @@ export function reduce(state: AppState, key: Key, options: ReduceOptions = {}): 
     if (ch === "q") return { state, quit: true, forceRedraw: false };
     if (ch === CTRL_L) return { state: { ...state, confirmQuit: false }, quit: false, forceRedraw: true };
 
-    if (ch >= "1" && ch <= "6") {
+    if (ch >= "1" && ch <= "7") {
       const tab = TABS[Number(ch) - 1];
       if (tab) return goTab(state, tab);
     }
@@ -1317,6 +1467,16 @@ export function reduce(state: AppState, key: Key, options: ReduceOptions = {}): 
           { type: "openWorkspacePicker", returnToWizard: false },
         );
       }
+    }
+
+    if (state.tab === "workspaces") {
+      const workspace = workspaceOf(state);
+      const selected = selectedCockpitWorkspace(state);
+      if (ch === "r") return settle({ ...state, confirmQuit: false, workspace: { ...workspace, status: "loading", error: undefined } }, { type: "refreshWorkspaces" });
+      if (ch === "g") return goTab({ ...state, confirmQuit: false }, "launch");
+      if (ch === "a") return settle({ ...state, confirmQuit: false, overlay: { kind: "workspaceAdd", cwd: lineFrom(""), label: lineFrom(""), focus: "cwd", returnToWizard: false, origin: "cockpit" } });
+      if (ch === "e" && selected?.persistent && selected.id) return settle({ ...state, confirmQuit: false, overlay: { kind: "workspaceRename", id: selected.id, label: lineFrom(selected.label) } });
+      if (ch === "x" && selected?.persistent && selected.id) return settle({ ...state, confirmQuit: false, overlay: { kind: "confirmWorkspaceRemove", id: selected.id, label: selected.label } });
     }
 
     // Sessions panel actions (only on that tab): a attach · k kill · p prompt · r refrescar.
@@ -1511,6 +1671,27 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
   if (overlay.kind === "workspaceAdd") {
     const width = Math.min(88, Math.max(48, cols - 6));
     const box = buildWorkspaceAddBox(state, overlay, width, maxDialogHeight, theme);
+    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+  }
+  if (overlay.kind === "workspaceRename") {
+    const width = Math.min(72, Math.max(36, cols - 6));
+    const box = buildWorkspaceRenameBox(state, overlay, width, maxDialogHeight, theme);
+    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+  }
+  if (overlay.kind === "confirmWorkspaceRemove") {
+    const width = Math.min(72, Math.max(36, cols - 6));
+    const box = confirmLayout({
+      title: "remove workspace",
+      message: `Remove ${overlay.label} from the local workspace registry? The directory and existing sessions are unchanged.`,
+      danger: true,
+      confirmKey: "y",
+      confirmLabel: "remove entry",
+      cancelKey: "n",
+      cancelLabel: "cancel",
+      width,
+      maxHeight: maxDialogHeight,
+      scroll: overlay.scroll,
+    }, theme).rows;
     return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
   }
   if (overlay.kind === "confirmTargetLaunch" || overlay.kind === "confirmTargetGovernor") {
@@ -1767,6 +1948,21 @@ function buildWorkspaceAddBox(state: AppState, overlay: Extract<Overlay, { kind:
   return responsiveDialog({ title: "add workspace", focus: true, width, maxHeight, blocks }, theme).rows;
 }
 
+function buildWorkspaceRenameBox(state: AppState, overlay: Extract<Overlay, { kind: "workspaceRename" }>, width: number, maxHeight: number, theme: Theme): string[] {
+  const workspace = workspaceOf(state);
+  const current = workspace.data?.workspaces.find((entry) => entry.id === overlay.id);
+  const blocks: DialogBlock[] = [
+    { kind: "paragraph", text: "Change only the display label. The canonical directory, active sessions, and launch-time validation remain unchanged.", tone: "text.muted" },
+    { kind: "spacer" },
+    { kind: "keyValue", key: "directory", value: current?.cwd ?? "workspace no longer available", keyTone: "text.secondary", valueTone: "text.muted" },
+    { kind: "spacer" },
+    { kind: "input", value: overlay.label.text, cursor: overlay.label.cursor, placeholder: "workspace label" },
+  ];
+  if (workspace.error) blocks.push({ kind: "line", text: workspace.error, tone: "semantic.error" });
+  blocks.push({ kind: "spacer" }, { kind: "actions", items: [{ key: "enter", label: "rename" }, { key: "esc", label: "cancel", labelTone: "text.muted" }] });
+  return responsiveDialog({ title: "rename workspace", focus: true, width, maxHeight, blocks }, theme).rows;
+}
+
 function wizardChoiceLabel(value: string, count: number, noun: string): string {
   if (count === 0) return `${value || "Unavailable"} -- no ${noun} available`;
   if (count === 1) return `${value} -- 1 ${noun}; locked`;
@@ -1906,6 +2102,7 @@ function buildMiddle(state: AppState, rect: Rect, theme: Theme): string[] {
   if (state.tab === "home") rows = buildOverviewView(overviewOf(state), sessionsOf(state), focused, rect, theme);
   else if (state.tab === "sessions") rows = buildSessionsView(sessionsOf(state), rect, theme);
   else if (state.tab === "launch") rows = buildLaunchView(launchOf(state), workspaceOf(state).active, state.cwd, focused, rect, theme);
+  else if (state.tab === "workspaces") rows = buildWorkspacesView(workspaceOf(state), sessionsOf(state), focused, rect, theme);
   else if (state.tab === "memory") rows = buildMemoryView(memoryOf(state), focused, rect, theme);
   else if (state.tab === "routing") rows = buildRoutingView(routingOf(state), rect, theme);
   else rows = buildDoctorView(doctorOf(state), focused, rect, theme);
@@ -2116,7 +2313,8 @@ function renderFleetRow(it: SessionListItem, width: number, sel: boolean, theme:
   const uptimeW = displayWidth(it.uptime);
   const nameW = Math.max(0, width - 11 - 1 - uptimeW);
   const nameColor = sel ? theme.fg("text.primary") + BOLD : theme.fg("text.secondary");
-  const nameCell = nameColor + padTo(truncate(it.name, nameW), nameW) + reset;
+  const displayName = it.workspaceLabel ? `${it.name} · ${it.workspaceLabel}` : it.name;
+  const nameCell = nameColor + padTo(truncate(displayName, nameW), nameW) + reset;
   const uptimeCell = " " + theme.fg("text.muted") + it.uptime + reset;
   return badgeCell + nameCell + uptimeCell;
 }
@@ -2202,6 +2400,146 @@ export function buildSessionsView(s: SessionsSlice, rect: Rect, theme: Theme): s
   const out: string[] = [];
   for (let i = 0; i < height; i++) out.push((leftPanel[i] ?? "") + gap + (rightPanel[i] ?? ""));
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Workspaces cockpit (F8.2) -- one validated directory registry, live tmux-derived
+// activity, and a selected-directory detail. No shell command, output, or environment
+// enters this view or its state.
+// ---------------------------------------------------------------------------
+
+function workspaceRow(candidate: WorkspaceSelection, active: WorkspaceSelection, width: number, selected: boolean, theme: Theme): string {
+  const reset = theme.reset;
+  const title = `${candidate.label}${candidate.cwd === active.cwd ? " · active" : ""}`;
+  const text = `${title}  ${candidate.cwd}`;
+  return (selected ? theme.fg("text.primary") + BOLD : theme.fg("text.secondary")) + truncate(text, width) + reset;
+}
+
+function activityRow(activity: WorkspaceActivity, width: number, selected: boolean, theme: Theme): string {
+  const reset = theme.reset;
+  const label = activity.label ?? "unregistered directory";
+  const count = `${activity.sessions.length} active`;
+  const countW = displayWidth(count);
+  const nameW = Math.max(1, width - countW - 2);
+  const name = activity.label ? label : `${label} · ${activity.cwd || "unknown"}`;
+  const color = selected ? theme.fg("text.primary") + BOLD : theme.fg("text.secondary");
+  return color + padTo(truncate(name, nameW), nameW) + reset + "  " + theme.fg("text.muted") + count + reset;
+}
+
+function workspacePanelBody(
+  workspace: WorkspaceSlice,
+  candidates: WorkspaceSelection[],
+  focused: boolean,
+  height: number,
+  width: number,
+  theme: Theme,
+): string[] {
+  if (workspace.status === "loading" && candidates.length === 0) return [theme.fg("text.secondary") + "validating workspace registry..." + theme.reset];
+  if (candidates.length === 0) return [theme.fg("text.secondary") + "no validated workspaces · press a to add one" + theme.reset];
+  const selected = clampIndex(workspace.selected, candidates.length);
+  const room = Math.max(1, height - 2);
+  const offset = scrollOffset(selected, room, candidates.length);
+  const rowW = Math.max(8, width - 4 - 3);
+  return scrolllist({
+    items: candidates,
+    selected,
+    height: room,
+    offset,
+    renderItem: (candidate, index) => workspaceRow(candidate, workspace.active, rowW, focused && index === selected, theme),
+  }, theme);
+}
+
+function workspaceActivityBody(
+  workspace: WorkspaceSlice,
+  sessions: SessionsSlice,
+  focused: boolean,
+  height: number,
+  width: number,
+  theme: Theme,
+): string[] {
+  const activity = workspaceActivity(workspace, sessions.rows);
+  if (activity.length === 0) return [theme.fg("text.secondary") + "no workspace activity yet" + theme.reset];
+  const selected = clampIndex(workspace.activitySelected, activity.length);
+  const room = Math.max(1, height - 2);
+  const offset = scrollOffset(selected, room, activity.length);
+  const rowW = Math.max(8, width - 4 - 3);
+  return scrolllist({
+    items: activity,
+    selected,
+    height: room,
+    offset,
+    renderItem: (entry, index) => activityRow(entry, rowW, focused && index === selected, theme),
+  }, theme);
+}
+
+function workspaceDetailBody(workspace: WorkspaceSlice, sessions: SessionsSlice, width: number, theme: Theme): string[] {
+  const candidates = workspaceCandidatesFromSlice(workspace);
+  const selected = candidates[clampIndex(workspace.selected, candidates.length)];
+  if (!selected) return [theme.fg("text.secondary") + "select or register a workspace to inspect it" + theme.reset];
+  const matching = sessions.rows.filter((session) => session.cwd === selected.cwd);
+  const latestCreated = matching.map((session) => session.created).filter((created): created is string => Boolean(created)).sort().at(-1);
+  const reset = theme.reset;
+  const lines = [
+    theme.fg("text.secondary") + "directory  " + reset + theme.fg("text.primary") + selected.cwd + reset,
+    theme.fg("text.secondary") + "next launch " + reset + (selected.cwd === workspace.active.cwd ? theme.fg("semantic.ok") + "selected" : theme.fg("text.muted") + "not selected") + reset,
+    theme.fg("text.secondary") + "active sessions  " + reset + theme.fg("text.primary") + String(matching.length) + reset,
+    ...(latestCreated ? [theme.fg("text.secondary") + "latest active session  " + reset + theme.fg("text.muted") + latestCreated + reset] : []),
+  ];
+  for (const session of matching.slice(0, 2)) lines.push(theme.fg("text.muted") + `· ${session.name}` + reset);
+  if (matching.length > 2) lines.push(theme.fg("text.muted") + `+${matching.length - 2} more active session${matching.length === 3 ? "" : "s"}` + reset);
+  return lines.map((line) => truncate(line, Math.max(1, width - 4)));
+}
+
+function buildWorkspacesView(workspace: WorkspaceSlice, sessions: SessionsSlice, focused: string, rect: Rect, theme: Theme): string[] {
+  const candidates = workspaceCandidatesFromSlice(workspace);
+  const registryTitle = `workspaces · ${workspace.data?.workspaces.length ?? 0} registered`;
+  const renderRegistry = (box: Rect): string[] => panel({
+    title: registryTitle,
+    focus: focused === "registry",
+    width: box.width,
+    height: box.height,
+    body: workspacePanelBody(workspace, candidates, focused === "registry", box.height, box.width, theme),
+  }, theme);
+  const renderActivity = (box: Rect): string[] => panel({
+    title: `live activity · ${sessions.rows.length}`,
+    focus: focused === "activity",
+    width: box.width,
+    height: box.height,
+    body: workspaceActivityBody(workspace, sessions, focused === "activity", box.height, box.width, theme),
+  }, theme);
+  const renderDetail = (box: Rect): string[] => panel({
+    title: "selected workspace",
+    focus: focused === "detail",
+    width: box.width,
+    height: box.height,
+    body: [
+      ...workspaceDetailBody(workspace, sessions, box.width, theme),
+      ...(workspace.error ? [theme.fg("semantic.error") + workspace.error + theme.reset] : []),
+    ],
+  }, theme);
+
+  const out: string[] = [];
+  // 100 columns still leaves two 49-column panels after the divider. That is enough to keep
+  // the primary desktop cockpit hierarchy; the 80-column minimum remains intentionally stacked.
+  if (rect.width >= 100) {
+    const [topRect, detailRect] = splitV(rect, [{ flex: 3 }, { flex: 2 }], 1);
+    const [registryRect, activityRect] = splitH(topRect, [{ flex: 1 }, { flex: 1 }], 2);
+    const registry = renderRegistry(registryRect);
+    const live = renderActivity(activityRect);
+    const gap = " ".repeat(Math.max(0, topRect.width - registryRect.width - activityRect.width));
+    for (let index = 0; index < topRect.height; index += 1) out.push((registry[index] ?? "") + gap + (live[index] ?? ""));
+    if (detailRect.top > topRect.top + topRect.height) out.push(" ".repeat(rect.width));
+    out.push(...renderDetail(detailRect));
+  } else {
+    const [registryRect, activityRect, detailRect] = splitV(rect, [{ flex: 3 }, { flex: 2 }, { flex: 2 }], 1);
+    out.push(...renderRegistry(registryRect));
+    if (activityRect.top > registryRect.top + registryRect.height) out.push(" ".repeat(rect.width));
+    out.push(...renderActivity(activityRect));
+    if (detailRect.top > activityRect.top + activityRect.height) out.push(" ".repeat(rect.width));
+    out.push(...renderDetail(detailRect));
+  }
+  while (out.length < rect.height) out.push(" ".repeat(rect.width));
+  return out.slice(0, rect.height);
 }
 
 // ---------------------------------------------------------------------------
@@ -2886,6 +3224,9 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
     let lastPeekAt: number | null = null;
     // Advances the doctor spinner (~8fps) only while a re-run is in flight (6.5.4).
     let spinnerTimer: ReturnType<typeof setInterval> | null = null;
+    /** Monotonic local request guard. A dismissed picker or older registry response may update
+     * cached data, but it must never restore an overlay or overwrite a newer mutation. */
+    let workspaceRequest = 0;
     let attaching = false;
     // Set once the loop is torn down (quit / signal / crash) so an in-flight attach
     // handoff never re-enters the alt-screen after cleanup already ran.
@@ -2979,6 +3320,9 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
         agent: r.agent,
         uptime: uptimeFromIso(r.created, now),
         attached: r.attached,
+        created: r.created,
+        cwd: r.cwd,
+        workspaceLabel: registeredWorkspaceLabel(r.cwd, workspaceOf(state)),
       }));
       const prev = sessionsOf(state);
       const selected = rows.length ? Math.min(prev.selected, rows.length - 1) : 0;
@@ -3195,6 +3539,9 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
         agent: r.agent,
         uptime: uptimeFromIso(r.created, now),
         attached: r.attached,
+        created: r.created,
+        cwd: r.cwd,
+        workspaceLabel: registeredWorkspaceLabel(r.cwd, workspaceOf(state)),
       }));
       const prev = sessionsOf(state);
       state = {
@@ -3291,60 +3638,109 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       if (state.tab === "routing") render();
     }
 
-    /** Refresh the store plus the non-persistent caller directory. `validate` deliberately does
-     * not read the registry, so one malformed local store never hides a safe current directory. */
-    async function openWorkspacePicker(returnToWizard: boolean): Promise<void> {
+    /** Re-read both halves of the workspace control plane. `validate` deliberately does not
+     * read the registry, so a malformed store never hides a safe caller directory. */
+    async function refreshWorkspaceRegistry(pickerReturnToWizard?: boolean): Promise<void> {
+      const request = ++workspaceRequest;
       const before = workspaceOf(state);
       const [registry, currentResult] = await Promise.all([fetchWorkspaces(), validateWorkspace(before.current.cwd)]);
+      if (disposed || request !== workspaceRequest) return;
+
       const current = currentResult.ok
         ? { ...before.current, cwd: currentResult.data.cwd, validated: true }
         : { ...before.current, validated: false };
-      const active = !before.active.persistent && before.active.cwd === before.current.cwd ? current : before.active;
+      const data = registry.ok ? registry.data : before.data;
+      let active = !before.active.persistent && before.active.cwd === before.current.cwd ? current : before.active;
+      // Removing a registered active entry must not leave a future launch pointing at an
+      // unregistered record. Existing tmux sessions keep their own immutable cwd.
+      if (active.persistent && !data?.workspaces.some((entry) => entry.cwd === active.cwd)) active = current;
       const error = !currentResult.ok
         ? "Current directory is not available as a workspace."
         : !registry.ok
           ? "Workspace registry is unavailable. Current directory remains available."
           : undefined;
+      const provisional: WorkspaceSlice = { ...before, current, active, data, status: error ? "error" : "ready", error };
+      const candidates = workspaceCandidatesFromSlice(provisional);
+      const activity = workspaceActivity(provisional, sessionsOf(state).rows);
+      const nextWorkspace: WorkspaceSlice = {
+        ...provisional,
+        selected: candidates.length ? clampIndex(before.selected, candidates.length) : 0,
+        activitySelected: activity.length ? clampIndex(before.activitySelected, activity.length) : 0,
+      };
       state = {
         ...state,
-        workspace: {
-          ...before,
-          current,
-          active,
-          data: registry.ok ? registry.data : before.data,
-          status: error ? "error" : "ready",
-          error,
-        },
+        workspace: nextWorkspace,
+        sessions: { ...sessionsOf(state), rows: relabelSessionRows(sessionsOf(state).rows, nextWorkspace) },
       };
-      // Keep an already-dismissed picker dismissed if a refresh resolves after Esc.
+      // An older picker result must not recreate a picker after Esc. If the expected picker is
+      // still present, clamping its selection is safe and keeps the visible list coherent.
       const overlay = state.overlay;
-      if (overlay?.kind === "workspacePicker" && overlay.returnToWizard === returnToWizard) {
+      if (pickerReturnToWizard !== undefined && overlay?.kind === "workspacePicker" && overlay.returnToWizard === pickerReturnToWizard) {
         const count = filteredWorkspaces(state, overlay.query).length;
         state = { ...state, overlay: { ...overlay, selected: clampIndex(overlay.selected, count) } };
       }
-      if (!disposed) render();
+      render();
     }
 
-    async function addLaunchWorkspace(cwd: string, label: string, returnToWizard: boolean): Promise<void> {
+    async function openWorkspacePicker(returnToWizard: boolean): Promise<void> {
+      await refreshWorkspaceRegistry(returnToWizard);
+    }
+
+    async function addWorkspaceFromUi(cwd: string, label: string, returnToWizard: boolean, origin: "picker" | "cockpit"): Promise<void> {
+      ++workspaceRequest; // invalidate a concurrent list/validation response before mutation
       const result = await createWorkspace({ cwd, label });
       if (!result.ok) {
         const workspace = workspaceOf(state);
         state = { ...state, workspace: { ...workspace, status: "error", error: "Workspace could not be added. Check the directory and label." } };
-        if (state.tab === "launch") render();
+        render();
         return;
       }
-      // Re-read the strict store rather than constructing an optimistic registry in the TUI.
-      const registry = await fetchWorkspaces();
+      await refreshWorkspaceRegistry(); // re-read strict store; never construct an optimistic registry
+      if (disposed) return;
       const workspace = workspaceOf(state);
-      const nextWorkspace: WorkspaceSlice = {
-        ...workspace,
-        data: registry.ok ? registry.data : workspace.data,
-        status: registry.ok ? "ready" : "error",
-        error: registry.ok ? undefined : "Workspace was added, but the registry could not be refreshed.",
-      };
-      const nextState = { ...state, workspace: nextWorkspace };
-      state = selectWorkspace(nextState, selectionFromRecord(result.data), returnToWizard);
-      if (state.tab === "launch") render();
+      const created = workspace.data?.workspaces.find((entry) => entry.id === result.data.id);
+      if (!created) {
+        state = { ...state, workspace: { ...workspace, status: "error", error: "Workspace was added, but the registry could not be refreshed." } };
+        render();
+        return;
+      }
+      const candidate = selectionFromRecord(created);
+      if (origin === "picker") {
+        state = selectWorkspace(state, candidate, returnToWizard);
+      } else {
+        const selected = Math.max(0, workspaceCandidates(state).findIndex((entry) => entry.cwd === candidate.cwd));
+        state = { ...state, overlay: null, workspace: { ...workspaceOf(state), selected } };
+      }
+      render();
+    }
+
+    async function renameWorkspaceFromUi(id: string, label: string): Promise<void> {
+      ++workspaceRequest;
+      const result = await renameWorkspace({ id, label });
+      if (!result.ok) {
+        const workspace = workspaceOf(state);
+        state = { ...state, workspace: { ...workspace, status: "error", error: "Workspace could not be renamed. Check the label and refresh." } };
+        render();
+        return;
+      }
+      await refreshWorkspaceRegistry();
+      if (disposed) return;
+      const workspace = workspaceOf(state);
+      const selected = Math.max(0, workspaceCandidates(state).findIndex((entry) => entry.id === result.data.id));
+      state = { ...state, workspace: { ...workspace, selected } };
+      render();
+    }
+
+    async function removeWorkspaceFromUi(id: string): Promise<void> {
+      ++workspaceRequest;
+      const result = await removeWorkspace(id);
+      if (!result.ok) {
+        const workspace = workspaceOf(state);
+        state = { ...state, workspace: { ...workspace, status: "error", error: "Workspace could not be removed. Refresh and try again." } };
+        render();
+        return;
+      }
+      await refreshWorkspaceRegistry();
     }
 
     async function openLaunchWizard(): Promise<void> {
@@ -3566,7 +3962,10 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
           break;
         case "openLaunchWizard": await openLaunchWizard(); break;
         case "openWorkspacePicker": await openWorkspacePicker(effect.returnToWizard); break;
-        case "addWorkspace": await addLaunchWorkspace(effect.cwd, effect.label, effect.returnToWizard); break;
+        case "refreshWorkspaces": await refreshWorkspaceRegistry(); break;
+        case "addWorkspace": await addWorkspaceFromUi(effect.cwd, effect.label, effect.returnToWizard, effect.origin); break;
+        case "renameWorkspace": await renameWorkspaceFromUi(effect.id, effect.label); break;
+        case "removeWorkspace": await removeWorkspaceFromUi(effect.id); break;
         case "initializeProfiles": await initializeLaunchProfiles(); break;
         case "planLaunchWizard": await planLaunchWizard(); break;
         case "requestTargetLaunch": await requestTargetLaunch(effect.plan, effect.intent); break;

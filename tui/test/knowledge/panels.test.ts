@@ -356,9 +356,9 @@ describe("Doctor panel (6.5.4)", () => {
 describe("reduce — knowledge-panel keys", () => {
   it("landing on each knowledge tab requests its refresh effect", () => {
     expect(reduce(initialState(), { name: "char", char: "1" }).effect?.type).toBe("refreshStatus");
-    expect(reduce(initialState(), { name: "char", char: "4" }).effect?.type).toBe("refreshMemory");
-    expect(reduce(initialState(), { name: "char", char: "5" }).effect?.type).toBe("refreshRouting");
-    expect(reduce(initialState(), { name: "char", char: "6" }).effect?.type).toBe("refreshFleetDoctor");
+    expect(reduce(initialState(), { name: "char", char: "5" }).effect?.type).toBe("refreshMemory");
+    expect(reduce(initialState(), { name: "char", char: "6" }).effect?.type).toBe("refreshRouting");
+    expect(reduce(initialState(), { name: "char", char: "7" }).effect?.type).toBe("refreshFleetDoctor");
   });
 
   it("memory ↑↓ moves the result selection", () => {

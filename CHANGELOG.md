@@ -4,6 +4,21 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-18 -- F8.2 Workspace cockpit
+
+- **Multi-project control surface:** added `4:workspaces`, with registered directories and live
+  tmux-derived activity side by side at normal widths, plus full-width selected detail. The
+  compact `80x24` view stacks those panels without hiding the primary registration path.
+- **One strict registry:** add, rename, and remove use only structured `ebrain workspaces` calls;
+  mutations re-read the validated store, removal is y-only and affects neither directories nor
+  sessions. The current directory remains a clearly marked temporary launch candidate.
+- **Immutable session context:** existing sessions retain their canonical cwd. Their display gets
+  a workspace label only for an exact registered-cwd match; live activity contains no history and
+  shows active count plus latest live-session creation in selected detail.
+- **Verification:** `docs/F8-WORKSPACES-MAKER-REPORT.md` records focused contracts, a real tmux
+  `100x30`/`80x24` smoke, CLI `229/0`, TUI `433/0`, source/diff zero-hex, diff safety, and the
+  independent-checker focus. Maker review remains pending by design.
+
 ## 2026-07-18 -- F8.1 Sessions multiline prompt editor
 
 - **Complete editor model:** Sessions `p` now opens a cursor-aware multiline editor instead of

@@ -77,7 +77,8 @@ selected workspace detail and actions (full width)
 - **Registered workspaces:** primary left list for current and validated registered directories,
   selection, add, rename, remove, and use-for-next-launch.
 - **Active session activity:** real `sessions list --json` data grouped by canonical cwd. It shows
-  active counts and latest creation time; it never invents historic activity after tmux exit.
+  active counts and the selected detail shows latest creation time; it never invents historic
+  activity after tmux exit.
 - **Selected workspace detail:** safe label, canonical directory, selection state, and matching
   immutable sessions. It hands off visibly to Launch and later to a native shell attach action.
 
@@ -130,6 +131,9 @@ search, and a real tmux capture of a long prompt before and after scrolling.
 ### F8.2 -- Workspaces tab and universal workspace handoff
 
 **Goal:** one cockpit organizes several projects without multiple eBrain instances.
+
+**Status (2026-07-18):** maker complete; independent checker review pending. Implementation and
+evidence are in `docs/F8-WORKSPACES-MAKER-REPORT.md`.
 
 - Add the tab and layout above using only contract-tested `workspaces` and `sessions` CLI data.
 - Reuse the existing validated registry. Add/rename/remove use structured argv, re-read the strict

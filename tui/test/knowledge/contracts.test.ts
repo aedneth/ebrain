@@ -26,6 +26,7 @@ import {
   parseWorkspaces,
   parseWorkspaceValidation,
   parseWorkspaceMutation,
+  parseWorkspaceRemoval,
 } from "../../src/knowledge/contracts.ts";
 
 describe("parseStatus (status --json)", () => {
@@ -211,6 +212,8 @@ describe("workspace registry contracts", () => {
     expect(parseWorkspaceMutation({ ok: true, workspace: { id: "project", label: "Project", cwd: "/tmp/project" } }))
       .toEqual({ id: "project", label: "Project", cwd: "/tmp/project" });
     expect(parseWorkspaceMutation({ ok: true, workspace: { label: "missing" } })).toBeNull();
+    expect(parseWorkspaceRemoval({ ok: true, removed: "project" })).toEqual({ removed: "project" });
+    expect(parseWorkspaceRemoval({ ok: true, removed: "../../bad" })).toBeNull();
   });
 });
 

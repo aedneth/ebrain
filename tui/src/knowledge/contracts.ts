@@ -389,6 +389,13 @@ export function parseWorkspaceMutation(j: unknown): WorkspaceData | null {
   return parseWorkspaceData(j.workspace);
 }
 
+/** `workspaces remove` deliberately returns only the removed generated id. */
+export function parseWorkspaceRemoval(j: unknown): { removed: string } | null {
+  if (!isObj(j) || j.ok !== true) return null;
+  const removed = asStr(j.removed);
+  return /^[a-z][a-z0-9-]{0,63}$/.test(removed) ? { removed } : null;
+}
+
 export interface ProfileSummaryData {
   id: string;
   label: string;

@@ -231,7 +231,7 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     expect(form.state.overlay?.kind).toBe("workspaceAdd");
     expect(reduce(form.state, { name: "enter" }).state.overlay).toMatchObject({ kind: "workspaceAdd", focus: "label" });
     const complete: AppState = { ...form.state, overlay: { kind: "workspaceAdd", cwd: lineFrom("/tmp/new"), label: lineFrom("New"), focus: "label", returnToWizard: false } };
-    expect(reduce(complete, { name: "enter" }).effect).toEqual({ type: "addWorkspace", cwd: "/tmp/new", label: "New", returnToWizard: false });
+    expect(reduce(complete, { name: "enter" }).effect).toEqual({ type: "addWorkspace", cwd: "/tmp/new", label: "New", returnToWizard: false, origin: "picker" });
   });
 
   test("workspace dialogs wrap safely at compact and wide viewport sizes", () => {
