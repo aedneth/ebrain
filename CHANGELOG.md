@@ -4,6 +4,19 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-18 -- F9.0 Governed agent-memory contract
+
+- **Four explicit layers:** ADR-008 separates human-governed operating context, immutable scrubbed
+  episodes, existing federated knowledge, and reviewed workflow/skill procedures. It preserves
+  clean-install local operation and makes CKIS federation optional.
+- **Boundaries before engine work:** proposals never activate context directly; terminal output is
+  not an episode; procedure lifecycle is review-only; no autonomous provider, dialectic pass,
+  skill creation, model selection, or preference mutation is introduced.
+- **Privacy correction planned:** the ADR identifies historical filesystem paths in `memory recent`
+  CLI JSON as a contract leak to remove in F9, while retaining only bounded local internal reads.
+  It also records a metadata-only audit of the private `agent-memory` repository without reading
+  or copying any content.
+
 ## 2026-07-18 -- F8.3 Native shell discovery gate
 
 - **Proposed boundary:** ADR-007 specifies a tmux-owned login shell per generated workspace ID,

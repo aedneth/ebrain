@@ -195,6 +195,9 @@ is optional and explicit.
 Write ADR-008 before engine work. It defines schemas, source-of-truth locations, retention,
 provenance, redaction, MCP exposure, migration, and daemon-down behavior. It answers:
 
+**Status (2026-07-18):** complete in `adr/ADR-008-governed-agent-memory.md`. The metadata-only
+private `agent-memory` audit is recorded there; it did not read or import repository content.
+
 - Which context packs are human-owned and which writes are proposals only?
 - What event creates an episode, and why raw terminal output is excluded?
 - How does retrieval avoid prompt injection and unbounded system-prompt growth?
