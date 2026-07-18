@@ -9,11 +9,8 @@
  * centers + composites it over the frame. All color via theme (zero hardcoded hex).
  */
 import type { Theme } from "./theme.js";
-import { padTo, truncate } from "./kit/draw.js";
 import { COMMANDS, type Command } from "./commands.js";
-import { panel } from "./widgets/layout/panel.js";
-
-const BOLD = "\x1b[1m";
+import { responsiveDialog, type DialogBlock, type ResponsiveDialogResult } from "./widgets/dialog/responsive.js";
 
 const GROUP_LABEL: Record<string, string> = { nav: "navigation", global: "global" };
 const GROUP_ORDER = ["nav", "global"] as const;
@@ -32,42 +29,45 @@ export interface HelpContext {
   actions: HelpAction[];
 }
 
-/** Render the help dialog as box rows (square corners — it is a modal). */
-export function renderHelp(theme: Theme, commands: Command[] = COMMANDS, width = 66, context?: HelpContext): string[] {
-  const keyW = 10;
-  const body: string[] = [];
+/** Semantic responsive variant used by app overlays. The legacy `renderHelp()` wrapper remains
+ * below for widget tests and consumers that only need rows. */
+export function renderHelpLayout(
+  theme: Theme,
+  commands: Command[] = COMMANDS,
+  width = 66,
+  context?: HelpContext,
+  maxHeight?: number,
+  scroll?: number,
+): ResponsiveDialogResult {
+  const body: DialogBlock[] = [];
 
   if (context) {
-    body.push(theme.fg("text.muted") + context.title + theme.reset);
+    body.push({ kind: "paragraph", text: context.title, tone: "text.muted" });
     for (const action of context.actions) {
-      const kcol = theme.fg("accent.teal") + BOLD + padTo(action.key, keyW) + theme.reset;
-      const title = theme.fg("text.primary") + padTo(truncate(action.title, 13), 14) + theme.reset;
-      const summary = theme.fg("text.secondary") + action.summary + theme.reset;
-      body.push(kcol + title + summary);
+      body.push({ kind: "keyValue", key: action.key, value: `${action.title} -- ${action.summary}`, keyTone: "accent.teal", valueTone: "text.secondary" });
     }
-    body.push("");
-    body.push(theme.fg("text.muted") + "/ command palette · esc close" + theme.reset);
-    return panel({ title: "actions", dialog: true, focus: true, width, height: body.length + 2, body }, theme);
+    body.push({ kind: "spacer" });
+    body.push({ kind: "line", text: "/ command palette · esc close", tone: "text.muted" });
+    return responsiveDialog({ title: "actions", focus: true, width, maxHeight, scroll, blocks: body }, theme);
   }
 
   for (const grp of GROUP_ORDER) {
     const cmds = commands.filter((c) => (c.group ?? "global") === grp);
     if (cmds.length === 0) continue;
-    if (body.length > 0) body.push("");
-    body.push(theme.fg("text.muted") + (GROUP_LABEL[grp] ?? grp) + theme.reset);
+    if (body.length > 0) body.push({ kind: "spacer" });
+    body.push({ kind: "line", text: GROUP_LABEL[grp] ?? grp, tone: "text.muted" });
     for (const c of cmds) {
-      const kcol = theme.fg("accent.teal") + BOLD + padTo(c.key ?? "", keyW) + theme.reset;
-      const title = theme.fg("text.primary") + padTo(truncate(c.title, 13), 14) + theme.reset;
-      const summary = theme.fg("text.secondary") + c.summary + theme.reset;
-      body.push(kcol + title + summary);
+      body.push({ kind: "keyValue", key: c.key ?? "", value: `${c.title} -- ${c.summary}`, keyTone: "accent.teal", valueTone: "text.secondary" });
     }
   }
 
-  body.push("");
-  body.push(theme.fg("text.muted") + "esc close" + theme.reset);
+  body.push({ kind: "spacer" });
+  body.push({ kind: "line", text: "esc close", tone: "text.muted" });
 
-  const height = body.length + 2;
-  // contour-only modal: a teal (focus) dialog border delineates it clearly against the
-  // native terminal bg — no interior fill.
-  return panel({ title: "help · keybindings", dialog: true, focus: true, width, height, body }, theme);
+  return responsiveDialog({ title: "help · keybindings", focus: true, width, maxHeight, scroll, blocks: body }, theme);
+}
+
+/** Render the help dialog as box rows (square corners -- it is a modal). */
+export function renderHelp(theme: Theme, commands: Command[] = COMMANDS, width = 66, context?: HelpContext): string[] {
+  return renderHelpLayout(theme, commands, width, context).rows;
 }

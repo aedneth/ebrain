@@ -4,6 +4,15 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-17 -- Responsive dialog foundation for compact terminals
+
+- **No clipped explanatory dialogs:** added `ResponsiveDialog`, a semantic dialog renderer that wraps plain prose before styling it, preserves preformatted prompt payloads, exposes an honest scroll position, and keeps every resulting row at the terminal width.
+- **Safe migration:** read-only details, contextual help, confirmations, target review, profile initialization, and session prompt review now use the responsive path. Arrow scrolling is available only to read-only/confirmation dialogs; input and selection overlays retain their existing key ownership until their F7.2/F7.3 rebuilds.
+- **Privacy and confirmation invariants:** a long prompt review now shows the full exact payload through its scroll viewport, and only `y` can still send it. No prompt is persisted or rendered outside the review dialog.
+- **Verification:** TUI `409 pass / 0 fail`; CLI `218 pass / 0 fail`; focused dialog integration `33 pass / 0 fail`; zero-hex scan and `git diff --check` clean.
+
+---
+
 ## 2026-07-17 -- Workspace-first Launch UX plan
 
 - **Planned F7 delivery:** documented the next Launch program in `docs/ULTRAPLAN-LAUNCH-WORKSPACES.md`: Manual Agents becomes the primary panel; Guided Launch and explicit Task Setup become secondary, deterministic decisions; all dialogs receive a responsive, scrollable rendering foundation; and the cockpit gains a validated multi-workspace model.

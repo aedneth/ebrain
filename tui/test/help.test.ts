@@ -66,4 +66,23 @@ describe("action-reference app integration (reduce + buildFrame)", () => {
     expect(afterQ.quit).toBe(false);
     expect(afterQ.state.overlay).toBeNull();
   });
+
+  it("keeps a long read-only dialog inside 80x24 and lets arrows reveal its remaining text", () => {
+    const state = {
+      ...initialState(),
+      overlay: {
+        kind: "detail" as const,
+        title: "long detail",
+        body: "This detail is intentionally long so a compact terminal must expose a scroll viewport instead of silently dropping the later explanation. ".repeat(12),
+      },
+    };
+    const compact = { cols: 80, rows: 24 };
+    const first = buildFrame(state, compact, t);
+    expect(first.map(strip).join("\n")).toContain("[↑↓] scroll");
+    for (const row of first) expect(displayWidth(row)).toBe(compact.cols);
+
+    const moved = reduce(state, { name: "down" });
+    expect(moved.state.overlay).toMatchObject({ kind: "detail", scroll: 1 });
+    expect(buildFrame(moved.state, compact, t).map(strip).join("\n")).not.toBe(first.map(strip).join("\n"));
+  });
 });
