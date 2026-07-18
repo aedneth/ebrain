@@ -4,6 +4,18 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-18 -- F11 Release gate preparation
+
+- **Independent-review candidate:** defined the exact F8-F10.3 range and supplied a separate Opus
+  review packet with reproducible suite, static-build, privacy, distribution, and visual checks.
+  Optional Fable/GPT evidence is explicitly not a replacement for the required maker/checker split.
+- **Machine-checkable release discipline:** added a readiness contract for static local docs, ignored
+  generated Astro state, no Vercel adapter/configuration, and a locally buildable rather than
+  deployed website claim. The F10.0 claim matrix now matches that verified local state.
+- **Gate state:** this is maker preparation only. Portable isolation policy, history/public-tree
+  remediation, independent review, and explicit owner approval for each external action remain
+  unresolved. No push, visibility change, release, deployment, or submission occurred.
+
 ## 2026-07-18 -- F10.3 Complete static documentation website
 
 - **Public Markdown remains canonical:** added an isolated Astro static-site package that derives

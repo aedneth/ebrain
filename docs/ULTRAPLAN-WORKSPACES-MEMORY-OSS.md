@@ -301,6 +301,10 @@ explicitly confirmed operation.
 
 ## F11 -- Gates and release discipline
 
+**Current local state (2026-07-18):** F8-F10.3 maker work is complete locally. F11 preparation is
+implemented, but independent review and owner approval remain pending. No public release action is
+authorized by this state.
+
 Each phase has a descriptive commit, CHANGELOG entry, durable learning where appropriate, tests, and
 handoff. Shared `app.ts` integration remains sequential.
 
