@@ -5,15 +5,15 @@ Thanks for your interest in eBrain! Contributions — from bug reports to featur
 ## Development setup
 
 ```bash
-git clone https://github.com/aedneth/ebrain.git ~/eBrain
-cd ~/eBrain
+git clone https://github.com/aedneth/ebrain.git ebrain
+cd ebrain
 bun install
 bun test ./cli/        # CLI suite
 bun test ./tui/test/   # TUI suite
 ebrain doctor          # environment + daemon health
 ```
 
-**Prerequisites:** [Bun](https://bun.sh), [tmux](https://github.com/tmux/tmux), and [`gh`](https://cli.github.com).
+**Prerequisites:** [Bun](https://bun.sh), git, and [tmux](https://github.com/tmux/tmux) for session tests.
 
 ## How we work
 
@@ -32,9 +32,9 @@ its users:
 - **Never** read, print, or commit secrets. Refer to a variable by **name** (`EBRAIN_MCP_TOKEN`),
   never its value. Use specific `git add <paths>`, never `git add -A` near env files.
 - **Never** add a dependency without a clear need and a lockfile update.
-- Respect source isolation: the client-repository deny-list is a security boundary, not a
-  suggestion.
-- Agent contributors additionally follow [`AGENTS.md`](AGENTS.md).
+- Respect source isolation: local exclusions and deny-first source policy are security boundaries,
+  not suggestions.
+- Follow the public [contributor workflow](docs/release/contributor-workflow.md).
 
 ## Commit & PR
 

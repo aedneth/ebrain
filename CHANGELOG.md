@@ -4,6 +4,22 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-18 -- F10.2 Public documentation and native product assets
+
+- **Public surface, not historical disclosure:** rebuilt the README and added a structured English
+  documentation tree for installation, memory, workspaces, sessions, routing, costs, MCP, privacy,
+  CKIS, contribution, license, and release boundaries. Navigation is allowlisted and deliberately
+  excludes historical handoffs, audits, and detailed ADR artifacts pending F10.0 privacy gates.
+- **Repository-owned visual evidence:** added a deterministic generator, native pixel wordmark, and
+  a sanitised TUI SVG produced from the pure production renderer with a fixed fixture. Public assets
+  carry no local path, raw terminal capture, credential, prompt, customer identity, or live data.
+- **Regression contract:** a public-doc test resolves local links inside the allowlist and rejects
+  historical navigation, English-surface drift, private paths, dotenv/token-shaped examples, ANSI,
+  and asset regressions. The `docs:assets` script makes checked-in visual output reproducible.
+- **Verification status:** final suites passed CLI `277/0` and TUI `442/0`; shell syntax, zero-hex,
+  diff check, deterministic assets, visual inspection, and diff-secret scan passed. Independent
+  review and F10.0 public-release blockers remain required.
+
 ## 2026-07-18 -- F10.1 AGPL-3.0-only distribution metadata
 
 - **Root licensing aligned:** replaced the root MIT text with the exact GNU AGPL v3 text and set
