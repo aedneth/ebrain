@@ -155,6 +155,10 @@ wide visual captures.
 
 **Goal:** deliver normal `cd`, completion, and multi-project terminals without an unsafe emulator.
 
+**Status (2026-07-18):** discovery complete as a proposed decision in
+`adr/ADR-007-tmux-owned-workspace-shells.md`; implementation is intentionally blocked on its
+independent security review.
+
 ADR-007 is required before implementation. The proposed design is a tmux-owned shell per validated
 workspace:
 

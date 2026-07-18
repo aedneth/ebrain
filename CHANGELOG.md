@@ -4,6 +4,18 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-18 -- F8.3 Native shell discovery gate
+
+- **Proposed boundary:** ADR-007 specifies a tmux-owned login shell per generated workspace ID,
+  with a distinct `ebsh-` prefix, strict registry revalidation, idempotent create/reuse, and the
+  existing attach-versus-switch-client handoff.
+- **No embedded evaluator:** the proposed surface accepts neither paths, commands, nor environment
+  overrides. It captures no shell output, does not feed memory, and must not inject eBrain control
+  variables or token-store data into the shell.
+- **Independent gate required:** ADR-007 remains proposed and lists the contract, isolation,
+  lifecycle, environment, tmux, responsive-UI, and no-capture checks required before code is
+  authorized. No runtime behavior changed in F8.3.
+
 ## 2026-07-18 -- F8.2 Workspace cockpit
 
 - **Multi-project control surface:** added `4:workspaces`, with registered directories and live
