@@ -71,8 +71,9 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
   usable `TERM`; `ebrain ui` remains a compatible alias and no-argument non-TTY use retains help.
   **Verify:** dispatcher invocation matrix covers pipe help, explicit non-TTY rejection, and
   pseudo-TTY entry for both bare and alias forms.
-- [ ] 7.5 **Product gate:** full independent audit plus real tmux captures at compact and wide
-  terminal sizes, documentation/handoff, and human two-workspace daily-driver acceptance.
+- [~] 7.5 **Product gate:** maker QA packet, full suites, static checks, and real tmux captures
+  are complete in `F7-REVIEW-PACKET.md`; an **independent checker** and human two-workspace
+  daily-driver acceptance remain required before this program is accepted.
 
 ## FASE 6.0 — Reverse engineering de las TUIs de referencia
 

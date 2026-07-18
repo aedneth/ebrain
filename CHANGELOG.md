@@ -4,6 +4,16 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-17 -- F7 review package prepared
+
+- **Independent-checker handoff:** added `docs/F7-REVIEW-PACKET.md` with the final F7 review
+  range, reproduction commands, security/UI invariants, visual matrix, fake-agent cwd evidence,
+  and the explicit remaining human acceptance. It intentionally contains no maker audit verdict.
+- **Maker QA evidence:** final CLI/TUI suites, harness contract, shell syntax, whitespace,
+  zero-hex, secret-safety, and bare-command visual smokes are recorded in the packet and handoff.
+
+---
+
 ## 2026-07-17 -- Frictionless TUI entry point
 
 - **Bare command:** `ebrain` now opens the interactive cockpit when stdin and stdout are TTYs and

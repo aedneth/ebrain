@@ -5,7 +5,7 @@ from: Codex (maker/constructor)
 to: Opus (Claude Code, auditor) + Fable 5 (gate)
 created: 2026-07-14
 updated: 2026-07-17
-status: F7.4 bare interactive entry complete; F7.5 QA package and independent checker next
+status: F7.5 maker QA package complete; independent checker and human acceptance pending
 scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX + workflow/cost loop + launch UX polish + F7 planning
 ---
 
@@ -16,6 +16,30 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 > [`AUDIT-FABLE-F6-CORRECTIONS.md`](AUDIT-FABLE-F6-CORRECTIONS.md); F-CF-3 was closed
 > afterwards in `0c887c4`. This addendum is a post-gate UX phase, not a claim that its
 > maker self-approved a new security gate. Historical entries below remain evidence only.
+
+## 2026-07-17 — F7.5 maker QA package complete; external gate pending
+
+### Maker evidence
+
+- Added [`F7-REVIEW-PACKET.md`](F7-REVIEW-PACKET.md), explicitly marked
+  `awaiting-independent-checker`. It names the review range, product invariants, reproducible
+  commands, visual checklist, fake-agent two-workspace check, and the required checker outcome.
+- Final suite run: CLI **229 pass / 0 fail** (25 files, 637 expectations); TUI **419 pass / 0
+  fail** (35 files, 2,125 expectations). `bash -n cli/ebrain`, harness contract (`16 ok / 0
+  failed` plus JSON contract), `git diff --check`, and the zero-hex scan all passed.
+- Secret-safety scan over the F7 diff found neither forbidden credential/dotenv filename changes
+  nor token-shaped content. No secrets were read or printed during this session.
+- Maker visually inspected bare-command real tmux panes: Task Setup at 80x24, workspace picker at
+  100x30, and Guided Launch plus picker-in-wizard at 160x48. The fake-agent workspace E2E cleaned
+  up its temporary sessions. No real provider target was launched.
+
+### Mandatory remaining gate
+
+An external checker must review `4e96c37..c05437b` using `F7-REVIEW-PACKET.md`, then record a
+separate verdict. The checker must not accept maker-supplied counts alone. The remaining human
+acceptance is `docs/human-checklist.md`: use bare `ebrain` across two harmless workspaces in a
+daily workflow and record real friction. Until those happen, F7.5 and the program remain pending,
+not self-approved.
 
 ## 2026-07-17 — F7.4 bare interactive entry complete
 
