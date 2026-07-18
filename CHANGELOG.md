@@ -4,6 +4,17 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-18 -- Workspace, memory, and OSS program planned
+
+- **Product program:** added `docs/ULTRAPLAN-WORKSPACES-MEMORY-OSS.md`, the implementation
+  contract for a complete Sessions composer, a dedicated Workspaces cockpit, a tmux-native shell
+  discovery gate, governed Hermes-informed agent-memory consolidation, and OSS documentation/site
+  readiness.
+- **Boundaries fixed before code:** tmux remains the terminal data plane; the TUI does not evaluate
+  arbitrary commands; private `agent-memory` is not an OSS dependency; CKIS federation is optional
+  on clean installs; context and skills remain human-governed; push, release, and Vercel deployment
+  require explicit authorization.
+
 ## 2026-07-17 -- F7 review package prepared
 
 - **Independent-checker handoff:** added `docs/F7-REVIEW-PACKET.md` with the final F7 review
