@@ -38,6 +38,33 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
 - [x] 6.8.3 **Compact, discoverable controls:** center bracketed `[key] action` hints, cap visible controls at six, and make `?` render the current view's complete action reference. At 80x24 all manual agents remain visible. **Verify:** chrome/help/launch snapshots and geometry tests.
 - [x] 6.8.4 **Public operator documentation:** document the visual hierarchy, modal journey, first-use behavior, compact-control policy, and non-recommendation boundary in `docs/UX-LAUNCH-POLISH.md` and `tui/README.md`. **Verify:** documentation review against reducer + tests.
 
+## FASE 7 — Workspace-first Launch experience (planned 2026-07-17)
+
+> **Authoritative specification:** `docs/ULTRAPLAN-LAUNCH-WORKSPACES.md`. This is a new,
+> post-F6 product program. It does not reopen the independently accepted F6 automated gate.
+> `ADR-006` fixes the scope: a validated multi-workspace control plane comes before any
+> embedded terminal or arbitrary command runner; tmux remains the data plane.
+
+- [x] 7.0 **Premise and architecture check:** verified that Guided Launch arrows already cycle
+  target/profile arrays; a one-target/one-profile install exposes a misleading singleton
+  affordance rather than a reducer failure. Defined Task Setup as an explicit user capability
+  preset, not an automatic profile mutation. **Verify:** reducer/render/session/ADR review plus
+  baseline `bun test ./tui/test/` = 403 pass / 0 fail.
+- [ ] 7.1 **Responsive dialogs:** semantic wrapped dialog foundation, viewport scrolling, and
+  migration of every overlay. **Verify:** overlay matrix at 80x24, 100x30 and 160x48 with no
+  silently clipped explanatory content.
+- [ ] 7.2 **Launch hierarchy + Task Setup:** Manual Agents primary at left; Guided Launch
+  upper-right; deterministic category/prompt setup lower-right; singleton affordances; `r` reset;
+  preserve post-launch Sessions transition. **Verify:** reducer, geometry, exact-prompt, and
+  no-accidental-launch regressions.
+- [ ] 7.3 **Workspace registry + picker:** CLI-first, canonical realpath validation, client deny
+  enforcement, and launch cwd snapshots across multiple registered workspaces. **Verify:**
+  temp-dir contract tests plus fake-agent tmux E2E with two different cwd values.
+- [ ] 7.4 **Global entry point:** bare `ebrain` opens the TUI only on a real TTY; `ebrain ui` and
+  non-TTY help remain compatible. **Verify:** dispatcher invocation-matrix tests.
+- [ ] 7.5 **Product gate:** full independent audit plus real tmux captures at compact and wide
+  terminal sizes, documentation/handoff, and human two-workspace daily-driver acceptance.
+
 ## FASE 6.0 — Reverse engineering de las TUIs de referencia
 
 > Mismo método que F0 con gbrain/gstack: leer el código real (open source) u observar la conducta (cerradas), documentar en `discovery/`, sintetizar requisitos. Rubrica común para TODAS: (a) anatomía de layout (home/wordmark, prompt box, status/hint bar, footer), (b) modelo de input (keybinds, modos, palette), (c) sistema de slash commands, (d) theming/tokens, (e) modelo de sesiones/tabs, (f) stack de render y por qué, (g) qué robar / qué evitar.

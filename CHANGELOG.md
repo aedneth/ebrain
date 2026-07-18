@@ -4,6 +4,15 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-17 -- Workspace-first Launch UX plan
+
+- **Planned F7 delivery:** documented the next Launch program in `docs/ULTRAPLAN-LAUNCH-WORKSPACES.md`: Manual Agents becomes the primary panel; Guided Launch and explicit Task Setup become secondary, deterministic decisions; all dialogs receive a responsive, scrollable rendering foundation; and the cockpit gains a validated multi-workspace model.
+- **Architecture decision:** ADR-006 chooses a workspace registry and picker before any embedded general shell. tmux remains the durable data plane; arbitrary command execution and a terminal emulator are explicitly deferred behind their own security and lifecycle design.
+- **Premises verified:** Guided Launch arrows already cycle target/profile state. The apparent failure with one target/profile is a misleading singleton affordance, not a reducer failure. The plan changes `r` from signal refresh to transient task-setup reset and preserves user-owned execution profiles.
+- **No runtime behavior changed in this documentation phase.**
+
+---
+
 ## 2026-07-17 — Launch experience polish
 
 - **Decision-oriented Launch:** the TUI now separates **task & signals**, **guided launch**, and **manual agents** into focusable panels. `Enter` acts only on the focused panel, eliminating invisible wizard state and accidental agent launches while preserving the manual-agent path.

@@ -5,8 +5,8 @@ from: Codex (maker/constructor)
 to: Opus (Claude Code, auditor) + Fable 5 (gate)
 created: 2026-07-14
 updated: 2026-07-17
-status: launch-ux-polish-complete; human acceptance pending
-scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX + workflow/cost loop + launch UX polish
+status: F7 workspace-first Launch plan complete; implementation pending
+scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX + workflow/cost loop + launch UX polish + F7 planning
 ---
 
 # HANDOFF-BACK — daemon work + audit-finding closure + Launch UX polish
@@ -16,6 +16,69 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 > [`AUDIT-FABLE-F6-CORRECTIONS.md`](AUDIT-FABLE-F6-CORRECTIONS.md); F-CF-3 was closed
 > afterwards in `0c887c4`. This addendum is a post-gate UX phase, not a claim that its
 > maker self-approved a new security gate. Historical entries below remain evidence only.
+
+## 2026-07-17 — F7 workspace-first Launch plan complete
+
+### What changed
+
+- Added [`ULTRAPLAN-LAUNCH-WORKSPACES.md`](ULTRAPLAN-LAUNCH-WORKSPACES.md): the implementation
+  contract for the next Launch program, covering visual hierarchy, deterministic Task Setup,
+  responsive dialogs, validated multi-workspace selection, bare-command compatibility, test
+  matrix, visual QA, stop conditions, and independent-audit scope.
+- Added [`ADR-006-workspace-first-control-plane.md`](adr/ADR-006-workspace-first-control-plane.md).
+  It selects a workspace registry/picker before an embedded terminal or arbitrary command runner,
+  preserving ADR-003's tmux data plane and CLI-first boundary.
+- Updated `SPRINT-TUI.md`, `TUI-CLI-COVERAGE.md`, and `CHANGELOG.md` to make F7 visible to future
+  makers/checkers. This documentation phase changes no runtime behavior.
+
+### Verified premises and decisions
+
+- The reported Guided Launch arrow issue is not a broken reducer: `tui/src/app.ts` cycles target
+  and profile indices. The observed environment had one target and one profile, so cycling was a
+  no-op while the UI wrongly promised a choice. F7.2 must render an explicit singleton count/locked
+  affordance and retain normal cycling for multi-item fixtures.
+- The reported `r` behavior is a real UX mismatch. It currently refreshes the automatic classifier
+  instead of clearing `LaunchSlice.task`; F7.2 rebinds it to transient Task Setup reset.
+- Task categories must not create execution profiles. ADR-005 keeps profiles user-owned model
+  orderings with provenance; F7 Task Setup stores only a reversible capability preset plus optional
+  reviewed prompt.
+- A general in-TUI shell is intentionally deferred. The immediate user outcome is selecting several
+  safe working directories in one cockpit. F7.3 will create a CLI-first workspace registry with
+  canonical paths, duplicate rejection, `realpath` client isolation, and tmux cwd snapshots.
+
+### Verification performed
+
+- `ebrain daemon status` -> UP, healthy on loopback (PID was reported by the control command; no
+  secret material was read or printed).
+- `bun test ./tui/test/` -> **403 pass / 0 fail** before documentation changes.
+- `git diff --check` -> clean for the planning-document diff.
+- Read and followed `AGENTS.md`, `docs/HANDOFF.md`, `docs/SPRINT-DAEMON.md`, the F6 records,
+  ADR-003/ADR-005, `development-pipeline-pattern-sop.md`, and the structured-agentic-development
+  workflow before writing the plan.
+
+### Durable learning
+
+- Ran `ebrain remember` for the workspace-first/tmux decision. The local learning was written, but
+  the wrapper again emitted the known generic MCP write-through warning: it may not yet be searchable
+  cross-agent even with the daemon up. No root cause is claimed and no credential/configuration file
+  was inspected.
+
+### Exact next action
+
+Start **F7.1 Responsive Dialog Foundation** in a fresh maker pass. Build the pure semantic dialog
+layout and scroll model first, with a test matrix for every existing overlay at 80x24, 100x30, and
+160x48. Do not touch Launch hierarchy or workspace persistence until that primitive and its visual
+captures are green.
+
+### What the later checker must audit
+
+- Dialog prose is wrapped/scrollable rather than silently truncated, without ANSI-width regressions.
+- Focus and key ownership remain modal; confirmations still accept only `y`; prompt privacy and the
+  immutable `LaunchIntent` path stay intact.
+- Workspace validation canonicalizes and rejects literal/symlinked client paths before persistence
+  or tmux launch; no registry field can carry a command, environment, credential, or prompt.
+- Bare `ebrain` remains non-interactive under non-TTY invocation and `ebrain ui` stays compatible.
+- Final visual captures cover compact and wide terminal sizes. This plan itself is not an audit pass.
 
 ## 2026-07-17 — Launch UX polish complete
 
