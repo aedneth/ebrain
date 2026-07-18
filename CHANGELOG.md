@@ -4,6 +4,25 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-17 -- Manual-first Launch and deterministic Task Setup
+
+- **Visual hierarchy:** Launch is now tab `2` and Sessions tab `3`. Manual Agents is the primary
+  large left panel at normal widths and the first complete panel at 80x24; Guided Launch and Task
+  Setup are secondary, focusable decisions. Both direct and guided launches retain the automatic
+  transition to Sessions.
+- **Deterministic onboarding:** Task Setup replaces visible automatic signals with six explained,
+  user-selected capability presets and an optional exact task prompt. It neither creates nor
+  mutates an execution profile, selects a provider/model, or starts a session. `r` clears only
+  transient task/category/workflow/preview state.
+- **Truthful wizard:** Guided Launch now presents active target/profile/capability/directory values
+  in the responsive dialog. Singleton fields show `locked` and do not advertise working arrows;
+  multi-choice fields continue to cycle. Directory and task editors wrap complete values with a
+  visible viewport rather than clipping them.
+- **Verification:** TUI `414 pass / 0 fail`; CLI `218 pass / 0 fail`; compact real-tmux captures
+  inspected for Launch, category guide, and singleton wizard; zero-hex and diff checks clean.
+
+---
+
 ## 2026-07-17 -- Responsive dialog foundation for compact terminals
 
 - **No clipped explanatory dialogs:** added `ResponsiveDialog`, a semantic dialog renderer that wraps plain prose before styling it, preserves preformatted prompt payloads, exposes an honest scroll position, and keeps every resulting row at the terminal width.

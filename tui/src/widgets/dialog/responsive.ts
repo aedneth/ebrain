@@ -33,6 +33,8 @@ export type DialogBlock =
   | { kind: "line"; text: string; tone?: ColorRole; bold?: boolean }
   /** Preserve user-entered line breaks and spacing while wrapping at cell boundaries. */
   | { kind: "pre"; text: string; tone?: ColorRole; bold?: boolean }
+  /** A single-line editor rendered as wrapped content so its complete value stays inspectable. */
+  | { kind: "input"; value: string; cursor: number; placeholder: string; tone?: ColorRole }
   | { kind: "keyValue"; key: string; value: string; keyTone?: ColorRole; valueTone?: ColorRole }
   | { kind: "actions"; items: DialogAction[] }
   | { kind: "spacer" };
@@ -144,6 +146,15 @@ function textLines(text: string, width: number, theme: Theme, tone?: ColorRole, 
   return wrapDialogText(text, width).map((line) => styled(line, theme, tone, bold));
 }
 
+function inputLines(block: Extract<DialogBlock, { kind: "input" }>, width: number, theme: Theme): string[] {
+  const cursor = Math.max(0, Math.min(block.cursor, block.value.length));
+  const text = block.value.length > 0
+    ? block.value.slice(0, cursor) + "▏" + block.value.slice(cursor)
+    : block.placeholder + "▏";
+  const tone = block.value.length > 0 ? block.tone ?? "text.primary" : "text.muted";
+  return wrapDialogText(text, width).map((line) => styled(line, theme, tone));
+}
+
 function keyValueLines(block: Extract<DialogBlock, { kind: "keyValue" }>, width: number, theme: Theme): string[] {
   const prefix = `${block.key}  `;
   if (displayWidth(prefix) >= width) {
@@ -214,6 +225,8 @@ function renderBlocks(blocks: DialogBlock[], width: number, theme: Theme): strin
       lines.push(...textLines(block.text, width, theme, block.tone, block.bold));
     } else if (block.kind === "pre") {
       lines.push(...wrapDialogPre(block.text, width).map((line) => styled(line, theme, block.tone, block.bold)));
+    } else if (block.kind === "input") {
+      lines.push(...inputLines(block, width, theme));
     } else if (block.kind === "keyValue") {
       lines.push(...keyValueLines(block, width, theme));
     } else {

@@ -55,10 +55,12 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
   and exact session-prompt review). Input and selection overlays retain their key ownership until
   the F7.2/F7.3 rebuilds. **Verify:** focused integration `33 pass / 0 fail`; full TUI
   `409 pass / 0 fail`; CLI `218 pass / 0 fail`; exact-width, no-hex, and diff checks clean.
-- [ ] 7.2 **Launch hierarchy + Task Setup:** Manual Agents primary at left; Guided Launch
-  upper-right; deterministic category/prompt setup lower-right; singleton affordances; `r` reset;
-  preserve post-launch Sessions transition. **Verify:** reducer, geometry, exact-prompt, and
-  no-accidental-launch regressions.
+- [x] 7.2 **Launch hierarchy + Task Setup:** Manual Agents is primary at left (or first when
+  compact); Guided Launch is upper-right; deterministic category/prompt setup is lower-right;
+  singleton affordances are locked/truthful; `r` resets transient setup; post-launch Sessions
+  transition remains intact. **Verify:** Launch reducer/geometry/exact-prompt/no-accidental-launch
+  regressions; TUI `414 pass / 0 fail`; CLI `218 pass / 0 fail`; real 80x24 tmux captures of the
+  compact Launch, category guide, and singleton wizard.
 - [ ] 7.3 **Workspace registry + picker:** CLI-first, canonical realpath validation, client deny
   enforcement, and launch cwd snapshots across multiple registered workspaces. **Verify:**
   temp-dir contract tests plus fake-agent tmux E2E with two different cwd values.

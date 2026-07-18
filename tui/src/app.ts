@@ -24,6 +24,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { CAPABILITIES, type Capability } from "../../cli/task-profile.ts";
 
 import { makeTheme, type Theme, type AgentName } from "./theme.js";
 import { Screen } from "./kit/screen.js";
@@ -52,7 +53,7 @@ import { scrolllist } from "./widgets/data/scrolllist.js";
 import { terminalPeek } from "./widgets/layout/terminalpeek.js";
 import { badge } from "./widgets/core/badge.js";
 import { confirmLayout } from "./widgets/dialog/confirm.js";
-import { responsiveDialog } from "./widgets/dialog/responsive.js";
+import { responsiveDialog, type DialogBlock } from "./widgets/dialog/responsive.js";
 import { promptBox } from "./widgets/input/promptbox.js";
 import { table } from "./widgets/data/table.js";
 import { spinner } from "./widgets/core/spinner.js";
@@ -69,7 +70,6 @@ import type {
   WorkflowSummaryData,
   RoutingData,
   CostData,
-  TaskProfileData,
   ProfilesData,
   TargetData,
   TargetPlanData,
@@ -91,7 +91,6 @@ import {
   fetchFleet,
   fetchDoctor,
   runRemember,
-  fetchTaskProfile,
   fetchProfiles,
   initializeProfiles,
   fetchTargets,
@@ -305,7 +304,10 @@ export type Overlay = { scroll?: number } & (
   | { kind: "confirmTargetLaunch"; plan: TargetPlanData; intent: LaunchIntent }
   | { kind: "confirmTargetGovernor"; plan: TargetPlanData; intent: LaunchIntent; reason: string }
   | { kind: "confirmProfilesInit" }
-  | { kind: "launchTask"; line: LineState }
+  /** Deterministic category chooser for the optional task prompt. */
+  | { kind: "taskSetup"; selected: number }
+  /** Wrapped single-line editor; escape returns to the category chooser. */
+  | { kind: "taskPrompt"; line: LineState; selected: number }
   | { kind: "remember"; line: LineState }
   | { kind: "memorySearch"; line: LineState }
   /** Read-only drill-in detail (Enter on a memory/check) — a titled, word-wrapped modal. */
@@ -315,9 +317,10 @@ export type Overlay = { scroll?: number } & (
 export interface LaunchSlice {
   selected: number;
   task: string;
+  /** Explicit and reversible Task Setup choice; it never writes an execution profile. */
+  taskCapability?: Capability;
   /** Workflow attribution survives attach -> the explicit wizard in F6.6.4. */
   workflowId?: string;
-  profile: TaskProfileData | null;
   wizard: LaunchWizard | null;
   status: LoadStatus | "running";
   error?: string;
@@ -336,11 +339,17 @@ export interface LaunchWizard {
 }
 
 export function emptyLaunch(): LaunchSlice {
-  return { selected: 0, task: "", profile: null, wizard: null, status: "idle" };
+  return { selected: 0, task: "", taskCapability: "general", wizard: null, status: "idle" };
 }
 
 function launchOf(state: AppState): LaunchSlice {
   return state.launch ?? emptyLaunch();
+}
+
+/** Older in-memory fixtures and pre-F7 state have no explicit setup yet. Treat that as General
+ * rather than making a missing preference behave like an implicit classifier result. */
+function taskCapabilityOf(launch: LaunchSlice): Capability {
+  return launch.taskCapability ?? "general";
 }
 
 /**
@@ -445,7 +454,7 @@ export function initialState(): AppState {
 const REGIONS: Record<TabName, readonly string[]> = {
   home: ["sessions", "memories", "system"],
   sessions: ["list"],
-  launch: ["task", "guided", "agents"],
+  launch: ["agents", "guided", "task"],
   memory: ["results", "workflows", "logs"],
   routing: ["caps"],
   doctor: ["checks", "fleet"],
@@ -481,7 +490,6 @@ export type AppEffect =
   | { type: "launch"; agent: string; prompt?: string }
   /** Launch confirmed through the governor's dialog (an override that gets logged). */
   | { type: "launchConfirmed"; agent: string; cwd: string; reason: string; prompt?: string }
-  | { type: "profileLaunchTask"; task: string }
   | { type: "openLaunchWizard" }
   | { type: "initializeProfiles" }
   | { type: "planLaunchWizard" }
@@ -675,11 +683,9 @@ function drillIn(state: AppState): ReduceResult {
   // Launch has three explicit decision areas. Enter acts only on the focused area,
   // so selecting a task or guided configuration can never accidentally start an agent.
   if (state.tab === "launch") {
-    if (region === "task") {
-      return settle({ ...clear, overlay: { kind: "launchTask", line: lineFrom(launchOf(state).task) } });
-    }
-    if (region === "guided") return settle(clear, { type: "openLaunchWizard" });
     if (region === "agents") return launchEnter(state);
+    if (region === "guided") return settle(clear, { type: "openLaunchWizard" });
+    if (region === "task") return settle({ ...clear, overlay: { kind: "taskSetup", selected: taskSetupIndex(taskCapabilityOf(launchOf(state))) } });
   }
 
   // Attach the selected session — from the Sessions list OR home's active-sessions box.
@@ -746,21 +752,31 @@ function cycleIndex(current: number, count: number, delta: number): number {
   return (current + delta + count) % count;
 }
 
+function wizardChoiceCount(wizard: LaunchWizard): number {
+  if (wizard.focus === "target") return wizard.targets.length;
+  if (wizard.focus === "profile") return wizard.profiles.profiles.length;
+  if (wizard.focus === "capability") return selectedWizardProfile(wizard)?.capabilities.length ?? 0;
+  return 0;
+}
+
 /** Compact, contextual controls: the footer is intentionally capped at six actions.
  * More complete per-view guidance stays available through the action reference (`?`). */
 export function hintsForState(state: AppState): HintEntry[] {
   const overlay = state.overlay;
   if (overlay?.kind === "launchWizard") {
+    const wizard = wizardOf(launchOf(state));
+    const choices = wizard ? wizardChoiceCount(wizard) : 0;
     return [
       { k: "tab", label: "field" },
-      { k: "↑↓", label: "select" },
+      ...(choices > 1 ? [{ k: "↑↓", label: "select" }] : []),
       { k: "c", label: "directory" },
       { k: "enter", label: "preview" },
       { k: "esc", label: "cancel" },
     ];
   }
   if (overlay?.kind === "wizardCwd") return [{ k: "enter", label: "save" }, { k: "esc", label: "back to wizard" }];
-  if (overlay?.kind === "launchTask") return [{ k: "enter", label: "analyze signals" }, { k: "esc", label: "cancel" }];
+  if (overlay?.kind === "taskSetup") return [{ k: "↑↓", label: "choose type" }, { k: "enter", label: "add task" }, { k: "esc", label: "cancel" }];
+  if (overlay?.kind === "taskPrompt") return [{ k: "↑↓", label: "scroll" }, { k: "enter", label: "save" }, { k: "esc", label: "back" }];
   if (overlay?.kind === "confirmKill" || overlay?.kind === "confirmLaunch" || overlay?.kind === "confirmSend" || overlay?.kind === "confirmTargetLaunch" || overlay?.kind === "confirmTargetGovernor" || overlay?.kind === "confirmProfilesInit") {
     return [{ k: "y", label: "confirm" }, { k: "n", label: "cancel" }];
   }
@@ -775,10 +791,10 @@ export function hintsForState(state: AppState): HintEntry[] {
     switch (focusedRegion(state)) {
       case "task":
         return [
-          { k: "t", label: "edit task" },
-          { k: "r", label: "refresh signals" },
+          { k: "t", label: "task setup" },
+          { k: "r", label: "reset task" },
           { k: "tab", label: "next box" },
-          { k: "enter", label: "edit" },
+          { k: "enter", label: "open" },
           { k: "?", label: "actions" },
         ];
       case "guided":
@@ -805,17 +821,17 @@ export function hintsForState(state: AppState): HintEntry[] {
  * stays discoverable in English and without invented model recommendations. */
 function actionReferenceFor(state: AppState): HelpContext {
   if (state.tab === "launch") {
-    const action = focusedRegion(state) === "task"
-      ? "edit task"
+    const action = focusedRegion(state) === "agents"
+      ? "launch selected agent"
       : focusedRegion(state) === "guided"
         ? "open guided launch"
-        : "launch selected agent";
+        : "open task setup";
     return {
       title: "launch actions",
       actions: [
-        { key: "tab", title: "focus box", summary: "move between task, guided launch, and manual agents" },
-        { key: "t", title: "edit task", summary: "describe work and derive non-binding task signals" },
-        { key: "r", title: "refresh signals", summary: "analyze the current task again" },
+        { key: "tab", title: "focus box", summary: "move between manual agents, guided launch, and task setup" },
+        { key: "t", title: "task setup", summary: "choose a work category and optional prompt" },
+        { key: "r", title: "reset task", summary: "clear the transient category, prompt, and workflow attribution" },
         { key: "w", title: "guided launch", summary: "choose your target, profile, capability, and directory" },
         { key: "↑↓←→", title: "choose agent", summary: "move selection when manual agents has focus" },
         { key: "enter", title: action, summary: "act only on the focused box" },
@@ -946,9 +962,11 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       if (key.name === "up" || key.name === "down" || key.name === "left" || key.name === "right") {
         const delta = key.name === "up" || key.name === "left" ? -1 : 1;
         if (wizard.focus === "target") {
+          if (wizard.targets.length <= 1) return settle(state);
           return settle({ ...state, launch: { ...launch, wizard: { ...wizard, targetSelected: cycleIndex(wizard.targetSelected, wizard.targets.length, delta), plan: null } } });
         }
         if (wizard.focus === "profile") {
+          if (wizard.profiles.profiles.length <= 1) return settle(state);
           const profileSelected = cycleIndex(wizard.profileSelected, wizard.profiles.profiles.length, delta);
           const profile = wizard.profiles.profiles[profileSelected];
           const capability = profile?.capabilities.includes(wizard.capability) ? wizard.capability : (profile?.capabilities[0] ?? wizard.capability);
@@ -956,6 +974,7 @@ export function reduce(state: AppState, key: Key): ReduceResult {
         }
         if (wizard.focus === "capability") {
           const capabilities = selectedWizardProfile(wizard)?.capabilities ?? [];
+          if (capabilities.length <= 1) return settle(state);
           const capability = capabilities.length
             ? capabilities[cycleIndex(Math.max(0, capabilities.indexOf(wizard.capability)), capabilities.length, delta)]!
             : wizard.capability;
@@ -987,6 +1006,8 @@ export function reduce(state: AppState, key: Key): ReduceResult {
         if (isClientPath(cwd)) return settle({ ...state, overlay: nextOverlay, launch: { ...launch, status: "error", error: "client repository cwd rejected" } });
         return settle({ ...state, overlay: nextOverlay, launch: { ...launch, wizard: { ...wizard, cwd, plan: null }, status: "ready", error: undefined } });
       }
+      const scrolled = scrollDialog(state, ov, key);
+      if (scrolled) return scrolled;
       const edited = lineApplyKey(ov.line, key);
       if (edited.handled) return settle({ ...state, overlay: { kind: "wizardCwd", line: edited.state, returnToWizard: ov.returnToWizard } });
       return settle(state);
@@ -1022,20 +1043,29 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       return settle(state);
     }
 
-    if (ov.kind === "launchTask") {
-      if (key.name === "escape") return settle({ ...state, overlay: null });
-      if (key.name === "enter") {
-        const text = ov.line.text.trim();
-        if (text.length === 0) return settle({ ...state, overlay: null });
-        return {
-          state: { ...state, overlay: null },
-          quit: false,
-          forceRedraw: false,
-          effect: { type: "profileLaunchTask", task: text },
-        };
+    if (ov.kind === "taskSetup") {
+      if (key.name === "escape" || (key.name === "char" && key.char === "q")) return settle({ ...state, overlay: null });
+      if (key.name === "up" || key.name === "down") {
+        const delta = key.name === "up" ? -1 : 1;
+        return settle({ ...state, overlay: { kind: "taskSetup", selected: cycleIndex(ov.selected, TASK_SETUP_OPTIONS.length, delta) } });
       }
+      if (key.name === "enter") {
+        const selected = clampIndex(ov.selected, TASK_SETUP_OPTIONS.length);
+        return settle({ ...state, overlay: { kind: "taskPrompt", selected, line: lineFrom(launchOf(state).task) } });
+      }
+      return settle(state);
+    }
+
+    if (ov.kind === "taskPrompt") {
+      if (key.name === "escape") return settle({ ...state, overlay: { kind: "taskSetup", selected: ov.selected } });
+      if (key.name === "enter") {
+        const option = TASK_SETUP_OPTIONS[clampIndex(ov.selected, TASK_SETUP_OPTIONS.length)]!;
+        return settle({ ...state, overlay: null, launch: applyTaskSetup(launchOf(state), option.capability, ov.line.text.trim()) });
+      }
+      const scrolled = scrollDialog(state, ov, key);
+      if (scrolled) return scrolled;
       const edited = lineApplyKey(ov.line, key);
-      if (edited.handled) return settle({ ...state, overlay: { kind: "launchTask", line: edited.state } });
+      if (edited.handled) return settle({ ...state, overlay: { ...ov, line: edited.state } });
       return settle(state);
     }
 
@@ -1132,12 +1162,8 @@ export function reduce(state: AppState, key: Key): ReduceResult {
     if (ch === "?") return openHelp(state);
 
     if (state.tab === "launch") {
-      if (ch === "t") return settle({ ...state, confirmQuit: false, overlay: { kind: "launchTask", line: lineFrom(launchOf(state).task) } });
-      if (ch === "r") {
-        const task = launchOf(state).task.trim();
-        if (task) return settle({ ...state, confirmQuit: false }, { type: "profileLaunchTask", task });
-        return settle({ ...state, confirmQuit: false, launch: { ...launchOf(state), status: "error", error: "Describe a task before refreshing task signals." } });
-      }
+      if (ch === "t") return settle({ ...state, confirmQuit: false, overlay: { kind: "taskSetup", selected: taskSetupIndex(taskCapabilityOf(launchOf(state))) } });
+      if (ch === "r") return settle({ ...state, confirmQuit: false, launch: resetTaskSetup(launchOf(state)) });
       if (ch === "w") return settle({ ...state, confirmQuit: false }, { type: "openLaunchWizard" });
     }
 
@@ -1302,9 +1328,15 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
     return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
   }
 
-  if (overlay.kind === "launchTask") {
-    const width = Math.min(82, Math.max(36, cols - 6));
-    const box = buildLaunchTaskBox(overlay, width, theme);
+  if (overlay.kind === "taskSetup") {
+    const width = Math.min(88, Math.max(48, cols - 6));
+    const box = buildTaskSetupBox(overlay, width, maxDialogHeight, theme);
+    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+  }
+
+  if (overlay.kind === "taskPrompt") {
+    const width = Math.min(88, Math.max(48, cols - 6));
+    const box = buildTaskPromptBox(overlay, width, maxDialogHeight, theme);
     const left = Math.max(0, Math.floor((cols - width) / 2));
     const top = Math.max(0, Math.min(Math.floor(rows * 0.34), rows - box.length));
     return { box, top, left };
@@ -1312,13 +1344,13 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
 
   if (overlay.kind === "launchWizard") {
     const width = Math.min(88, Math.max(48, cols - 6));
-    const box = buildLaunchWizardBox(launchOf(state), width, theme);
+    const box = buildLaunchWizardBox(launchOf(state), width, maxDialogHeight, theme);
     return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
   }
 
   if (overlay.kind === "wizardCwd") {
     const width = Math.min(82, Math.max(36, cols - 6));
-    const box = buildWizardCwdBox(overlay, width, theme);
+    const box = buildWizardCwdBox(overlay, width, maxDialogHeight, theme);
     return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
   }
   if (overlay.kind === "confirmTargetLaunch" || overlay.kind === "confirmTargetGovernor") {
@@ -1410,93 +1442,108 @@ function buildSendPreviewBox(overlay: Extract<Overlay, { kind: "confirmSend" }>,
   }, theme).rows;
 }
 
-function buildLaunchTaskBox(overlay: Extract<Overlay, { kind: "launchTask" }>, width: number, theme: Theme): string[] {
-  const field = promptBox(
-    { value: overlay.line.text, focus: true, placeholder: "describe task signals", hint: "enter profile · esc cancel", width: width - 4 },
-    theme,
-  );
-  return panel(
-    { title: "task router", dialog: true, width, height: 3, body: [field] },
-    theme,
-  );
+function buildTaskSetupBox(overlay: Extract<Overlay, { kind: "taskSetup" }>, width: number, maxHeight: number, theme: Theme): string[] {
+  const selected = clampIndex(overlay.selected, TASK_SETUP_OPTIONS.length);
+  const blocks: DialogBlock[] = [
+    { kind: "paragraph", text: "Choose the type of work you want to launch. This is a reversible capability preset, not a model or profile recommendation.", tone: "text.muted" },
+    { kind: "spacer" },
+    ...TASK_SETUP_OPTIONS.map((option, index) => ({
+      kind: "line" as const,
+      text: `${index === selected ? "▸" : " "} ${option.label} -- ${option.description}`,
+      tone: index === selected ? "text.primary" as const : "text.secondary" as const,
+      bold: index === selected,
+    })),
+    { kind: "spacer" },
+    { kind: "actions", items: [{ key: "↑↓", label: "choose type" }, { key: "enter", label: "add optional task" }, { key: "esc", label: "cancel", labelTone: "text.muted" }] },
+  ];
+  return responsiveDialog({ title: "task setup", focus: true, width, maxHeight, blocks }, theme).rows;
 }
 
-function buildWizardCwdBox(overlay: Extract<Overlay, { kind: "wizardCwd" }>, width: number, theme: Theme): string[] {
-  const field = promptBox(
-    { value: overlay.line.text, focus: true, placeholder: "working directory", hint: "enter save · esc cancel", width: width - 4 },
-    theme,
-  );
-  return panel({ title: "launch cwd", dialog: true, width, height: 3, body: [field] }, theme);
+function buildTaskPromptBox(overlay: Extract<Overlay, { kind: "taskPrompt" }>, width: number, maxHeight: number, theme: Theme): string[] {
+  const option = TASK_SETUP_OPTIONS[clampIndex(overlay.selected, TASK_SETUP_OPTIONS.length)]!;
+  return responsiveDialog({
+    title: "task prompt",
+    focus: true,
+    width,
+    maxHeight,
+    scroll: overlay.scroll,
+    blocks: [
+      { kind: "keyValue", key: "type", value: `${option.label} -- ${option.description}`, keyTone: "accent.teal", valueTone: "text.secondary" },
+      { kind: "paragraph", text: "Add an optional task for the new session. It is delivered exactly as reviewed and never infers a provider or model.", tone: "text.muted" },
+      { kind: "spacer" },
+      { kind: "input", value: overlay.line.text, cursor: overlay.line.cursor, placeholder: "optional task prompt" },
+      { kind: "spacer" },
+      { kind: "actions", items: [{ key: "↑↓", label: "scroll" }, { key: "enter", label: "save" }, { key: "esc", label: "back", labelTone: "text.muted" }] },
+    ],
+  }, theme).rows;
 }
 
-/** Keep long target/profile lists usable without flooding a compact terminal. The
- * selected choice stays inside a short window; arrows still traverse the full list. */
-function wizardChoiceWindow<T>(items: readonly T[], selected: number, maxItems = 3): Array<{ item: T; index: number }> {
-  if (items.length === 0) return [];
-  const max = Math.max(1, maxItems);
-  const safe = clampIndex(selected, items.length);
-  const start = Math.max(0, Math.min(safe - Math.floor(max / 2), items.length - max));
-  return items.slice(start, start + max).map((item, i) => ({ item, index: start + i }));
+function buildWizardCwdBox(overlay: Extract<Overlay, { kind: "wizardCwd" }>, width: number, maxHeight: number, theme: Theme): string[] {
+  return responsiveDialog({
+    title: "launch directory",
+    focus: true,
+    width,
+    maxHeight,
+    scroll: overlay.scroll,
+    blocks: [
+      { kind: "paragraph", text: "Set the working directory for this reviewed launch. Client repositories are rejected before a session can start.", tone: "text.muted" },
+      { kind: "spacer" },
+      { kind: "input", value: overlay.line.text, cursor: overlay.line.cursor, placeholder: "working directory" },
+      { kind: "spacer" },
+      { kind: "actions", items: [{ key: "↑↓", label: "scroll" }, { key: "enter", label: "save" }, { key: "esc", label: "back", labelTone: "text.muted" }] },
+    ],
+  }, theme).rows;
 }
 
-function wizardField(label: string, value: string, focused: boolean, width: number, theme: Theme): string {
-  const reset = theme.reset;
-  const marker = focused ? theme.fg("accent.teal") + "▸" + reset : " ";
-  const name = theme.fg(focused ? "accent.teal" : "text.secondary") + label + reset;
-  const valueColor = theme.fg(focused ? "text.primary" : "text.secondary");
-  return marker + " " + name + " " + valueColor + truncate(value, Math.max(0, width - displayWidth(label) - 5)) + reset;
+function wizardChoiceLabel(value: string, count: number, noun: string): string {
+  if (count === 0) return `${value || "Unavailable"} -- no ${noun} available`;
+  if (count === 1) return `${value} -- 1 ${noun}; locked`;
+  const plural = noun.endsWith("y") ? noun.slice(0, -1) + "ies" : noun + "s";
+  return `${value} -- ${count} ${plural}; arrows change selection`;
 }
 
-/** Guided-launch dialog. Selections are explicitly user-owned: task signals only
- * classify text and never choose a provider/model. The reviewed plan is still gated
- * by the existing confirmation and RAM governor after this dialog. */
-function buildLaunchWizardBox(launch: LaunchSlice, width: number, theme: Theme): string[] {
+function wizardBlock(label: string, value: string, focused: boolean, count?: number, noun?: string): DialogBlock {
+  return {
+    kind: "keyValue",
+    key: `${focused ? "▸" : " "} ${label}`,
+    value: count === undefined ? value : wizardChoiceLabel(value, count, noun ?? "choices"),
+    keyTone: focused ? "accent.teal" : "text.secondary",
+    valueTone: focused ? "text.primary" : "text.secondary",
+  };
+}
+
+/** Guided-launch dialog. Target, profile, capability and directory remain explicit
+ * user decisions. It renders the active value plus an honest count rather than a fake
+ * arrow affordance when the local installation has only one choice. */
+function buildLaunchWizardBox(launch: LaunchSlice, width: number, maxHeight: number, theme: Theme): string[] {
   const wizard = wizardOf(launch);
-  const inner = Math.max(0, width - 4);
   if (!wizard) {
-    return panel({ title: "guided launch", dialog: true, focus: true, width, height: 4, body: ["Wizard data is no longer available.", keyHint({ k: "esc", label: "close" }, theme)] }, theme);
+    return responsiveDialog({ title: "guided launch", focus: true, width, maxHeight, blocks: [{ kind: "line", text: "Wizard data is no longer available.", tone: "semantic.error" }, { kind: "actions", items: [{ key: "esc", label: "close" }] }] }, theme).rows;
   }
-
-  const reset = theme.reset;
-  const body: string[] = [];
-  body.push(theme.fg("text.muted") + "Choose a declared target and an execution profile you control. Signals do not choose a model." + reset);
-  body.push("");
-  body.push(wizardField("target", "use arrows to choose", wizard.focus === "target", inner, theme));
-  const targetChoices = wizardChoiceWindow(wizard.targets, wizard.targetSelected);
-  if (targetChoices.length === 0) body.push(theme.fg("semantic.error") + "  No declared targets are available." + reset);
-  for (const { item, index } of targetChoices) {
-    const active = index === wizard.targetSelected;
-    const marker = active ? theme.fg("accent.teal") + "  ▸ " + reset : "    ";
-    const color = active ? theme.fg("text.primary") : theme.fg("text.secondary");
-    body.push(marker + color + truncate(`${item.id} · ${item.provider} / ${item.agent}`, Math.max(0, inner - 4)) + reset);
+  const target = selectedWizardTarget(wizard);
+  const profile = selectedWizardProfile(wizard);
+  const capabilities = profile?.capabilities ?? [];
+  const choices = wizardChoiceCount(wizard);
+  const blocks: DialogBlock[] = [
+    { kind: "paragraph", text: "Choose a declared target and an execution profile you control. This wizard does not recommend a provider or model.", tone: "text.muted" },
+    { kind: "spacer" },
+    wizardBlock("target", target ? `${target.id} -- ${target.provider} / ${target.agent}` : "Unavailable", wizard.focus === "target", wizard.targets.length, "declared target"),
+    wizardBlock("profile", profile ? `${profile.label} -- ${profile.provider} / ${profile.models} models` : "Unavailable", wizard.focus === "profile", wizard.profiles.profiles.length, "execution profile"),
+    wizardBlock("capability", wizard.capability, wizard.focus === "capability", capabilities.length, "capability"),
+    wizardBlock("directory", wizard.cwd, wizard.focus === "cwd"),
+  ];
+  if (wizard.plan) blocks.push({ kind: "line", text: `Preview ready -- ${wizard.plan.model} -- ${wizard.plan.costStatus}`, tone: "semantic.ok" });
+  if (wizard.focus !== "cwd" && choices <= 1) {
+    blocks.push({ kind: "line", text: "This field has no alternative selection. Use Tab to continue.", tone: "text.muted" });
   }
-  if (wizard.targets.length > targetChoices.length) body.push(theme.fg("text.muted") + `    ${wizard.targets.length} targets · use arrows to browse` + reset);
-
-  body.push(wizardField("profile", "use arrows to choose", wizard.focus === "profile", inner, theme));
-  const profileChoices = wizardChoiceWindow(wizard.profiles.profiles, wizard.profileSelected);
-  if (profileChoices.length === 0) body.push(theme.fg("semantic.error") + "  No execution profiles are available." + reset);
-  for (const { item, index } of profileChoices) {
-    const active = index === wizard.profileSelected;
-    const marker = active ? theme.fg("accent.teal") + "  ▸ " + reset : "    ";
-    const color = active ? theme.fg("text.primary") : theme.fg("text.secondary");
-    body.push(marker + color + truncate(`${item.label} · ${item.provider} · ${item.models} models`, Math.max(0, inner - 4)) + reset);
-  }
-  if (wizard.profiles.profiles.length > profileChoices.length) body.push(theme.fg("text.muted") + `    ${wizard.profiles.profiles.length} profiles · use arrows to browse` + reset);
-
-  body.push(wizardField("capability", wizard.capability, wizard.focus === "capability", inner, theme));
-  body.push(wizardField("directory", wizard.cwd, wizard.focus === "cwd", inner, theme));
-  if (wizard.plan) {
-    body.push(theme.fg("semantic.ok") + "  Preview ready" + reset + theme.fg("text.muted") + ` · ${truncate(`${wizard.plan.model} · ${wizard.plan.costStatus}`, Math.max(0, inner - 20))}` + reset);
-  }
-  body.push("");
-  body.push(
-    keyHint({ k: "tab", label: "field" }, theme) + "  " +
-    keyHint({ k: "↑↓", label: "choose" }, theme) + "  " +
-    keyHint({ k: "c", label: "directory" }, theme) + "  " +
-    keyHint({ k: "enter", label: wizard.plan ? "review launch" : "preview" }, theme) + "  " +
-    keyHint({ k: "esc", label: "cancel" }, theme),
-  );
-  return panel({ title: "guided launch", dialog: true, focus: true, width, height: body.length + 2, body }, theme);
+  blocks.push({ kind: "spacer" }, { kind: "actions", items: [
+    { key: "tab", label: "field" },
+    ...(choices > 1 ? [{ key: "↑↓", label: "choose" }] : []),
+    { key: "c", label: "directory" },
+    { key: "enter", label: wizard.plan ? "review launch" : "preview" },
+    { key: "esc", label: "cancel", labelTone: "text.muted" },
+  ] });
+  return responsiveDialog({ title: "guided launch", focus: true, width, maxHeight, blocks }, theme).rows;
 }
 
 /** Read-only detail modal (Enter drill-in): a teal-bordered dialog with the title and a
@@ -1905,91 +1952,136 @@ const LAUNCHABLE: Array<{ agent: AgentName; cls: "heavy" | "light" }> = [
   { agent: "generic", cls: "light" },
 ];
 
+export interface TaskSetupOption {
+  capability: Capability;
+  label: string;
+  description: string;
+}
+
+const TASK_SETUP_COPY: Record<Capability, Omit<TaskSetupOption, "capability">> = {
+  coding: { label: "Coding", description: "Implement, test, debug, or refactor software." },
+  agentic: { label: "Agentic systems", description: "Build tool-using agents, orchestration, or evaluation loops." },
+  web_design: { label: "Web design", description: "Design interfaces, frontend components, pages, or product flows." },
+  long_context: { label: "Long-context research", description: "Analyze, synthesize, or plan from substantial source material." },
+  terminal: { label: "Terminal automation", description: "Automate developer tools, command-line workflows, or scripts." },
+  general: { label: "General", description: "Use when work spans categories or you are still framing it." },
+};
+
+/** Fixed, user-readable categories. The shared CLI exports the capability identifiers so this
+ * onboarding cannot drift from the profiles/targets contract. */
+export const TASK_SETUP_OPTIONS: readonly TaskSetupOption[] = CAPABILITIES.map((capability) => ({ capability, ...TASK_SETUP_COPY[capability] }));
+
+function taskSetupIndex(capability: Capability): number {
+  const index = TASK_SETUP_OPTIONS.findIndex((option) => option.capability === capability);
+  return index < 0 ? TASK_SETUP_OPTIONS.length - 1 : index;
+}
+
+function wizardCapabilityFor(wizard: LaunchWizard, capability: Capability): string {
+  const available = selectedWizardProfile(wizard)?.capabilities ?? [];
+  return available.includes(capability) ? capability : (available[0] ?? capability);
+}
+
+/** Apply the explicit transient setup without changing a user-owned profile. Any old preview is
+ * invalid because the capability and/or reviewed prompt may have changed. */
+function applyTaskSetup(launch: LaunchSlice, capability: Capability, task: string): LaunchSlice {
+  const wizard = launch.wizard
+    ? { ...launch.wizard, capability: wizardCapabilityFor(launch.wizard, capability), plan: null }
+    : null;
+  return { ...launch, task, taskCapability: capability, workflowId: undefined, wizard, status: "ready", error: undefined };
+}
+
+function resetTaskSetup(launch: LaunchSlice): LaunchSlice {
+  return applyTaskSetup(launch, "general", "");
+}
+
 function buildLaunchView(launch: LaunchSlice, focused: string, rect: Rect, theme: Theme): string[] {
   const reset = theme.reset;
-  // At the supported 80x24 minimum, preserve enough rows for the complete agent
-  // grid. Wider/taller terminals get the more explanatory task/guided panels.
-  const topPanelHeight = rect.height < 23 ? 5 : 7;
-  const [taskRect, guidedRect, agentsRect] = splitV(rect, [topPanelHeight, topPanelHeight, { flex: 1 }], 1);
-  const contentW = Math.max(0, rect.width - 4);
-
-  const taskBody: string[] = [
-    keyHint({ k: "t", label: "edit task" }, theme) + "  " + keyHint({ k: "r", label: "refresh signals" }, theme),
-  ];
-  if (launch.task) {
-    taskBody.push(theme.fg("text.secondary") + "task  " + reset + theme.fg("text.primary") + truncate(launch.task, contentW - 6) + reset);
-  } else {
-    taskBody.push(theme.fg("text.muted") + "No task yet. Describe work to derive non-binding task signals." + reset);
-  }
-  if (launch.status === "loading") {
-    taskBody.push(spinner({ label: "analyzing task signals", active: true, frame: 1 }, theme));
-  } else if (launch.profile) {
-    const signals = launch.profile.signals.map((signal) => `${signal.capability}: ${signal.matched.join(", ")}`).join(" · ") || "No explicit signals matched";
-    taskBody.push(theme.fg("text.secondary") + "signals  " + reset + theme.fg("text.muted") + truncate(signals, contentW - 9) + reset);
-    taskBody.push(theme.fg("text.muted") + "Signals classify the task. They never select a provider or model." + reset);
-  } else {
-    taskBody.push(theme.fg("text.muted") + "Signals help you inspect the task; they are not recommendations." + reset);
-  }
-  if (launch.status === "error" && launch.error?.startsWith("Describe a task")) {
-    taskBody.push(theme.fg("semantic.error") + truncate(launch.error, contentW) + reset);
-  }
-
   const wizard = launch.wizard;
   const target = wizard ? selectedWizardTarget(wizard) : undefined;
   const selectedProfile = wizard ? selectedWizardProfile(wizard) : undefined;
-  const guidedBody: string[] = [
-    keyHint({ k: "w", label: "open guided launch" }, theme),
-    theme.fg("text.muted") + "Choose a declared target, your execution profile, capability, and directory." + reset,
-  ];
-  if (wizard) {
-    guidedBody.push(theme.fg("text.secondary") + "target  " + reset + theme.fg("text.primary") + (target?.id ?? "Unavailable") + reset);
-    guidedBody.push(theme.fg("text.secondary") + "profile " + reset + theme.fg("text.primary") + (selectedProfile?.label ?? "Unavailable") + reset + theme.fg("text.muted") + ` · ${wizard.capability}` + reset);
-    if (wizard.plan) guidedBody.push(theme.fg("semantic.ok") + "Preview ready" + reset + theme.fg("text.muted") + ` · ${truncate(`${wizard.plan.model} · ${wizard.plan.costStatus}`, Math.max(0, contentW - 17))}` + reset);
-    else guidedBody.push(theme.fg("text.muted") + "Open the wizard to review or change this configuration." + reset);
-  } else if (launch.status === "loading") {
-    guidedBody.push(spinner({ label: "loading declared launch options", active: true, frame: 1 }, theme));
-  } else {
-    guidedBody.push(theme.fg("text.muted") + "No selection yet. Opening the wizard never starts a session." + reset);
-  }
-  if (launch.status === "error" && !launch.error?.startsWith("Describe a task")) {
-    guidedBody.push(theme.fg("semantic.error") + truncate(launch.error ?? "guided launch unavailable", contentW) + reset);
-  }
-
   const selected = Math.min(Math.max(0, launch.selected), LAUNCHABLE.length - 1);
-  const agentsContentW = Math.max(0, agentsRect.width - 4);
-  const colGap = 2;
-  const cellW = Math.max(10, Math.floor((agentsContentW - colGap) / LAUNCH_COLS));
-  const grid: string[] = [];
-  for (let r = 0; r < Math.ceil(LAUNCHABLE.length / LAUNCH_COLS); r++) {
-    let line = "";
-    for (let c = 0; c < LAUNCH_COLS; c++) {
-      const idx = r * LAUNCH_COLS + c;
-      if (c > 0) line += " ".repeat(colGap);
-      if (idx >= LAUNCHABLE.length) {
-        line += " ".repeat(cellW);
-        continue;
-      }
-      const agent = LAUNCHABLE[idx]!;
-      const on = idx === selected;
-      const marker = on ? theme.fg("accent.teal") + "▸ " + reset : "  ";
-      const clsColor = agent.cls === "heavy" ? theme.fg("semantic.warn") : theme.fg("text.muted");
-      line += padTo(truncate(marker + badge({ agent: agent.agent }, theme) + "  " + clsColor + agent.cls + reset, cellW), cellW);
-    }
-    grid.push(line);
-  }
-  const selectedAgent = LAUNCHABLE[selected]!.agent;
-  const agentsBody = [
-    theme.fg("text.muted") + "Start a direct local session. This does not change your guided-launch profile." + reset,
-    ...grid,
-    theme.fg("text.muted") + (launch.task ? "Task will be sent to " : "New session with ") + reset + theme.fg("text.primary") + selectedAgent + reset,
-  ];
 
-  const panels = [
-    panel({ title: "1 · task & signals", focus: focused === "task", width: taskRect.width, height: taskRect.height, body: taskBody }, theme),
-    panel({ title: "2 · guided launch", focus: focused === "guided", width: guidedRect.width, height: guidedRect.height, body: guidedBody }, theme),
-    panel({ title: "3 · manual agents", focus: focused === "agents", width: agentsRect.width, height: agentsRect.height, body: agentsBody }, theme),
+  const manualPanel = (panelRect: Rect): string[] => {
+    const contentW = Math.max(0, panelRect.width - 4);
+    const colGap = 2;
+    const cellW = Math.max(10, Math.floor((contentW - colGap) / LAUNCH_COLS));
+    const grid: string[] = [];
+    for (let row = 0; row < Math.ceil(LAUNCHABLE.length / LAUNCH_COLS); row++) {
+      let line = "";
+      for (let col = 0; col < LAUNCH_COLS; col++) {
+        const index = row * LAUNCH_COLS + col;
+        if (col > 0) line += " ".repeat(colGap);
+        if (index >= LAUNCHABLE.length) {
+          line += " ".repeat(cellW);
+          continue;
+        }
+        const agent = LAUNCHABLE[index]!;
+        const active = index === selected;
+        const marker = active ? theme.fg("accent.teal") + "▸ " + reset : "  ";
+        const clsColor = agent.cls === "heavy" ? theme.fg("semantic.warn") : theme.fg("text.muted");
+        line += padTo(truncate(marker + badge({ agent: agent.agent }, theme) + "  " + clsColor + agent.cls + reset, cellW), cellW);
+      }
+      grid.push(line);
+    }
+    const selectedAgent = LAUNCHABLE[selected]!.agent;
+    const body = [
+      theme.fg("text.muted") + "Start a direct local session in the current directory." + reset,
+      ...grid,
+      theme.fg("text.muted") + (launch.task ? "Task will be sent to " : "New session with ") + reset + theme.fg("text.primary") + selectedAgent + reset,
+    ];
+    return panel({ title: "1 · manual agents", focus: focused === "agents", width: panelRect.width, height: panelRect.height, body }, theme);
+  };
+
+  const guidedPanel = (panelRect: Rect): string[] => {
+    const contentW = Math.max(0, panelRect.width - 4);
+    const body: string[] = [keyHint({ k: "w", label: "open guided launch" }, theme)];
+    if (wizard) {
+      body.push(theme.fg("text.secondary") + "target  " + reset + theme.fg("text.primary") + truncate(target?.id ?? "Unavailable", contentW - 8) + reset);
+      body.push(theme.fg("text.secondary") + "profile " + reset + theme.fg("text.primary") + truncate(selectedProfile?.label ?? "Unavailable", contentW - 9) + reset + theme.fg("text.muted") + ` · ${wizard.capability}` + reset);
+      if (wizard.plan) body.push(theme.fg("semantic.ok") + "Preview ready" + reset + theme.fg("text.muted") + ` · ${truncate(`${wizard.plan.model} · ${wizard.plan.costStatus}`, Math.max(0, contentW - 17))}` + reset);
+      else body.push(theme.fg("text.muted") + "Open to review or change this configuration." + reset);
+    } else if (launch.status === "loading") {
+      body.push(spinner({ label: "loading launch options", active: true, frame: 1 }, theme));
+    } else {
+      body.push(theme.fg("text.muted") + "Choose target, profile, capability, and directory." + reset);
+    }
+    if (launch.status === "error") body.push(theme.fg("semantic.error") + truncate(launch.error ?? "guided launch unavailable", contentW) + reset);
+    return panel({ title: "2 · guided launch", focus: focused === "guided", width: panelRect.width, height: panelRect.height, body }, theme);
+  };
+
+  const taskPanel = (panelRect: Rect): string[] => {
+    const contentW = Math.max(0, panelRect.width - 4);
+    const option = TASK_SETUP_OPTIONS[taskSetupIndex(taskCapabilityOf(launch))]!;
+    const body: string[] = [
+      keyHint({ k: "t", label: "task setup" }, theme) + "  " + keyHint({ k: "r", label: "reset" }, theme),
+      theme.fg("text.secondary") + "type  " + reset + theme.fg("text.primary") + option.label + reset,
+      launch.task
+        ? theme.fg("text.secondary") + "task  " + reset + theme.fg("text.primary") + truncate(launch.task, contentW - 6) + reset
+        : theme.fg("text.muted") + "Choose a type, then add an optional task prompt." + reset,
+    ];
+    if (launch.workflowId) body.push(theme.fg("text.muted") + `workflow  ${truncate(launch.workflowId, contentW - 10)}` + reset);
+    return panel({ title: "3 · task setup", focus: focused === "task", width: panelRect.width, height: panelRect.height, body }, theme);
+  };
+
+  // The priority changes at wide widths: manual launch gets the dominant left region. At the
+  // supported compact minimum, panels stack but keep the full six-agent grid visible first.
+  if (rect.width >= 100 && rect.height >= 18) {
+    const [agentsRect, rightRect] = splitH(rect, [{ flex: 2 }, { flex: 1 }], 1);
+    const [guidedRect, taskRect] = splitV(rightRect!, [{ flex: 1 }, { flex: 1 }], 1);
+    const left = manualPanel(agentsRect!);
+    const right = [...guidedPanel(guidedRect!), " ".repeat(rightRect!.width), ...taskPanel(taskRect!)];
+    const gap = " ";
+    return Array.from({ length: rect.height }, (_, index) => (left[index] ?? " ".repeat(agentsRect!.width)) + gap + (right[index] ?? " ".repeat(rightRect!.width)));
+  }
+
+  const [agentsRect, guidedRect, taskRect] = splitV(rect, [8, 4, { flex: 1 }], 1);
+  return [
+    ...manualPanel(agentsRect!),
+    " ".repeat(rect.width),
+    ...guidedPanel(guidedRect!),
+    " ".repeat(rect.width),
+    ...taskPanel(taskRect!),
   ];
-  return [...panels[0]!, " ".repeat(rect.width), ...panels[1]!, " ".repeat(rect.width), ...panels[2]!];
 }
 
 // ---------------------------------------------------------------------------
@@ -2869,7 +2961,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
         tab: "launch",
         focusRegion: 0,
         overlay: null,
-        launch: { ...launch, task: r.data.prompt, workflowId: r.data.id, profile: null, status: "idle", error: undefined },
+        launch: { ...launch, task: r.data.prompt, workflowId: r.data.id, status: "idle", error: undefined },
       };
       render();
     }
@@ -2900,20 +2992,6 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       if (state.tab === "routing") render();
     }
 
-    async function profileLaunchTask(task: string): Promise<void> {
-      const cur = launchOf(state);
-      state = { ...state, launch: { ...cur, task, status: "loading", error: undefined } };
-      if (state.tab === "launch") render();
-      const r = await fetchTaskProfile(task);
-      const latest = launchOf(state);
-      if (r.ok) {
-        state = { ...state, launch: { ...latest, task, profile: r.data, status: "ready", error: undefined } };
-      } else {
-        state = { ...state, launch: { ...latest, task, status: "error", error: r.error } };
-      }
-      if (state.tab === "launch") render();
-    }
-
     async function openLaunchWizard(): Promise<void> {
       const launch = launchOf(state);
       state = { ...state, launch: { ...launch, status: "loading", error: undefined } };
@@ -2932,7 +3010,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
             : "no adapter declares an OpenRouter target";
         state = { ...state, launch: { ...current, status: "error", error } };
       } else {
-        const capability = current.profile?.selectedCapability ?? profiles.data.profiles[0]!.capabilities[0] ?? "general";
+        const capability = taskCapabilityOf(current);
         const first = profiles.data.profiles[0]!;
         state = {
           ...state,
@@ -3128,9 +3206,6 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
           break;
         case "launchConfirmed":
           await performLaunch(effect.agent, effect.cwd, effect.reason, effect.prompt ?? "");
-          break;
-        case "profileLaunchTask":
-          await profileLaunchTask(effect.task);
           break;
         case "openLaunchWizard": await openLaunchWizard(); break;
         case "initializeProfiles": await initializeLaunchProfiles(); break;

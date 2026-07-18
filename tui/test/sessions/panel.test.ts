@@ -93,7 +93,7 @@ describe("reduce — sessions nav & actions emit effects (pure, no tmux)", () =>
   const base = stateOn(slice());
 
   test("navigating to sessions requests a refresh", () => {
-    const r = reduce(initialState(), parseKey("2"));
+    const r = reduce(initialState(), parseKey("3"));
     expect(r.state.tab).toBe("sessions");
     expect(r.effect).toEqual({ type: "refreshSessions" });
   });

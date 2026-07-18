@@ -5,20 +5,29 @@ in tmux and the data views consume the same contract-tested ebrain CLI commands.
 
 ## Navigation
 
-- `1`-`6`: Home, Sessions, Launch, Memory, Routing, Doctor.
+- `1`-`6`: Home, Launch, Sessions, Memory, Routing, Doctor.
 - `Tab` / `Shift+Tab`: move focus between boxes in the current view.
 - Arrow keys: move the focused selection. `Enter`: open or act on it.
 - `/` or `Ctrl+P`: command palette. `?`: actions for the current view. `q`, `Ctrl+D`, or `Ctrl+C` twice: exit.
 
 ## Daily flows
 
-- **Sessions (`2`):** `a`/Enter attaches, `k` asks before killing, and `p` opens a
+- **Launch (`2`):** Manual Agents is the default, primary decision. On wide terminals it occupies
+  the large left region; on 80x24 it is the first complete panel. Arrow keys select a manual
+  agent and Enter starts that local session in the current directory. Guided Launch and Task Setup
+  are separate focused panels, so configuration never starts an agent by accident. `Tab` follows
+  Manual Agents, Guided Launch, then Task Setup.
+- **Task Setup:** `t`, or Enter on Task Setup, opens a category guide for Coding, Agentic systems,
+  Web design, Long-context research, Terminal automation, or General. Choose a type, then add an
+  optional exact task prompt. This is a reversible capability preset: it never creates or changes
+  an execution profile, provider, or model. `r` clears the transient type, prompt, workflow
+  attribution, and any stale guided preview.
+- **Guided Launch:** `w`, or Enter on Guided Launch, opens a centered target/profile/capability/
+  directory review. Fields report their available count; a singleton is explicitly locked, while
+  arrows change only fields with alternatives. `c` edits the directory, Enter previews then
+  reviews the exact launch, and only `y` confirms it.
+- **Sessions (`3`):** `a`/Enter attaches, `k` asks before killing, and `p` opens a
   multiline prompt composer. `Alt+Enter` adds a line, Enter previews, and only `y` sends.
-- **Launch (`3`):** three focused panels keep decisions separate: **task & signals**,
-  **guided launch**, and **manual agents**. `Tab` moves between them. `t` describes a task
-  and shows explainable signals; it never chooses an agent or model. Arrow keys select an
-  agent only when **manual agents** is focused. `Enter` edits the task, opens the wizard, or
-  launches the selected manual agent according to the focused panel.
 - **First OpenRouter use:** the wizard offers to initialize a local execution profile from the
   existing ebrain routing. Only `y` writes it; no provider call or credential is stored. Then
   select target, profile, capability, and cwd in a centered modal before previewing the exact
@@ -27,8 +36,8 @@ in tmux and the data views consume the same contract-tested ebrain CLI commands.
 - **Routing (`5`):** `c` switches to the factual token/USD ledger. It never allocates subscription cost.
 - **Doctor (`6`):** `r` refreshes health checks.
 
-Execution profiles are user-owned local model orderings with provenance. Task signals classify
-text into capabilities only; they do not recommend a provider, benchmark winner, or model.
+Execution profiles are user-owned local model orderings with provenance. Task Setup provides a
+user-selected capability preset only; it does not recommend a provider, benchmark winner, or model.
 
 The centered footer keeps at most six `[key] action` controls visible. Use `?` for the full
 action reference when a view has more actions than fit comfortably.

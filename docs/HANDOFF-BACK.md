@@ -5,7 +5,7 @@ from: Codex (maker/constructor)
 to: Opus (Claude Code, auditor) + Fable 5 (gate)
 created: 2026-07-14
 updated: 2026-07-17
-status: F7.1 responsive dialog foundation complete; F7.2 Launch hierarchy and Task Setup next
+status: F7.2 Manual-first Launch and Task Setup complete; F7.3 workspace registry and picker next
 scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX + workflow/cost loop + launch UX polish + F7 planning
 ---
 
@@ -33,12 +33,12 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 
 ### Verified premises and decisions
 
-- The reported Guided Launch arrow issue is not a broken reducer: `tui/src/app.ts` cycles target
-  and profile indices. The observed environment had one target and one profile, so cycling was a
-  no-op while the UI wrongly promised a choice. F7.2 must render an explicit singleton count/locked
-  affordance and retain normal cycling for multi-item fixtures.
-- The reported `r` behavior is a real UX mismatch. It currently refreshes the automatic classifier
-  instead of clearing `LaunchSlice.task`; F7.2 rebinds it to transient Task Setup reset.
+- The reported Guided Launch arrow issue was not a broken reducer: the observed environment had one
+  target and one profile, so cycling was a no-op while the UI wrongly promised a choice. F7.2 now
+  shows singleton counts as locked, removes the arrow hint for that focused field, and retains
+  normal cycling for multi-item fixtures.
+- The reported `r` behavior was a real UX mismatch. F7.2 now clears transient Task Setup state
+  instead of invoking automatic classification.
 - Task categories must not create execution profiles. ADR-005 keeps profiles user-owned model
   orderings with provenance; F7 Task Setup stores only a reversible capability preset plus optional
   reviewed prompt.
@@ -65,10 +65,10 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 
 ### Exact next action
 
-Continue with **F7.2 Launch Hierarchy and Task Setup**. Make Manual Agents the primary focused
-panel, change the visible concept from automatic signals to explicit task categories plus an
-optional prompt, and make reset/singleton affordances truthful. Do not begin workspace persistence
-until the F7.2 reducer, geometry, exact-prompt and no-accidental-launch tests are green.
+Continue with **F7.3 Workspace Registry and Picker**. Keep the validated workspace registry
+CLI-first, reject literal and symlinked client paths before persistence, and wire both direct and
+guided launch to a selected workspace snapshot. Do not add a general shell, arbitrary command
+runner, environment store, or terminal emulator.
 
 ### What the later checker must audit
 
@@ -94,8 +94,8 @@ until the F7.2 reducer, geometry, exact-prompt and no-accidental-launch tests ar
   confirmations remain `y`-only.
 - The session prompt preview now retains the exact complete payload in the viewport rather than
   showing the previous six-line summary. It remains review-only until `y`; no prompt is persisted.
-- Interactive editors and selection dialogs are deliberately not force-migrated: F7.2 rebuilds the
-  Launch wizard/Task Setup and F7.3 builds the workspace picker. This avoids giving a generic
+- Interactive editors and selection dialogs were deliberately not force-migrated: F7.2 rebuilt the
+  Launch wizard/Task Setup and F7.3 will build the workspace picker. This avoids giving a generic
   scroller ownership of keys currently needed by a cursor or selector.
 
 ### Verification performed
@@ -115,11 +115,47 @@ until the F7.2 reducer, geometry, exact-prompt and no-accidental-launch tests ar
 - Ran `ebrain remember` for that rule. The local record was written, but the command emitted the
   known MCP write-through warning, so its cross-agent searchability is not claimed.
 
+### Historical continuation (completed)
+
+F7.2 implemented the planned Manual Agents geometry, explicit Task Setup, truthful singleton
+wizard fields, transient `r` reset, and the existing automatic post-launch transition to Sessions.
+The current continuation is F7.3 below.
+
+## 2026-07-17 — F7.2 Manual-first Launch and Task Setup complete
+
+### What changed
+
+- Reordered the TUI to **Home (1), Launch (2), Sessions (3)**. Launch now defaults its focus to
+  Manual Agents. At 100+ columns Manual Agents takes the large left region; Guided Launch and Task
+  Setup occupy the right column. At 80x24 they stack in the same priority order while retaining
+  all six manual agents.
+- Replaced the visible automatic `task & signals` flow with a two-step **Task Setup** modal: an
+  explained, user-selected capability type followed by an optional wrapped exact-prompt editor.
+  The preset is transient and reversible. It never writes an execution profile, calls a provider,
+  recommends a model, or launches an agent. `r` clears task, type, workflow attribution, and a
+  stale guided preview.
+- Rebuilt Guided Launch as responsive semantic fields. Each target/profile/capability field shows
+  its current value and available count. A singleton reads `locked`, ignores arrows, and omits the
+  footer arrow control; multi-choice selection still cycles. The cwd editor also uses wrapped,
+  scrollable input.
+- Direct launch still snapshots the exact prompt and automatically changes to Sessions after
+  creating a session. Guided launch retains its immutable `LaunchIntent`, stdin prompt delivery,
+  explicit `y` confirmation, client-path denial, and RAM governor.
+
+### Verification performed
+
+- Focused reducer/dialog/session set: **59 pass / 0 fail**.
+- Full TUI suite: **414 pass / 0 fail** (35 files, 2,002 expectations).
+- Full CLI suite: **218 pass / 0 fail** (23 files, 603 expectations).
+- `git diff --check` clean; zero-hex scan outside `tui/src/theme.ts` clean.
+- Real 80x24 tmux renders inspected for the compact Manual-first Launch, full Task Setup category
+  guide, a long wrapped task prompt, and the local singleton Guided Launch wizard.
+
 ### Next action
 
-Implement **F7.2** according to `ULTRAPLAN-LAUNCH-WORKSPACES.md`: primary Manual Agents geometry,
-explicit Task Setup, truthful singleton wizard fields, `r` reset, and the existing automatic
-post-launch transition to Sessions. Then run the scoped and full suites before committing.
+Implement **F7.3** from `ULTRAPLAN-LAUNCH-WORKSPACES.md`: a contract-tested workspace registry
+and picker that records only canonical directory identities and launches direct/guided sessions in
+the selected snapshot. Keep the future terminal-pane question deferred under ADR-006.
 
 ## 2026-07-17 — Launch UX polish complete
 

@@ -124,10 +124,14 @@ describe("buildFrame — knowledge tabs are REAL views (F6.5), never stubs", () 
 // ---------------------------------------------------------------------------
 
 describe("reduce — pure key-driven navigation", () => {
-  it('"2" switches the active tab to sessions', () => {
+  it('"2" switches the active tab to the primary Launch view', () => {
     const r = reduce(initialState(), { name: "char", char: "2" });
-    expect(r.state.tab).toBe("sessions");
+    expect(r.state.tab).toBe("launch");
     expect(r.quit).toBe(false);
+  });
+
+  it('"3" switches to Sessions after launching', () => {
+    expect(reduce(initialState(), { name: "char", char: "3" }).state.tab).toBe("sessions");
   });
 
   it('"tab" moves the focus ring between boxes, NOT the view (F6.6)', () => {

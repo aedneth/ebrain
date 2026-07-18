@@ -18,7 +18,7 @@
  * mockup's `TABS` in design-system/ui_kits/ebrain/shell.jsx exactly. */
 export type TabName = "home" | "sessions" | "launch" | "memory" | "routing" | "doctor";
 
-export const TABS: readonly TabName[] = ["home", "sessions", "launch", "memory", "routing", "doctor"];
+export const TABS: readonly TabName[] = ["home", "launch", "sessions", "memory", "routing", "doctor"];
 
 export interface Command {
   id: string;
@@ -41,8 +41,8 @@ export const COMMANDS: Command[] = [
   // ── per-tab direct-jump (1..6) — individually addressable for the future
   // help overlay (6.3.5), collapsed to one "1-6" entry below for the hint bar.
   { id: "nav.home", title: "home", summary: "go to the home view", key: "1", group: "nav" },
-  { id: "nav.sessions", title: "sessions", summary: "go to the sessions view", key: "2", group: "nav" },
-  { id: "nav.launch", title: "launch", summary: "go to the launch view", key: "3", group: "nav" },
+  { id: "nav.launch", title: "launch", summary: "go to the launch view", key: "2", group: "nav" },
+  { id: "nav.sessions", title: "sessions", summary: "go to the sessions view", key: "3", group: "nav" },
   { id: "nav.memory", title: "memory", summary: "go to the memory view", key: "4", group: "nav" },
   { id: "nav.routing", title: "routing", summary: "go to the routing view", key: "5", group: "nav" },
   { id: "nav.doctor", title: "doctor", summary: "go to the doctor view", key: "6", group: "nav" },
