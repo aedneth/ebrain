@@ -546,7 +546,7 @@ export function parseMemory(j: unknown): MemoryData | null {
 export interface EpisodeSummaryData {
   id: string;
   kind: "learning" | "session-summary";
-  source: "remember" | "explicit" | "harness-summary";
+  source: "remember" | "explicit" | "harness-summary" | "legacy-import";
   createdAt: string;
   project: string;
   agent: string;
@@ -573,7 +573,7 @@ export function parseEpisodes(j: unknown): EpisodesData | null {
     const session = typeof value.session === "string" ? value.session : undefined;
     const workspaceId = typeof value.workspace_id === "string" ? value.workspace_id : undefined;
     const chars = asNum(value.chars, -1);
-    if (!/^episode-[a-f0-9-]{36}$/.test(id) || (kind !== "learning" && kind !== "session-summary") || (source !== "remember" && source !== "explicit" && source !== "harness-summary") || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(createdAt) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/.test(project) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/.test(agent) || (session !== undefined && !/^[a-z][a-z0-9-]{0,63}$/.test(session)) || (workspaceId !== undefined && !/^[a-z][a-z0-9-]{0,63}$/.test(workspaceId)) || !Number.isInteger(chars) || chars < 0) return null;
+    if (!/^episode-[a-f0-9-]{36}$/.test(id) || (kind !== "learning" && kind !== "session-summary") || (source !== "remember" && source !== "explicit" && source !== "harness-summary" && source !== "legacy-import") || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(createdAt) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/.test(project) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/.test(agent) || (session !== undefined && !/^[a-z][a-z0-9-]{0,63}$/.test(session)) || (workspaceId !== undefined && !/^[a-z][a-z0-9-]{0,63}$/.test(workspaceId)) || !Number.isInteger(chars) || chars < 0) return null;
     episodes.push({ id, kind, source, createdAt, project, agent, ...(session ? { session } : {}), ...(workspaceId ? { workspaceId } : {}), chars });
   }
   return { episodes };

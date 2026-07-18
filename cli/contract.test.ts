@@ -631,7 +631,7 @@ describe("F9.1 context list --json", () => {
 const EpisodeSummarySchema = z.object({
   id: z.string().regex(/^episode-[a-f0-9-]{36}$/),
   kind: z.enum(["learning", "session-summary"]),
-  source: z.enum(["remember", "explicit", "harness-summary"]),
+  source: z.enum(["remember", "explicit", "harness-summary", "legacy-import"]),
   created_at: z.string().datetime(),
   project: z.string().min(1),
   agent: z.string().min(1),
@@ -670,6 +670,10 @@ describe("F9.2 episodes --json", () => {
   });
   test("explicit get still cannot carry a filesystem path", () => {
     expect(EpisodeGetSchema.safeParse({ episode: { ...episodeSummaryFixture, path: "/private/episode.json" }, text: "safe" }).success).toBe(false);
+  });
+  test("fixture-only legacy provenance remains summary-only on passive surfaces", () => {
+    expect(EpisodesListSchema.safeParse({ episodes: [{ ...episodeSummaryFixture, source: "legacy-import" }] }).success).toBe(true);
+    expect(EpisodesListSchema.safeParse({ episodes: [{ ...episodeSummaryFixture, source: "legacy-import", text: "private body" }] }).success).toBe(false);
   });
 });
 

@@ -243,12 +243,15 @@ audit-closure phase; no private data migration was performed here.
 
 ### F9.3 -- Agent-memory migration and audit closure
 
+**Status (2026-07-18):** implementation complete; independent checker review pending. Evidence is
+in `F9.3-MIGRATION-AUDIT-MAKER-REPORT.md`. No private repository content was read or migrated.
+
 - Record a metadata-only audit of private `agent-memory` here. Do not copy its content, clone it into
   the public tree, or disclose private paths.
 - Correct its stale private README only in a separately reviewed change. Product docs describe a
   clean-install local store plus import/export contract.
 - Use fixture-only legacy migrations. Verify secret rejection, client isolation, idempotency,
-  provenance, and daemon-down degradation.
+  provenance, ledger-loss recovery, changed-input refusal, and daemon-down degradation.
 
 ## F10 -- Documentation, brand, license, and website
 

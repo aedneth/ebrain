@@ -6,7 +6,7 @@
  * bounded, scrubbed records created by an explicit learning or summary boundary. List and recall
  * expose summaries/excerpts only; a body requires explicit bounded `get` retrieval.
  */
-import { chmod, lstat, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, link, lstat, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
@@ -30,7 +30,27 @@ const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 const EPISODE_ID = /^episode-[a-f0-9-]{36}$/;
 
 export type EpisodeKind = "learning" | "session-summary";
-export type EpisodeSource = "remember" | "explicit" | "harness-summary";
+/** `legacy-import` is internal provenance for the fixture-only F9.3 adapter. It is deliberately
+ * not accepted by the public `episodes record` command. */
+export type EpisodeSource = "remember" | "explicit" | "harness-summary" | "legacy-import";
+
+export interface EpisodeRecordInput {
+  kind: EpisodeKind;
+  source: EpisodeSource;
+  project: string;
+  agent: string;
+  session?: string;
+  workspaceId?: string;
+  text: string;
+}
+
+/** Private immutable relation used only by the fixture-only F9.3 recovery adapter. It never
+ * appears in list, recall, get, or TUI output. */
+export interface EpisodeMigrationProvenance {
+  source: "legacy-fixture-v1";
+  fixture_id: string;
+  input_hash: string;
+}
 
 export interface Episode {
   schema_version: 1;
@@ -42,6 +62,7 @@ export interface Episode {
   agent: string;
   session?: string;
   workspace_id?: string;
+  migration?: EpisodeMigrationProvenance;
   content_hash: string;
   text: string;
 }
@@ -67,6 +88,10 @@ export interface EpisodeStoreOptions {
   dir?: string;
   now?: string;
   workspaceStorePath?: string;
+  /** Internal only: fixture migration uses a deterministic ID for recoverable writes. */
+  id?: string;
+  /** Internal only: binds a legacy fixture identity to an immutable episode for ledger recovery. */
+  migration?: EpisodeMigrationProvenance;
 }
 
 function isObj(value: unknown): value is Record<string, unknown> {
@@ -78,7 +103,9 @@ function hasOnly(value: Record<string, unknown>, allowed: readonly string[]): bo
 }
 
 function nowIso(value?: string): string {
-  return value ?? new Date().toISOString();
+  const resolved = value ?? new Date().toISOString();
+  if (!ISO_UTC.test(resolved)) throw new Error("episode timestamp must be an ISO UTC timestamp");
+  return resolved;
 }
 
 function sha256(value: string): string {
@@ -90,12 +117,24 @@ function isKind(value: unknown): value is EpisodeKind {
 }
 
 function isSource(value: unknown): value is EpisodeSource {
-  return value === "remember" || value === "explicit" || value === "harness-summary";
+  return value === "remember" || value === "explicit" || value === "harness-summary" || value === "legacy-import";
 }
 
 function assertSourceForKind(kind: EpisodeKind, source: EpisodeSource): void {
   if (kind === "learning" && source === "harness-summary") throw new Error("learning episodes cannot use harness-summary source");
   if (kind === "session-summary" && source === "remember") throw new Error("session-summary episodes cannot use remember source");
+}
+
+function isPublicRecordSource(value: unknown): value is Exclude<EpisodeSource, "legacy-import"> {
+  return value === "remember" || value === "explicit" || value === "harness-summary";
+}
+
+function normalizeEpisodeMigration(value: unknown): EpisodeMigrationProvenance | undefined {
+  if (value === undefined) return undefined;
+  if (!isObj(value) || !hasOnly(value, ["source", "fixture_id", "input_hash"]) || value.source !== "legacy-fixture-v1" || typeof value.fixture_id !== "string" || !SAFE_ID.test(value.fixture_id) || typeof value.input_hash !== "string" || !/^[a-f0-9]{64}$/.test(value.input_hash)) {
+    throw new Error("invalid episode migration provenance");
+  }
+  return { source: "legacy-fixture-v1", fixture_id: value.fixture_id, input_hash: value.input_hash };
 }
 
 /** Reject rather than redact at write time. A caller must know exactly what durable text is being
@@ -148,18 +187,27 @@ async function assertPrivateRecord(path: string): Promise<void> {
   }
 }
 
-async function writePrivateAtomic(path: string, body: string): Promise<void> {
+/** Create a new private record without replacing an existing immutable episode. `link` provides
+ * the no-clobber boundary after the temporary file is fully written in the same directory. */
+async function writeNewPrivateAtomic(path: string, body: string): Promise<void> {
   const dir = dirname(path);
   await ensurePrivateDir(dir);
   const temp = `${path}.tmp-${process.pid}-${randomUUID()}`;
   await writeFile(temp, body, { mode: 0o600 });
   await chmod(temp, 0o600);
-  await rename(temp, path);
+  try {
+    await link(temp, path);
+  } catch (error) {
+    if ((error as { code?: string }).code === "EEXIST") throw new Error("episode id already exists");
+    throw error;
+  } finally {
+    await unlink(temp).catch(() => undefined);
+  }
   await chmod(path, 0o600);
 }
 
 function parseEpisode(value: unknown): Episode {
-  const allowed = ["schema_version", "id", "kind", "source", "created_at", "project", "agent", "session", "workspace_id", "content_hash", "text"];
+  const allowed = ["schema_version", "id", "kind", "source", "created_at", "project", "agent", "session", "workspace_id", "migration", "content_hash", "text"];
   if (!isObj(value) || !hasOnly(value, allowed)) throw new Error("invalid episode record");
   const id = typeof value.id === "string" ? value.id : "";
   const kind = value.kind;
@@ -176,6 +224,8 @@ function parseEpisode(value: unknown): Episode {
   if (Object.hasOwn(value, "workspace_id") && typeof value.workspace_id !== "string") throw new Error("invalid episode workspace id");
   const session = typeof value.session === "string" ? validateSafeId(value.session, "session") : undefined;
   const workspaceId = typeof value.workspace_id === "string" ? validateSafeId(value.workspace_id, "workspace id") : undefined;
+  const migration = Object.hasOwn(value, "migration") ? normalizeEpisodeMigration(value.migration) : undefined;
+  if ((source === "legacy-import") !== Boolean(migration)) throw new Error("invalid episode migration provenance");
   const text = validateEpisodeText(value.text);
   if (sha256(text) !== hash) throw new Error("episode content hash does not match text");
   return {
@@ -188,6 +238,7 @@ function parseEpisode(value: unknown): Episode {
     agent,
     ...(session ? { session } : {}),
     ...(workspaceId ? { workspace_id: workspaceId } : {}),
+    ...(migration ? { migration } : {}),
     content_hash: hash,
     text,
   };
@@ -212,32 +263,53 @@ async function assertWorkspaceId(workspaceId: string, workspaceStorePath?: strin
   if (!store.workspaces.some((workspace) => workspace.id === workspaceId)) throw new Error("episode workspace id must be registered");
 }
 
-export async function recordEpisode(
-  input: { kind: EpisodeKind; source: EpisodeSource; project: string; agent: string; session?: string; workspaceId?: string; text: string },
-  opts: EpisodeStoreOptions = {},
-): Promise<EpisodeSummary> {
+/** Normalize at the one shared write boundary so an internal fixture adapter cannot bypass the
+ * same provenance, identity, and text constraints as ordinary episode creation. */
+export function normalizeEpisodeInput(input: EpisodeRecordInput): EpisodeRecordInput {
   assertSourceForKind(input.kind, input.source);
   const project = validateSafeLabel(input.project, "project");
   const agent = validateSafeLabel(input.agent, "agent");
   const session = input.session === undefined ? undefined : validateSafeId(input.session, "session");
   const workspaceId = input.workspaceId === undefined ? undefined : validateSafeId(input.workspaceId, "workspace id");
-  if (workspaceId) await assertWorkspaceId(workspaceId, opts.workspaceStorePath);
   const text = validateEpisodeText(input.text);
-  const episode: Episode = {
-    schema_version: 1,
-    id: `episode-${randomUUID()}`,
+  return {
     kind: input.kind,
     source: input.source,
+    project,
+    agent,
+    ...(session ? { session } : {}),
+    ...(workspaceId ? { workspaceId } : {}),
+    text,
+  };
+}
+
+export async function recordEpisode(
+  input: EpisodeRecordInput,
+  opts: EpisodeStoreOptions = {},
+): Promise<EpisodeSummary> {
+  const normalized = normalizeEpisodeInput(input);
+  const { project, agent, session, workspaceId, text } = normalized;
+  const migration = normalizeEpisodeMigration(opts.migration);
+  if ((normalized.source === "legacy-import") !== Boolean(migration)) throw new Error("legacy episode requires migration provenance");
+  if (workspaceId) await assertWorkspaceId(workspaceId, opts.workspaceStorePath);
+  const id = opts.id ?? `episode-${randomUUID()}`;
+  if (!EPISODE_ID.test(id)) throw new Error("invalid episode id");
+  const episode: Episode = {
+    schema_version: 1,
+    id,
+    kind: normalized.kind,
+    source: normalized.source,
     created_at: nowIso(opts.now),
     project,
     agent,
     ...(session ? { session } : {}),
     ...(workspaceId ? { workspace_id: workspaceId } : {}),
+    ...(migration ? { migration } : {}),
     content_hash: sha256(text),
     text,
   };
   const dir = opts.dir ?? DEFAULT_EPISODES_DIR;
-  await writePrivateAtomic(episodePath(dir, episode.id), `${JSON.stringify(episode, null, 2)}\n`);
+  await writeNewPrivateAtomic(episodePath(dir, episode.id), `${JSON.stringify(episode, null, 2)}\n`);
   return summarizeEpisode(episode);
 }
 
@@ -264,6 +336,24 @@ export async function listEpisodes(limit = DEFAULT_LIMIT, opts: EpisodeStoreOpti
     .sort((left, right) => right.created_at.localeCompare(left.created_at) || right.id.localeCompare(left.id))
     .slice(0, limit)
     .map(summarizeEpisode);
+}
+
+/** Internal recovery lookup. It scans only the private episode store and never returns its result
+ * through a CLI/TUI surface. Multiple records for one fixture are corruption, not a tie to pick. */
+export async function findEpisodeForMigrationFixture(fixtureId: string, opts: EpisodeStoreOptions = {}): Promise<Episode | null> {
+  validateSafeId(fixtureId, "migration fixture id");
+  const dir = opts.dir ?? DEFAULT_EPISODES_DIR;
+  if (!existsSync(dir)) return null;
+  await assertPrivateDir(dir);
+  const filenames = (await Array.fromAsync(new Bun.Glob("episode-*.json").scan({ cwd: dir }))).sort();
+  let match: Episode | null = null;
+  for (const filename of filenames) {
+    const episode = await readEpisode(filename.replace(/\.json$/, ""), { dir });
+    if (!episode || episode.migration?.fixture_id !== fixtureId) continue;
+    if (match) throw new Error("duplicate migration fixture provenance");
+    match = episode;
+  }
+  return match;
 }
 
 export async function getEpisode(id: string, maxChars = MAX_GET_CHARS, opts: EpisodeStoreOptions = {}): Promise<{ episode: EpisodeSummary; text: string }> {
@@ -401,7 +491,7 @@ async function main(): Promise<void> {
     const project = value(args, "--project");
     const agent = value(args, "--agent");
     const text = value(args, "--text");
-    if (!isKind(kind) || !isSource(source) || !project || !agent || !text) die("episode record requires kind, source, project, agent, and text", 2);
+    if (!isKind(kind) || !isPublicRecordSource(source) || !project || !agent || !text) die("episode record requires kind, source, project, agent, and text", 2);
     return print({ episode: await recordEpisode({ kind, source, project, agent, session: value(args, "--session"), workspaceId: value(args, "--workspace-id"), text }) });
   }
   die("usage: ebrain episodes <list|get|recall|record> [--json]", 2);

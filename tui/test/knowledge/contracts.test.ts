@@ -335,6 +335,11 @@ describe("F9.2 passive episode and procedure summaries", () => {
     });
   });
 
+  test("accepts fixture-only legacy provenance without relaxing passive fields", () => {
+    expect(parseEpisodes({ episodes: [{ ...episode, source: "legacy-import" }] })?.episodes[0]?.source).toBe("legacy-import");
+    expect(parseEpisodes({ episodes: [{ ...episode, source: "legacy-import", text: "private body" }] })).toBeNull();
+  });
+
   test("rejects passive bodies, paths, events, commands, and model/provider fields", () => {
     expect(parseEpisodes({ episodes: [{ ...episode, text: "must not enter TUI state" }] })).toBeNull();
     expect(parseEpisodes({ episodes: [{ ...episode, path: "/private/episode.json" }] })).toBeNull();

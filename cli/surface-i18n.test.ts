@@ -47,6 +47,7 @@ const SURFACES = [
   "cli/profiles.ts",
   "cli/context.ts",
   "cli/episodes.ts",
+  "cli/episode-migration.ts",
   "cli/procedures.ts",
   "cli/targets.ts",
   "cli/workflows.ts",

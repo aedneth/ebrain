@@ -68,6 +68,9 @@ local stores; CKIS federation is optional and explicit.
 3. Episode retrieval is bounded by count and characters, uses secret scrubbing at both ingestion
    and presentation, and degrades locally when the daemon is down. Daemon recovery may index an
    approved scrubbed record through existing paths but never becomes a requirement for local read.
+4. A fixture-only legacy record carries private immutable fixture ID/hash provenance solely for
+   recovery after a ledger interruption. That provenance is excluded from every public episode and
+   TUI contract; a changed fixture fails closed rather than producing a duplicate after ledger loss.
 
 ### Procedures and skills
 
@@ -103,7 +106,8 @@ visibility, default branch, empty description, absent declared license, update t
 It is private with default branch `master`. No repository content, files, commits, issues, clone,
 or local path was read or copied. It is therefore not an eBrain OSS dependency, migration source,
 or documentation authority. Any future cleanup of that private repository is a separate reviewed
-change; F9 uses fixture-only migration tests and documents the clean-install format here.
+change. F9.3 completed only fixture-only migration proofs and did not change that boundary; F10
+owns clean-install public import/export documentation.
 
 ## Consequences
 

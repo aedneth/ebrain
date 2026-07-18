@@ -4,6 +4,23 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-18 -- F9.3 Fixture-only migration recovery and audit closure
+
+- **No private-data migration:** F9.3 adds an internal synthetic-fixture proof only. It neither
+  reads nor imports `agent-memory` content, exposes a public import command, adds a TUI action, or
+  makes the private repository a dependency. The metadata-only audit boundary remains explicit in
+  ADR-008.
+- **Recoverable immutable records:** fixture migration now derives deterministic episode IDs, keeps
+  a private path-free/text-free migration ledger, and binds a safe fixture ID/hash privately to an
+  immutable `legacy-import` episode. Reruns and lost-ledger recovery skip/rebuild exact records;
+  changed input fails closed instead of creating a duplicate or overwriting history.
+- **Passive contract preserved:** public CLI/TUI episode summaries may label fixture provenance but
+  still reject bodies, paths, content hashes, and private migration metadata. Public `episodes
+  record` rejects the internal source.
+- **Verification status:** focused migration/episode/contract/TUI suites passed `143/0`; final full
+  suite and static verification are recorded in the maker report. Independent approval remains
+  required by design.
+
 ## 2026-07-18 -- F9.2 Governed episodes and reviewed procedures
 
 - **Bounded local recall:** added immutable, scrubbed episode records with opaque identifiers,
