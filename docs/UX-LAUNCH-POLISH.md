@@ -3,8 +3,8 @@ type: ux-spec
 project: ebrain
 area: tui-launch
 created: 2026-07-17
-status: superseded-by-f7-2
-related: [SPRINT-TUI.md, ../tui/README.md, adr/ADR-005-user-governed-model-selection.md]
+status: current-f7-3
+related: [SPRINT-TUI.md, ../tui/README.md, adr/ADR-005-user-governed-model-selection.md, adr/ADR-006-workspace-first-control-plane.md]
 ---
 
 # Launch Experience Polish
@@ -14,7 +14,7 @@ related: [SPRINT-TUI.md, ../tui/README.md, adr/ADR-005-user-governed-model-selec
 Launch is the daily entry point for starting work. It must expose three separate user
 decisions without requiring prior knowledge of ebrain internals:
 
-1. Start a direct local session with a manually selected agent.
+1. Select a safe workspace, then start a direct local session with a manually selected agent.
 2. Configure a user-owned guided launch when the user wants a declared OpenRouter target.
 3. Choose a task category and optional exact prompt when that context is useful.
 
@@ -40,17 +40,31 @@ research, Terminal automation, or General, then may add an optional prompt. It d
 manual selection, create a profile, or choose a target, provider, or model. `r` clears the
 transient category, prompt, workflow attribution, and stale guided preview.
 
+## Workspace Selection
+
+`g` opens a searchable workspace picker from any Launch focus. It lists the caller directory only
+after the same CLI validator has canonicalized it, followed by registered directories. `s` filters
+by label or directory, `a` opens an explicit directory-and-label form, and `r` refreshes the local
+registry. The form passes structured argv to `ebrain workspaces add`; it never evaluates a command
+string. Both the literal input and its resolved realpath must be existing directories outside the
+client-repository deny list before persistence or selection.
+
+The active workspace appears in the Manual Agents panel and footer. Direct launch validates it
+again immediately before the RAM gate. Guided Launch validates it before opening and its
+workspace field invokes this same picker; it no longer has a free-form cwd editor. A started tmux
+session retains its own cwd forever, so a later selection only affects future sessions.
+
 ## Guided Launch Wizard
 
 `w`, or Enter on **guided launch**, fetches declared targets and local execution profiles,
 then opens a centered modal. The modal owns its input; no wizard key is active on the base
 Launch screen.
 
-- `Tab` / `Shift+Tab` cycles target, profile, capability, and directory.
+- `Tab` / `Shift+Tab` cycles target, profile, capability, and workspace.
 - Each field shows its active value and available count. Arrow keys change only a field with more
   than one alternative; singleton fields are visibly locked rather than pretending a choice exists.
-- `c`, or Enter on the directory field, opens the directory editor. Save and cancel return
-  to the wizard rather than silently discarding it.
+- `c`, or Enter on the workspace field, opens the validated workspace picker. Selecting an item
+  returns to the wizard with a fresh workspace snapshot; cancel returns without discarding it.
 - Enter creates a plan, then a second Enter opens the existing review confirmation. `y` is
   still the only confirmation path; the RAM governor can require a further confirmation.
 - On first use, profile initialization remains explicit. It does not call a provider or
@@ -77,7 +91,9 @@ The regression suite covers:
 - Manual-primary layout and exact 80x24, 100x30, and 160x48 geometry.
 - Panel focus and no accidental agent launch from guided/task focus.
 - Deterministic category/prompt state, reset behavior, singleton/multi-choice navigation,
-  directory round-trip, and preview-before-launch semantics.
+  workspace-picker round-trip, and preview-before-launch semantics.
+- Strict registry schema, canonicalization, private persistence, duplicate rejection, client-path
+  denial, and a real tmux E2E showing two selected workspaces retain distinct cwd values.
 - Preserved immutable task/workflow delivery through the confirmed target path.
 - Centered bracketed key hints, maximum footer density, contextual action reference, and
   80x24 manual-agent visibility.

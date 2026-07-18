@@ -5,7 +5,7 @@ from: Codex (maker/constructor)
 to: Opus (Claude Code, auditor) + Fable 5 (gate)
 created: 2026-07-14
 updated: 2026-07-17
-status: F7.2 Manual-first Launch and Task Setup complete; F7.3 workspace registry and picker next
+status: F7.3 validated workspace registry and picker complete; F7.4 bare entry point next
 scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX + workflow/cost loop + launch UX polish + F7 planning
 ---
 
@@ -16,6 +16,70 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 > [`AUDIT-FABLE-F6-CORRECTIONS.md`](AUDIT-FABLE-F6-CORRECTIONS.md); F-CF-3 was closed
 > afterwards in `0c887c4`. This addendum is a post-gate UX phase, not a claim that its
 > maker self-approved a new security gate. Historical entries below remain evidence only.
+
+## 2026-07-17 — F7.3 validated workspace registry and picker complete
+
+### What changed
+
+- Added [`cli/workspaces.ts`](../cli/workspaces.ts) and its dispatcher surface:
+  `ebrain workspaces list|validate|add|rename|remove`. The persistent schema is deliberately
+  narrow: schema version, generated safe id, user label, and canonical cwd only. It has no command,
+  environment, credential, prompt, agent configuration, or session output field.
+- Registry reads and writes parse strictly, revalidate every stored directory through `realpath`,
+  reject missing/non-directory paths and duplicate canonical directories, and reject the client
+  deny list both before and after symlink resolution. The containing directory is `0700`; the JSON
+  file and atomic temporary write are `0600`.
+- Added the TUI data-plane parsers/fetchers for registry list, non-persistent validation, and
+  explicit add. All calls use structured Bun argv; Launch never evaluates a user-provided command
+  string or inspects a config/credential file.
+- Launch now owns a workspace slice. `[g] workspace` opens a searchable picker from every Launch
+  focus; `s` filters, `a` opens an explicit directory/label form, `r` refreshes. The active label
+  and path appear in Manual Agents and the footer. The previous free-form wizard cwd editor was
+  removed: Guided Launch opens the same picker with `c` or Enter on its workspace field.
+- Direct launch resolves the selected workspace through `ebrain workspaces validate` immediately
+  before the RAM gate. Guided Launch resolves it before its target/profile fetch. Both session
+  paths retain the existing backend deny-list as an independent final defense. A workspace change
+  affects only later launches; a running tmux session retains its original cwd.
+
+### Verification performed
+
+- Focused workspace/TUI contracts: **59 pass / 0 fail**.
+- Full CLI and TUI suites both passed; final TUI result: **419 pass / 0 fail** (35 files,
+  2,125 expectations). The CLI run included the new workspace store and tmux E2E.
+- `cli/workspaces.test.ts` performed a real fake-agent tmux E2E: two registered temporary
+  directories were launched concurrently, then `sessions list` reported each distinct canonical
+  cwd. Teardown killed both sessions.
+- `git diff --check` and zero-hex scan outside `tui/src/theme.ts` were clean.
+- Real 80x24 tmux captures inspected the workspace picker and the add-workspace modal. Both had
+  wrapped explanatory text, full action labels, no clipping, and a stable compact Launch frame.
+
+### Decisions and gotchas
+
+- `Current directory` begins unvalidated and is warmed asynchronously when the TUI starts. It is
+  not selectable from the picker until the CLI validator returns; direct and guided flows validate
+  again before launch. This avoids treating the incidental caller cwd as trusted state.
+- The picker is searchable but intentionally not an embedded shell. ADR-006 still defers a terminal
+  pane until its separate security, retention, environment and lifecycle design is approved.
+- The responsive dialog input primitive now supports a non-focused input row without rendering a
+  false cursor. The workspace registration form uses this to expose both fields in one compact
+  modal without hiding either value.
+
+### Next action
+
+Implement **F7.4**: make bare `ebrain` start the TUI only with usable stdin/stdout TTYs; preserve
+`ebrain ui`, help flags, and non-interactive no-argument help. Then proceed to F7.5 visual matrix,
+external audit, and final handoff. Do not call F7 accepted without the independent checker.
+
+### What the later checker must audit
+
+- Registry grammar and schema cannot accept a command/configuration channel; list/validate/add use
+  structured argv and no secret values enter any UI/log/docs output.
+- Literal and symlinked client paths are refused before persistence, selection, wizard planning and
+  tmux creation; a changed symlink is rejected by pre-launch revalidation.
+- Picker/filter/add selection is modal, scroll/wrap behavior remains intact at 80x24, and no stale
+  async refresh reopens a dismissed picker.
+- Direct and guided launches both snapshot the selected workspace and retain automatic transition
+  to Sessions; existing session cwd is immutable.
 
 ## 2026-07-17 — F7 workspace-first Launch plan complete
 

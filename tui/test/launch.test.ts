@@ -37,7 +37,8 @@ describe("buildLaunchView — workspace-first information hierarchy", () => {
     expect(frame).toContain("claude");
     expect(frame).toContain("gemini");
     expect(frame).toContain("generic");
-    expect(frame).toContain("Start a direct local session");
+    expect(frame).toContain("workspace");
+    expect(frame).toContain("Current directory");
   });
 
   test("shows heavy vs light class per agent", () => {
@@ -184,7 +185,7 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     expect(reduce(modal, { name: "tab" }).state.launch?.wizard?.focus).toBe("profile");
   });
 
-  test("wizard exposes all fields and returns to it after editing the directory", () => {
+  test("wizard exposes all fields and returns to it after choosing a validated workspace", () => {
     const st: AppState = {
       ...launchState(),
       overlay: { kind: "launchWizard" },
@@ -200,11 +201,48 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     const capability = reduce(reduce(st, { name: "tab" }).state, { name: "tab" }).state;
     expect(capability.launch?.wizard?.focus).toBe("capability");
     expect(reduce(capability, { name: "right" }).state.launch?.wizard?.capability).toBe("review");
-    const cwd = reduce(reduce(capability, { name: "tab" }).state, { name: "enter" }).state;
-    expect(cwd.overlay?.kind).toBe("wizardCwd");
-    const saved = reduce({ ...cwd, overlay: { kind: "wizardCwd", line: lineFrom("/tmp/next"), returnToWizard: true } }, { name: "enter" });
+    const picker = reduce(reduce(capability, { name: "tab" }).state, { name: "enter" });
+    expect(picker.state.overlay?.kind).toBe("workspacePicker");
+    expect(picker.effect).toEqual({ type: "openWorkspacePicker", returnToWizard: true });
+    const current = { label: "Current directory", cwd: "/tmp/project", persistent: false, validated: true };
+    const saved = reduce({ ...picker.state, workspace: { data: { schemaVersion: 1, workspaces: [{ id: "next", label: "Next", cwd: "/tmp/next" }] }, current, active: current, status: "ready" }, overlay: { kind: "workspacePicker", selected: 1, query: "", search: null, returnToWizard: true } }, { name: "enter" });
     expect(saved.state.overlay?.kind).toBe("launchWizard");
     expect(saved.state.launch?.wizard?.cwd).toBe("/tmp/next");
+  });
+
+  test("g opens a registry-backed workspace picker and selection updates only future launches", () => {
+    const opened = reduce(launchState(), parseKey("g"));
+    expect(opened.state.overlay?.kind).toBe("workspacePicker");
+    expect(opened.effect).toEqual({ type: "openWorkspacePicker", returnToWizard: false });
+    const current = { label: "Current directory", cwd: "/tmp/current", persistent: false, validated: true };
+    const selected = reduce({ ...opened.state, workspace: { data: { schemaVersion: 1, workspaces: [{ id: "api", label: "API", cwd: "/tmp/api" }] }, current, active: current, status: "ready" }, overlay: { kind: "workspacePicker", selected: 1, query: "", search: null, returnToWizard: false } }, { name: "enter" });
+    expect(selected.state.workspace?.active).toMatchObject({ id: "api", label: "API", cwd: "/tmp/api", persistent: true, validated: true });
+    expect(selected.state.overlay).toBeNull();
+  });
+
+  test("workspace picker can filter and its add form emits structured CLI input only after both fields exist", () => {
+    const current = { label: "Current directory", cwd: "/tmp/current", persistent: false, validated: true };
+    const base: AppState = { ...launchState(), workspace: { data: { schemaVersion: 1, workspaces: [{ id: "web", label: "Web app", cwd: "/tmp/web-app" }] }, current, active: current, status: "ready" }, overlay: { kind: "workspacePicker", selected: 0, query: "", search: null, returnToWizard: false } };
+    const filtering = reduce(base, parseKey("s"));
+    expect(filtering.state.overlay).toMatchObject({ kind: "workspacePicker", search: { text: "" } });
+    const apply = reduce({ ...filtering.state, overlay: { kind: "workspacePicker", selected: 0, query: "", search: lineFrom("web"), returnToWizard: false } }, { name: "enter" });
+    expect(apply.state.overlay).toMatchObject({ kind: "workspacePicker", query: "web", search: null });
+    const form = reduce(base, parseKey("a"));
+    expect(form.state.overlay?.kind).toBe("workspaceAdd");
+    expect(reduce(form.state, { name: "enter" }).state.overlay).toMatchObject({ kind: "workspaceAdd", focus: "label" });
+    const complete: AppState = { ...form.state, overlay: { kind: "workspaceAdd", cwd: lineFrom("/tmp/new"), label: lineFrom("New"), focus: "label", returnToWizard: false } };
+    expect(reduce(complete, { name: "enter" }).effect).toEqual({ type: "addWorkspace", cwd: "/tmp/new", label: "New", returnToWizard: false });
+  });
+
+  test("workspace dialogs wrap safely at compact and wide viewport sizes", () => {
+    const long = "/tmp/a-very-long-workspace-directory-name-that-must-wrap-instead-of-being-silently-clipped/project";
+    const current = { label: "Current directory", cwd: "/tmp/current", persistent: false, validated: true };
+    const state: AppState = { ...launchState(), workspace: { data: { schemaVersion: 1, workspaces: [{ id: "long", label: "Long workspace", cwd: long }] }, current, active: current, status: "ready" }, overlay: { kind: "workspacePicker", selected: 1, query: "", search: null, returnToWizard: false } };
+    for (const frameSize of [{ cols: 80, rows: 24 }, { cols: 100, rows: 30 }, { cols: 160, rows: 48 }]) {
+      const frame = buildFrame(state, frameSize, t);
+      for (const row of frame) expect(displayWidth(row)).toBe(frameSize.cols);
+      expect(frame.map(strip).join("\n")).toContain("launch workspace");
+    }
   });
 
   test("wizard is a visible dialog with choices and never launches on open", () => {

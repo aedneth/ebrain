@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -12,6 +13,7 @@ import {
   removeWorkspace,
   writeWorkspaceStore,
 } from "./workspaces.ts";
+import { SESSION_PREFIX, killSession, listSessions, newSession } from "./sessions.ts";
 
 const roots: string[] = [];
 function root(): string {
@@ -95,4 +97,51 @@ describe("workspace mutations", () => {
     writeFileSync(storePath, JSON.stringify({ schema_version: 1, workspaces: [{ id: "project", label: "Project", cwd: shortcut }] }));
     await expect(readWorkspaceStore(storePath)).rejects.toThrow("not canonical");
   });
+});
+
+let hasTmux = false;
+try {
+  execSync("command -v tmux", { stdio: "ignore" });
+  hasTmux = true;
+} catch {
+  hasTmux = false;
+}
+
+const tmuxTest = hasTmux ? test : test.skip;
+
+tmuxTest("validated workspace records launch independent fake-agent sessions in their own cwd", async () => {
+  const dir = root();
+  const alpha = join(dir, "alpha");
+  const beta = join(dir, "beta");
+  mkdirSync(alpha);
+  mkdirSync(beta);
+  const storePath = join(dir, "config", "workspaces.json");
+  const fakeAgent = join(import.meta.dir, "..", "scripts", "fake-agent.sh");
+  const suffix = `workspace-${Date.now().toString(36)}`;
+  const alphaName = `${SESSION_PREFIX}test-${suffix}-a`;
+  const betaName = `${SESSION_PREFIX}test-${suffix}-b`;
+  try {
+    const first = await addWorkspace({ schema_version: 1, workspaces: [] }, { label: "Alpha", cwd: alpha });
+    const store = await addWorkspace(first, { label: "Beta", cwd: beta });
+    await writeWorkspaceStore(store, storePath);
+    const registered = await readWorkspaceStore(storePath);
+    const alphaWorkspace = registered.workspaces.find((workspace) => workspace.label === "Alpha")!;
+    const betaWorkspace = registered.workspaces.find((workspace) => workspace.label === "Beta")!;
+
+    const [left, right] = await Promise.all([
+      newSession("test", `${suffix}-a`, { cwd: alphaWorkspace.cwd, launchCmd: `bash ${fakeAgent}` }),
+      newSession("test", `${suffix}-b`, { cwd: betaWorkspace.cwd, launchCmd: `bash ${fakeAgent}` }),
+    ]);
+    expect(left.ok).toBe(true);
+    expect(right.ok).toBe(true);
+    const listed = await listSessions();
+    expect(listed.ok).toBe(true);
+    if (listed.ok) {
+      expect(listed.sessions.find((session) => session.name === alphaName)?.cwd).toBe(alphaWorkspace.cwd);
+      expect(listed.sessions.find((session) => session.name === betaName)?.cwd).toBe(betaWorkspace.cwd);
+    }
+  } finally {
+    await killSession(alphaName, true);
+    await killSession(betaName, true);
+  }
 });

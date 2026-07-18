@@ -26,6 +26,8 @@ import {
   parseWorkflowRun,
   parseTaskProfile,
   parseWorkspaces,
+  parseWorkspaceValidation,
+  parseWorkspaceMutation,
   parseProfiles,
   parseTargets,
   parseTargetPlan,
@@ -42,6 +44,7 @@ import {
   type WorkflowRunData,
   type TaskProfileData,
   type WorkspacesData,
+  type WorkspaceData,
   type ProfilesData,
   type TargetData,
   type TargetPlanData,
@@ -144,6 +147,16 @@ export function fetchTaskProfile(task: string): Promise<KResult<TaskProfileData>
   return fetchParsed(["task-profile", task, "--json"], 15000, parseTaskProfile);
 }
 export function fetchWorkspaces(): Promise<KResult<WorkspacesData>> { return fetchParsed(["workspaces", "list", "--json"], 15000, parseWorkspaces); }
+/** Validation is intentionally routed through the same strict CLI boundary as registry writes.
+ * It returns a canonical directory but persists nothing. */
+export function validateWorkspace(cwd: string): Promise<KResult<{ cwd: string }>> {
+  return fetchParsed(["workspaces", "validate", "--cwd", cwd, "--json"], 15000, parseWorkspaceValidation);
+}
+/** Add a workspace through structured argv. `--yes` is the TUI's explicit final Add action,
+ * never an ambient or implicit configuration write. */
+export function createWorkspace(input: { cwd: string; label: string }): Promise<KResult<WorkspaceData>> {
+  return fetchParsed(["workspaces", "add", "--cwd", input.cwd, "--label", input.label, "--yes", "--json"], 15000, parseWorkspaceMutation);
+}
 export function fetchProfiles(): Promise<KResult<ProfilesData>> { return fetchParsed(["profiles", "list", "--json"], 15000, parseProfiles); }
 /** Explicit first-use migration of the user's existing local routing into a profile. */
 export function initializeProfiles(): Promise<KResult<ProfilesData>> {

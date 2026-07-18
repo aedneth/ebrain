@@ -149,46 +149,102 @@ export function removeWorkspace(store: WorkspaceStore, id: string): WorkspaceSto
   return parseWorkspaceStore({ ...store, workspaces: store.workspaces.filter((workspace) => workspace.id !== id) });
 }
 
-function parseArgs(argv: string[]): { command: string; rest: string[]; json: boolean; yes: boolean } {
-  const [command = "list", ...raw] = argv;
-  return { command, rest: raw.filter((arg) => arg !== "--json" && arg !== "--yes"), json: raw.includes("--json"), yes: raw.includes("--yes") };
+interface WorkspaceArgs {
+  command: string;
+  json: boolean;
+  yes: boolean;
+  values: Map<"--cwd" | "--id" | "--label", string>;
 }
-function flagValue(args: string[], flag: string): string | null {
-  const index = args.indexOf(flag);
-  const value = index >= 0 ? args[index + 1] : undefined;
-  return typeof value === "string" && !value.startsWith("--") ? value : null;
+
+/** Strictly parse a deliberately tiny grammar.  Unknown flags and repeated values must not
+ * become silently accepted configuration surface as this command evolves. */
+function parseArgs(argv: string[]): WorkspaceArgs {
+  const [command = "list", ...raw] = argv;
+  let json = false;
+  let yes = false;
+  const values = new Map<"--cwd" | "--id" | "--label", string>();
+  for (let index = 0; index < raw.length; index += 1) {
+    const arg = raw[index]!;
+    if (arg === "--json") {
+      if (json) throw new Error("--json may be supplied only once");
+      json = true;
+      continue;
+    }
+    if (arg === "--yes") {
+      if (yes) throw new Error("--yes may be supplied only once");
+      yes = true;
+      continue;
+    }
+    if (arg === "--cwd" || arg === "--id" || arg === "--label") {
+      const value = raw[index + 1];
+      if (!value || value.startsWith("--")) throw new Error(`${arg} requires a value`);
+      if (values.has(arg)) throw new Error(`${arg} may be supplied only once`);
+      values.set(arg, value);
+      index += 1;
+      continue;
+    }
+    throw new Error(`unknown workspace argument: ${arg}`);
+  }
+  return { command, json, yes, values };
+}
+
+function onlyFlags(args: WorkspaceArgs, flags: Array<"--cwd" | "--id" | "--label">): void {
+  for (const flag of args.values.keys()) {
+    if (!flags.includes(flag)) throw new Error(`${flag} is not valid for workspaces ${args.command}`);
+  }
+}
+
+function valueOf(args: WorkspaceArgs, flag: "--cwd" | "--id" | "--label"): string | null {
+  return args.values.get(flag) ?? null;
 }
 function print(value: unknown): void { console.log(JSON.stringify(value, null, 2)); }
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
-  const store = await readWorkspaceStore();
-  if (args.command === "list") return print(store);
+  if (args.command === "validate") {
+    onlyFlags(args, ["--cwd"]);
+    if (args.yes) die("workspaces validate does not write local config", 2);
+    const cwd = valueOf(args, "--cwd");
+    if (!cwd) die("usage: ebrain workspaces validate --cwd DIR [--json]", 2);
+    return print({ ok: true, cwd: await canonicalWorkspacePath(cwd) });
+  }
+  if (!["list", "add", "rename", "remove"].includes(args.command)) {
+    die("usage: ebrain workspaces <list|validate|add|rename|remove> [--json]", 2);
+  }
+  if (args.command === "list") {
+    onlyFlags(args, []);
+    if (args.yes) die("workspaces list does not write local config", 2);
+    return print(await readWorkspaceStore());
+  }
   if (!args.yes) die(`workspaces ${args.command} writes local config; confirm with --yes`, 2);
+  const store = await readWorkspaceStore();
   if (args.command === "add") {
-    const label = flagValue(args.rest, "--label");
-    const cwd = flagValue(args.rest, "--cwd");
+    onlyFlags(args, ["--label", "--cwd"]);
+    const label = valueOf(args, "--label");
+    const cwd = valueOf(args, "--cwd");
     if (!label || !cwd) die("usage: ebrain workspaces add --label LABEL --cwd DIR --yes [--json]", 2);
     const next = await addWorkspace(store, { label, cwd });
     await writeWorkspaceStore(next);
     return print({ ok: true, workspace: next.workspaces.at(-1) });
   }
   if (args.command === "rename") {
-    const id = flagValue(args.rest, "--id");
-    const label = flagValue(args.rest, "--label");
+    onlyFlags(args, ["--id", "--label"]);
+    const id = valueOf(args, "--id");
+    const label = valueOf(args, "--label");
     if (!id || !label) die("usage: ebrain workspaces rename --id ID --label LABEL --yes [--json]", 2);
     const next = renameWorkspace(store, id, label);
     await writeWorkspaceStore(next);
     return print({ ok: true, workspace: next.workspaces.find((workspace) => workspace.id === id) });
   }
   if (args.command === "remove") {
-    const id = flagValue(args.rest, "--id");
+    onlyFlags(args, ["--id"]);
+    const id = valueOf(args, "--id");
     if (!id) die("usage: ebrain workspaces remove --id ID --yes [--json]", 2);
     const next = removeWorkspace(store, id);
     await writeWorkspaceStore(next);
     return print({ ok: true, removed: id });
   }
-  die("usage: ebrain workspaces <list|add|rename|remove> [--json]", 2);
+  die("usage: ebrain workspaces <list|validate|add|rename|remove> [--json]", 2);
 }
 
 if (import.meta.main) main().catch((error) => die(error instanceof Error ? error.message : String(error)));

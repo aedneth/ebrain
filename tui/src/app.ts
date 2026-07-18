@@ -71,6 +71,8 @@ import type {
   RoutingData,
   CostData,
   ProfilesData,
+  WorkspacesData,
+  WorkspaceData,
   TargetData,
   TargetPlanData,
   ProfileSummaryData,
@@ -96,6 +98,9 @@ import {
   fetchTargets,
   fetchTargetPlan,
   fetchSearch,
+  fetchWorkspaces,
+  validateWorkspace,
+  createWorkspace,
 } from "./knowledge/run.js";
 
 // Sessions data plane (F6.4) — REUSED from cli/sessions.ts via the control-plane
@@ -106,7 +111,6 @@ import {
   killSession,
   sendToSession,
   newSession,
-  isClientPath,
   hasServer,
   attachTarget,
 } from "./sessions/tmux.js";
@@ -299,8 +303,10 @@ export type Overlay = { scroll?: number } & (
   | { kind: "confirmLaunch"; agent: string; cwd: string; reason: string }
   /** The guided target/profile workflow. Its selections live in LaunchSlice. */
   | { kind: "launchWizard" }
-  /** Directory editor entered from the wizard; completion returns to that wizard. */
-  | { kind: "wizardCwd"; line: LineState; returnToWizard: boolean }
+  /** Searchable picker backed by the validated local workspace registry. */
+  | { kind: "workspacePicker"; selected: number; query: string; search: LineState | null; returnToWizard: boolean }
+  /** Two explicit fields: a path is validated by the CLI before it can become selectable. */
+  | { kind: "workspaceAdd"; cwd: LineState; label: LineState; focus: "cwd" | "label"; returnToWizard: boolean }
   | { kind: "confirmTargetLaunch"; plan: TargetPlanData; intent: LaunchIntent }
   | { kind: "confirmTargetGovernor"; plan: TargetPlanData; intent: LaunchIntent; reason: string }
   | { kind: "confirmProfilesInit" }
@@ -352,6 +358,64 @@ function taskCapabilityOf(launch: LaunchSlice): Capability {
   return launch.taskCapability ?? "general";
 }
 
+/** A workspace is only a labeled, validated directory. It deliberately has no command,
+ * environment, provider, or session payload: tmux remains the session data plane. */
+export interface WorkspaceSelection {
+  id?: string;
+  label: string;
+  cwd: string;
+  persistent: boolean;
+  /** False only while the caller directory has not yet made a round trip through the CLI validator. */
+  validated: boolean;
+}
+
+export interface WorkspaceSlice {
+  data: WorkspacesData | null;
+  /** The directory where the TUI itself was started. It is always a non-persistent candidate. */
+  current: WorkspaceSelection;
+  /** The directory snapshotted by the next launch; existing sessions never observe changes here. */
+  active: WorkspaceSelection;
+  status: LoadStatus;
+  error?: string;
+}
+
+function currentWorkspace(cwd: string, validated = false): WorkspaceSelection {
+  return { label: "Current directory", cwd, persistent: false, validated };
+}
+
+export function emptyWorkspace(cwd: string): WorkspaceSlice {
+  const current = currentWorkspace(cwd);
+  return { data: null, current, active: current, status: "idle" };
+}
+
+/** This fallback is pure for legacy test fixtures. Real runtime state always initializes an
+ * absolute caller cwd in initialState(), then validates it before any launch. */
+function workspaceOf(state: AppState): WorkspaceSlice {
+  return state.workspace ?? emptyWorkspace(state.cwd);
+}
+
+function selectionFromRecord(workspace: WorkspaceData): WorkspaceSelection {
+  return { ...workspace, persistent: true, validated: true };
+}
+
+/** Current first, then registered workspaces. Duplicate canonical directories are impossible in
+ * the store, but the current directory can equal one of them, so suppress its duplicate row. */
+function workspaceCandidates(state: AppState): WorkspaceSelection[] {
+  const workspace = workspaceOf(state);
+  const candidates: WorkspaceSelection[] = workspace.current.validated ? [workspace.current] : [];
+  for (const entry of workspace.data?.workspaces ?? []) {
+    if (!candidates.some((candidate) => candidate.cwd === entry.cwd)) candidates.push(selectionFromRecord(entry));
+  }
+  if (workspace.active.validated && !candidates.some((candidate) => candidate.cwd === workspace.active.cwd)) candidates.push(workspace.active);
+  return candidates;
+}
+
+function workspaceDisplay(workspace: WorkspaceSelection, fallbackCwd: string): string {
+  if (!workspace.validated) return `${workspace.label} · validating…`;
+  const cwd = workspace.persistent ? workspace.cwd : fallbackCwd;
+  return `${workspace.label} · ${cwd}`;
+}
+
 /**
  * Immutable snapshot of the reviewed work, captured at the reducer boundary (G56-F2): the task
  * prompt plus optional workflow attribution. It is carried through every confirmation overlay,
@@ -380,8 +444,7 @@ export interface AppState {
   tab: TabName;
   /** true after a first Ctrl-C — a second Ctrl-C quits ("ctrl+c x2" per the registry). */
   confirmQuit: boolean;
-  /** Footer identity — the CALLER's cwd (see cli/ebrain's EBRAIN_CALLER_CWD export),
-   * not run_bun's neutral working dir. Collapsed to "~/..." when under $HOME. */
+  /** Compatibility display of the caller cwd. The workspace slice owns launch identity. */
   cwd: string;
   branch?: string;
   /** Open command palette / help / confirm / prompt overlay, or null when none. */
@@ -390,6 +453,8 @@ export interface AppState {
   sessions?: SessionsSlice;
   /** Launch-panel state (F6.4.5 + F6.6B task router). Optional — defaults empty. */
   launch?: LaunchSlice;
+  /** Selected workspace plus registry cache. The state is serializable and carries no shell data. */
+  workspace?: WorkspaceSlice;
   /** Knowledge-panel slices (F6.5). Optional — the *Of() helpers default empties. */
   overview?: OverviewSlice;
   memory?: MemorySlice;
@@ -438,6 +503,7 @@ export function initialState(): AppState {
     overlay: null,
     sessions: emptySessions(),
     launch: emptyLaunch(),
+    workspace: emptyWorkspace(dir),
     overview: emptyOverview(),
     memory: emptyMemory(),
     routing: emptyRouting(),
@@ -491,6 +557,8 @@ export type AppEffect =
   /** Launch confirmed through the governor's dialog (an override that gets logged). */
   | { type: "launchConfirmed"; agent: string; cwd: string; reason: string; prompt?: string }
   | { type: "openLaunchWizard" }
+  | { type: "openWorkspacePicker"; returnToWizard: boolean }
+  | { type: "addWorkspace"; cwd: string; label: string; returnToWizard: boolean }
   | { type: "initializeProfiles" }
   | { type: "planLaunchWizard" }
   | { type: "requestTargetLaunch"; plan: TargetPlanData; intent: LaunchIntent }
@@ -759,6 +827,30 @@ function wizardChoiceCount(wizard: LaunchWizard): number {
   return 0;
 }
 
+function filteredWorkspaces(state: AppState, query: string): WorkspaceSelection[] {
+  const needle = query.trim().toLowerCase();
+  const candidates = workspaceCandidates(state);
+  if (!needle) return candidates;
+  return candidates.filter((workspace) => `${workspace.label}\n${workspace.cwd}`.toLowerCase().includes(needle));
+}
+
+/** Select through a known candidate only. Guided Launch receives a validated snapshot rather
+ * than a free-form directory, so its plan cannot escape the workspace contract. */
+function selectWorkspace(state: AppState, candidate: WorkspaceSelection, returnToWizard: boolean): AppState {
+  const workspace = workspaceOf(state);
+  const nextWorkspace: WorkspaceSlice = { ...workspace, active: candidate, status: "ready", error: undefined };
+  if (!returnToWizard) return { ...state, workspace: nextWorkspace, overlay: null };
+  const launch = launchOf(state);
+  const wizard = wizardOf(launch);
+  if (!wizard) return { ...state, workspace: nextWorkspace, overlay: null };
+  return {
+    ...state,
+    workspace: nextWorkspace,
+    overlay: { kind: "launchWizard" },
+    launch: { ...launch, wizard: { ...wizard, cwd: candidate.cwd, plan: null }, status: "ready", error: undefined },
+  };
+}
+
 /** Compact, contextual controls: the footer is intentionally capped at six actions.
  * More complete per-view guidance stays available through the action reference (`?`). */
 export function hintsForState(state: AppState): HintEntry[] {
@@ -769,12 +861,16 @@ export function hintsForState(state: AppState): HintEntry[] {
     return [
       { k: "tab", label: "field" },
       ...(choices > 1 ? [{ k: "↑↓", label: "select" }] : []),
-      { k: "c", label: "directory" },
+      { k: "c", label: "workspace" },
       { k: "enter", label: "preview" },
       { k: "esc", label: "cancel" },
     ];
   }
-  if (overlay?.kind === "wizardCwd") return [{ k: "enter", label: "save" }, { k: "esc", label: "back to wizard" }];
+  if (overlay?.kind === "workspacePicker") {
+    if (overlay.search) return [{ k: "enter", label: "apply filter" }, { k: "esc", label: "back" }];
+    return [{ k: "↑↓", label: "choose" }, { k: "enter", label: "select" }, { k: "s", label: "filter" }, { k: "a", label: "add" }, { k: "esc", label: "cancel" }];
+  }
+  if (overlay?.kind === "workspaceAdd") return [{ k: "tab", label: "field" }, { k: "enter", label: overlay.focus === "cwd" ? "next" : "add" }, { k: "esc", label: "back" }];
   if (overlay?.kind === "taskSetup") return [{ k: "↑↓", label: "choose type" }, { k: "enter", label: "add task" }, { k: "esc", label: "cancel" }];
   if (overlay?.kind === "taskPrompt") return [{ k: "↑↓", label: "scroll" }, { k: "enter", label: "save" }, { k: "esc", label: "back" }];
   if (overlay?.kind === "confirmKill" || overlay?.kind === "confirmLaunch" || overlay?.kind === "confirmSend" || overlay?.kind === "confirmTargetLaunch" || overlay?.kind === "confirmTargetGovernor" || overlay?.kind === "confirmProfilesInit") {
@@ -791,6 +887,7 @@ export function hintsForState(state: AppState): HintEntry[] {
     switch (focusedRegion(state)) {
       case "task":
         return [
+          { k: "g", label: "workspace" },
           { k: "t", label: "task setup" },
           { k: "r", label: "reset task" },
           { k: "tab", label: "next box" },
@@ -799,6 +896,7 @@ export function hintsForState(state: AppState): HintEntry[] {
         ];
       case "guided":
         return [
+          { k: "g", label: "workspace" },
           { k: "w", label: "open wizard" },
           { k: "tab", label: "next box" },
           { k: "enter", label: "open" },
@@ -806,6 +904,7 @@ export function hintsForState(state: AppState): HintEntry[] {
         ];
       default:
         return [
+          { k: "g", label: "workspace" },
           { k: "↑↓←→", label: "agent" },
           { k: "tab", label: "next box" },
           { k: "enter", label: "launch" },
@@ -832,7 +931,8 @@ function actionReferenceFor(state: AppState): HelpContext {
         { key: "tab", title: "focus box", summary: "move between manual agents, guided launch, and task setup" },
         { key: "t", title: "task setup", summary: "choose a work category and optional prompt" },
         { key: "r", title: "reset task", summary: "clear the transient category, prompt, and workflow attribution" },
-        { key: "w", title: "guided launch", summary: "choose your target, profile, capability, and directory" },
+        { key: "g", title: "workspace", summary: "choose or register the validated directory for the next launch" },
+        { key: "w", title: "guided launch", summary: "choose your target, profile, capability, and workspace" },
         { key: "↑↓←→", title: "choose agent", summary: "move selection when manual agents has focus" },
         { key: "enter", title: action, summary: "act only on the focused box" },
       ],
@@ -983,10 +1083,18 @@ export function reduce(state: AppState, key: Key): ReduceResult {
         return settle(state);
       }
       if (key.name === "char" && key.char === "c") {
-        return settle({ ...state, overlay: { kind: "wizardCwd", line: lineFrom(wizard.cwd), returnToWizard: true } });
+        return settle(
+          { ...state, overlay: { kind: "workspacePicker", selected: 0, query: "", search: null, returnToWizard: true }, workspace: { ...workspaceOf(state), status: "loading", error: undefined } },
+          { type: "openWorkspacePicker", returnToWizard: true },
+        );
       }
       if (key.name === "enter") {
-        if (wizard.focus === "cwd") return settle({ ...state, overlay: { kind: "wizardCwd", line: lineFrom(wizard.cwd), returnToWizard: true } });
+        if (wizard.focus === "cwd") {
+          return settle(
+            { ...state, overlay: { kind: "workspacePicker", selected: 0, query: "", search: null, returnToWizard: true }, workspace: { ...workspaceOf(state), status: "loading", error: undefined } },
+            { type: "openWorkspacePicker", returnToWizard: true },
+          );
+        }
         return wizard.plan
           ? settle({ ...state, overlay: { kind: "confirmTargetLaunch", plan: wizard.plan, intent: launchIntentOf(launch) } })
           : settle(state, { type: "planLaunchWizard" });
@@ -994,23 +1102,55 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       return settle(state);
     }
 
-    if (ov.kind === "wizardCwd") {
-      const returnToWizard = ov.returnToWizard && wizardOf(launchOf(state));
-      if (key.name === "escape") return settle({ ...state, overlay: returnToWizard ? { kind: "launchWizard" } : null });
-      if (key.name === "enter") {
-        const cwd = ov.line.text.trim();
-        const launch = launchOf(state);
-        const wizard = wizardOf(launch);
-        const nextOverlay = ov.returnToWizard && wizard ? { kind: "launchWizard" } as const : null;
-        if (!cwd || !wizard) return settle({ ...state, overlay: nextOverlay });
-        if (isClientPath(cwd)) return settle({ ...state, overlay: nextOverlay, launch: { ...launch, status: "error", error: "client repository cwd rejected" } });
-        return settle({ ...state, overlay: nextOverlay, launch: { ...launch, wizard: { ...wizard, cwd, plan: null }, status: "ready", error: undefined } });
+    if (ov.kind === "workspacePicker") {
+      if (ov.search) {
+        if (key.name === "escape") return settle({ ...state, overlay: { ...ov, search: null } });
+        if (key.name === "enter") return settle({ ...state, overlay: { ...ov, query: ov.search.text, search: null, selected: 0 } });
+        const edited = lineApplyKey(ov.search, key);
+        if (edited.handled) return settle({ ...state, overlay: { ...ov, search: edited.state } });
+        return settle(state);
       }
-      const scrolled = scrollDialog(state, ov, key);
-      if (scrolled) return scrolled;
-      const edited = lineApplyKey(ov.line, key);
-      if (edited.handled) return settle({ ...state, overlay: { kind: "wizardCwd", line: edited.state, returnToWizard: ov.returnToWizard } });
+      if (key.name === "escape" || (key.name === "char" && key.char === "q")) {
+        return settle({ ...state, overlay: ov.returnToWizard && wizardOf(launchOf(state)) ? { kind: "launchWizard" } : null });
+      }
+      const candidates = filteredWorkspaces(state, ov.query);
+      if (key.name === "up" || key.name === "down") {
+        const delta = key.name === "up" ? -1 : 1;
+        return settle({ ...state, overlay: { ...ov, selected: cycleIndex(ov.selected, candidates.length, delta) } });
+      }
+      if (key.name === "enter") {
+        const selected = candidates[clampIndex(ov.selected, candidates.length)];
+        return selected ? settle(selectWorkspace(state, selected, ov.returnToWizard)) : settle(state);
+      }
+      if (key.name === "char" && key.char === "s") return settle({ ...state, overlay: { ...ov, search: lineFrom(ov.query) } });
+      if (key.name === "char" && key.char === "a") {
+        return settle({ ...state, overlay: { kind: "workspaceAdd", cwd: lineFrom(""), label: lineFrom(""), focus: "cwd", returnToWizard: ov.returnToWizard } });
+      }
+      if (key.name === "char" && key.char === "r") {
+        return settle({ ...state, workspace: { ...workspaceOf(state), status: "loading", error: undefined } }, { type: "openWorkspacePicker", returnToWizard: ov.returnToWizard });
+      }
       return settle(state);
+    }
+
+    if (ov.kind === "workspaceAdd") {
+      if (key.name === "escape") {
+        return settle({ ...state, overlay: { kind: "workspacePicker", selected: 0, query: "", search: null, returnToWizard: ov.returnToWizard } });
+      }
+      if (key.name === "tab" || key.name === "shifttab") {
+        const focus = ov.focus === "cwd" ? "label" : "cwd";
+        return settle({ ...state, overlay: { ...ov, focus } });
+      }
+      if (key.name === "enter") {
+        if (ov.focus === "cwd") return settle({ ...state, overlay: { ...ov, focus: "label" } });
+        const cwd = ov.cwd.text.trim();
+        const label = ov.label.text.trim();
+        if (!cwd || !label) return settle({ ...state, workspace: { ...workspaceOf(state), status: "error", error: "Enter both a directory and a label." } });
+        return settle({ ...state, workspace: { ...workspaceOf(state), status: "loading", error: undefined } }, { type: "addWorkspace", cwd, label, returnToWizard: ov.returnToWizard });
+      }
+      const line = ov.focus === "cwd" ? ov.cwd : ov.label;
+      const edited = lineApplyKey(line, key);
+      if (!edited.handled) return settle(state);
+      return settle({ ...state, overlay: ov.focus === "cwd" ? { ...ov, cwd: edited.state } : { ...ov, label: edited.state } });
     }
 
     if (ov.kind === "confirmTargetLaunch") {
@@ -1165,6 +1305,12 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       if (ch === "t") return settle({ ...state, confirmQuit: false, overlay: { kind: "taskSetup", selected: taskSetupIndex(taskCapabilityOf(launchOf(state))) } });
       if (ch === "r") return settle({ ...state, confirmQuit: false, launch: resetTaskSetup(launchOf(state)) });
       if (ch === "w") return settle({ ...state, confirmQuit: false }, { type: "openLaunchWizard" });
+      if (ch === "g") {
+        return settle(
+          { ...state, confirmQuit: false, overlay: { kind: "workspacePicker", selected: 0, query: "", search: null, returnToWizard: false }, workspace: { ...workspaceOf(state), status: "loading", error: undefined } },
+          { type: "openWorkspacePicker", returnToWizard: false },
+        );
+      }
     }
 
     // Sessions panel actions (only on that tab): a attach · k kill · p prompt · r refrescar.
@@ -1238,7 +1384,10 @@ export function buildFrame(state: AppState, size: FrameSize, theme: Theme): stri
   frame.push(buildHairlineRow(theme, cols));
   frame.push(...buildMiddle(state, middleRect, theme));
   frame.push(hintBar({ hints: hintsForState(state) }, theme, cols));
-  frame.push(footer({ cwd: state.cwd, branch: state.branch, right: `ebrain ${EBRAIN_UI_VERSION}` }, theme, cols));
+  // The footer names the selected workspace, never the incidental shell cwd from which the
+  // TUI happened to start. A registered workspace can be different from the caller project.
+  const workspace = workspaceOf(state);
+  frame.push(footer({ cwd: workspaceDisplay(workspace.active, state.cwd), right: `ebrain ${EBRAIN_UI_VERSION}` }, theme, cols));
 
   // Defensive: guarantee exactly `rows` rows of exactly `cols` width regardless of
   // how the section arithmetic above landed.
@@ -1348,9 +1497,14 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
     return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
   }
 
-  if (overlay.kind === "wizardCwd") {
-    const width = Math.min(82, Math.max(36, cols - 6));
-    const box = buildWizardCwdBox(overlay, width, maxDialogHeight, theme);
+  if (overlay.kind === "workspacePicker") {
+    const width = Math.min(88, Math.max(48, cols - 6));
+    const box = buildWorkspacePickerBox(state, overlay, width, maxDialogHeight, theme);
+    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+  }
+  if (overlay.kind === "workspaceAdd") {
+    const width = Math.min(88, Math.max(48, cols - 6));
+    const box = buildWorkspaceAddBox(state, overlay, width, maxDialogHeight, theme);
     return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
   }
   if (overlay.kind === "confirmTargetLaunch" || overlay.kind === "confirmTargetGovernor") {
@@ -1478,21 +1632,85 @@ function buildTaskPromptBox(overlay: Extract<Overlay, { kind: "taskPrompt" }>, w
   }, theme).rows;
 }
 
-function buildWizardCwdBox(overlay: Extract<Overlay, { kind: "wizardCwd" }>, width: number, maxHeight: number, theme: Theme): string[] {
-  return responsiveDialog({
-    title: "launch directory",
-    focus: true,
-    width,
-    maxHeight,
-    scroll: overlay.scroll,
-    blocks: [
-      { kind: "paragraph", text: "Set the working directory for this reviewed launch. Client repositories are rejected before a session can start.", tone: "text.muted" },
-      { kind: "spacer" },
-      { kind: "input", value: overlay.line.text, cursor: overlay.line.cursor, placeholder: "working directory" },
-      { kind: "spacer" },
-      { kind: "actions", items: [{ key: "↑↓", label: "scroll" }, { key: "enter", label: "save" }, { key: "esc", label: "back", labelTone: "text.muted" }] },
-    ],
-  }, theme).rows;
+/** Keep the selected workspace and nearby matches visible without creating an unscrollable
+ * modal. Search controls the complete candidate list; this is only the visual window. */
+function workspaceWindow<T>(items: readonly T[], selected: number, limit = 5): { start: number; items: readonly T[] } {
+  if (items.length <= limit) return { start: 0, items };
+  const start = Math.max(0, Math.min(selected - Math.floor(limit / 2), items.length - limit));
+  return { start, items: items.slice(start, start + limit) };
+}
+
+function buildWorkspacePickerBox(state: AppState, overlay: Extract<Overlay, { kind: "workspacePicker" }>, width: number, maxHeight: number, theme: Theme): string[] {
+  if (overlay.search) {
+    return responsiveDialog({
+      title: "filter workspaces",
+      focus: true,
+      width,
+      maxHeight,
+      blocks: [
+        { kind: "paragraph", text: "Filter by workspace label or directory. This only narrows the local validated registry.", tone: "text.muted" },
+        { kind: "spacer" },
+        { kind: "input", value: overlay.search.text, cursor: overlay.search.cursor, placeholder: "workspace label or directory" },
+        { kind: "spacer" },
+        { kind: "actions", items: [{ key: "enter", label: "apply filter" }, { key: "esc", label: "back", labelTone: "text.muted" }] },
+      ],
+    }, theme).rows;
+  }
+
+  const all = filteredWorkspaces(state, overlay.query);
+  const selected = clampIndex(overlay.selected, all.length);
+  const window = workspaceWindow(all, selected);
+  const workspace = workspaceOf(state);
+  const blocks: DialogBlock[] = [
+    { kind: "paragraph", text: "Choose the validated directory for the next launch. Existing sessions keep their own directory. Client repositories are never selectable.", tone: "text.muted" },
+    { kind: "spacer" },
+  ];
+  if (overlay.query) blocks.push({ kind: "keyValue", key: "filter", value: overlay.query, keyTone: "accent.teal", valueTone: "text.secondary" });
+  if (workspace.status === "loading") blocks.push({ kind: "line", text: "Refreshing local workspace registry...", tone: "text.muted" });
+  if (workspace.error) blocks.push({ kind: "line", text: workspace.error, tone: "semantic.error" });
+  if (all.length === 0) {
+    blocks.push({ kind: "line", text: "No validated workspace matches. Add one or clear the filter.", tone: "text.secondary" });
+  } else {
+    if (window.start > 0) blocks.push({ kind: "line", text: `↑ ${window.start} earlier workspace${window.start === 1 ? "" : "s"}`, tone: "text.muted" });
+    window.items.forEach((candidate, index) => {
+      const absoluteIndex = window.start + index;
+      const active = absoluteIndex === selected;
+      const current = candidate.cwd === workspace.active.cwd;
+      blocks.push({ kind: "keyValue", key: `${active ? "▸" : " "} ${candidate.label}${current ? " (active)" : ""}`, value: candidate.cwd, keyTone: active ? "accent.teal" : "text.secondary", valueTone: active ? "text.primary" : "text.muted" });
+    });
+    const after = all.length - (window.start + window.items.length);
+    if (after > 0) blocks.push({ kind: "line", text: `↓ ${after} more workspace${after === 1 ? "" : "s"}`, tone: "text.muted" });
+  }
+  blocks.push(
+    { kind: "spacer" },
+    { kind: "actions", items: [
+      { key: "↑↓", label: "choose" },
+      { key: "enter", label: "select" },
+      { key: "s", label: "filter" },
+      { key: "a", label: "add" },
+      { key: "r", label: "refresh" },
+      { key: "esc", label: "cancel", labelTone: "text.muted" },
+    ] },
+  );
+  return responsiveDialog({ title: overlay.returnToWizard ? "guided launch workspace" : "launch workspace", focus: true, width, maxHeight, blocks }, theme).rows;
+}
+
+function buildWorkspaceAddBox(state: AppState, overlay: Extract<Overlay, { kind: "workspaceAdd" }>, width: number, maxHeight: number, theme: Theme): string[] {
+  const workspace = workspaceOf(state);
+  const blocks: DialogBlock[] = [
+    { kind: "paragraph", text: "Register a local directory for future launches. The directory must exist, resolve to a real directory, and pass the client-repository isolation check before it is stored.", tone: "text.muted" },
+    { kind: "spacer" },
+    { kind: "keyValue", key: `${overlay.focus === "cwd" ? "▸" : " "} directory`, value: overlay.focus === "cwd" ? "editing" : "", keyTone: overlay.focus === "cwd" ? "accent.teal" : "text.secondary", valueTone: "text.muted" },
+    { kind: "input", value: overlay.cwd.text, cursor: overlay.focus === "cwd" ? overlay.cwd.cursor : undefined, placeholder: "absolute or relative directory" },
+    { kind: "keyValue", key: `${overlay.focus === "label" ? "▸" : " "} label`, value: overlay.focus === "label" ? "editing" : "", keyTone: overlay.focus === "label" ? "accent.teal" : "text.secondary", valueTone: "text.muted" },
+    { kind: "input", value: overlay.label.text, cursor: overlay.focus === "label" ? overlay.label.cursor : undefined, placeholder: "short workspace label" },
+  ];
+  if (workspace.error) blocks.push({ kind: "line", text: workspace.error, tone: "semantic.error" });
+  blocks.push(
+    { kind: "spacer" },
+    { kind: "actions", items: [{ key: "tab", label: "field" }, { key: "enter", label: overlay.focus === "cwd" ? "next" : "add workspace" }, { key: "esc", label: "back", labelTone: "text.muted" }] },
+  );
+  return responsiveDialog({ title: "add workspace", focus: true, width, maxHeight, blocks }, theme).rows;
 }
 
 function wizardChoiceLabel(value: string, count: number, noun: string): string {
@@ -1512,7 +1730,7 @@ function wizardBlock(label: string, value: string, focused: boolean, count?: num
   };
 }
 
-/** Guided-launch dialog. Target, profile, capability and directory remain explicit
+/** Guided-launch dialog. Target, profile, capability and workspace remain explicit
  * user decisions. It renders the active value plus an honest count rather than a fake
  * arrow affordance when the local installation has only one choice. */
 function buildLaunchWizardBox(launch: LaunchSlice, width: number, maxHeight: number, theme: Theme): string[] {
@@ -1530,7 +1748,7 @@ function buildLaunchWizardBox(launch: LaunchSlice, width: number, maxHeight: num
     wizardBlock("target", target ? `${target.id} -- ${target.provider} / ${target.agent}` : "Unavailable", wizard.focus === "target", wizard.targets.length, "declared target"),
     wizardBlock("profile", profile ? `${profile.label} -- ${profile.provider} / ${profile.models} models` : "Unavailable", wizard.focus === "profile", wizard.profiles.profiles.length, "execution profile"),
     wizardBlock("capability", wizard.capability, wizard.focus === "capability", capabilities.length, "capability"),
-    wizardBlock("directory", wizard.cwd, wizard.focus === "cwd"),
+    wizardBlock("workspace", wizard.cwd, wizard.focus === "cwd"),
   ];
   if (wizard.plan) blocks.push({ kind: "line", text: `Preview ready -- ${wizard.plan.model} -- ${wizard.plan.costStatus}`, tone: "semantic.ok" });
   if (wizard.focus !== "cwd" && choices <= 1) {
@@ -1539,7 +1757,7 @@ function buildLaunchWizardBox(launch: LaunchSlice, width: number, maxHeight: num
   blocks.push({ kind: "spacer" }, { kind: "actions", items: [
     { key: "tab", label: "field" },
     ...(choices > 1 ? [{ key: "↑↓", label: "choose" }] : []),
-    { key: "c", label: "directory" },
+    { key: "c", label: "workspace" },
     { key: "enter", label: wizard.plan ? "review launch" : "preview" },
     { key: "esc", label: "cancel", labelTone: "text.muted" },
   ] });
@@ -1633,7 +1851,7 @@ function buildMiddle(state: AppState, rect: Rect, theme: Theme): string[] {
   let rows: string[];
   if (state.tab === "home") rows = buildOverviewView(overviewOf(state), sessionsOf(state), focused, rect, theme);
   else if (state.tab === "sessions") rows = buildSessionsView(sessionsOf(state), rect, theme);
-  else if (state.tab === "launch") rows = buildLaunchView(launchOf(state), focused, rect, theme);
+  else if (state.tab === "launch") rows = buildLaunchView(launchOf(state), workspaceOf(state).active, state.cwd, focused, rect, theme);
   else if (state.tab === "memory") rows = buildMemoryView(memoryOf(state), focused, rect, theme);
   else if (state.tab === "routing") rows = buildRoutingView(routingOf(state), rect, theme);
   else rows = buildDoctorView(doctorOf(state), focused, rect, theme);
@@ -1994,7 +2212,7 @@ function resetTaskSetup(launch: LaunchSlice): LaunchSlice {
   return applyTaskSetup(launch, "general", "");
 }
 
-function buildLaunchView(launch: LaunchSlice, focused: string, rect: Rect, theme: Theme): string[] {
+function buildLaunchView(launch: LaunchSlice, workspace: WorkspaceSelection, callerDisplayCwd: string, focused: string, rect: Rect, theme: Theme): string[] {
   const reset = theme.reset;
   const wizard = launch.wizard;
   const target = wizard ? selectedWizardTarget(wizard) : undefined;
@@ -2025,7 +2243,7 @@ function buildLaunchView(launch: LaunchSlice, focused: string, rect: Rect, theme
     }
     const selectedAgent = LAUNCHABLE[selected]!.agent;
     const body = [
-      theme.fg("text.muted") + "Start a direct local session in the current directory." + reset,
+      keyHint({ k: "g", label: "workspace" }, theme) + "  " + theme.fg("text.secondary") + truncate(workspaceDisplay(workspace, callerDisplayCwd), Math.max(0, contentW - 14)) + reset,
       ...grid,
       theme.fg("text.muted") + (launch.task ? "Task will be sent to " : "New session with ") + reset + theme.fg("text.primary") + selectedAgent + reset,
     ];
@@ -2043,7 +2261,7 @@ function buildLaunchView(launch: LaunchSlice, focused: string, rect: Rect, theme
     } else if (launch.status === "loading") {
       body.push(spinner({ label: "loading launch options", active: true, frame: 1 }, theme));
     } else {
-      body.push(theme.fg("text.muted") + "Choose target, profile, capability, and directory." + reset);
+      body.push(theme.fg("text.muted") + "Choose target, profile, capability, and workspace." + reset);
     }
     if (launch.status === "error") body.push(theme.fg("semantic.error") + truncate(launch.error ?? "guided launch unavailable", contentW) + reset);
     return panel({ title: "2 · guided launch", focus: focused === "guided", width: panelRect.width, height: panelRect.height, body }, theme);
@@ -2803,10 +3021,37 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       if (sel) void doPeek(sel.name);
     }
 
-    /** Launch `agent`: run the RAM governor (6.4.6); if it wants confirmation, open the
+    /** Resolve the selected workspace through the CLI immediately before a launch flow. A
+     * registered path may have been replaced since it was listed; this closes that TOCTOU gap
+     * before the independent sessions/targets deny-list performs its own final check. */
+    async function resolveLaunchWorkspace(): Promise<WorkspaceSelection | null> {
+      const workspace = workspaceOf(state);
+      const result = await validateWorkspace(workspace.active.cwd);
+      if (!result.ok) {
+        const launch = launchOf(state);
+        state = {
+          ...state,
+          workspace: { ...workspace, status: "error", error: "Selected workspace is unavailable." },
+          launch: { ...launch, status: "error", error: "Selected workspace is unavailable. Open the workspace picker and choose another directory." },
+        };
+        if (state.tab === "launch") render();
+        return null;
+      }
+      const canonical = result.data.cwd;
+      const current = !workspace.current.persistent && workspace.current.cwd === workspace.active.cwd
+        ? { ...workspace.current, cwd: canonical, validated: true }
+        : workspace.current;
+      const active = { ...workspace.active, cwd: canonical, validated: true };
+      state = { ...state, workspace: { ...workspace, current, active, status: "ready", error: undefined } };
+      return active;
+    }
+
+    /** Launch `agent`: resolve workspace then run the RAM governor (6.4.6); if it wants confirmation, open the
      * dialog; otherwise launch straight away. */
     async function doLaunch(agent: string, prompt: string): Promise<void> {
-      const cwd = callerCwd();
+      const workspace = await resolveLaunchWorkspace();
+      if (!workspace) return;
+      const cwd = workspace.cwd;
       const [cls, heavy] = await Promise.all([classOf(agent), countLiveHeavy()]);
       const g = governLaunch({ launchingClass: cls, liveHeavyCount: heavy, availableMb: readAvailableMb() });
       if (g.decision === "confirm") {
@@ -2992,10 +3237,68 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       if (state.tab === "routing") render();
     }
 
+    /** Refresh the store plus the non-persistent caller directory. `validate` deliberately does
+     * not read the registry, so one malformed local store never hides a safe current directory. */
+    async function openWorkspacePicker(returnToWizard: boolean): Promise<void> {
+      const before = workspaceOf(state);
+      const [registry, currentResult] = await Promise.all([fetchWorkspaces(), validateWorkspace(before.current.cwd)]);
+      const current = currentResult.ok
+        ? { ...before.current, cwd: currentResult.data.cwd, validated: true }
+        : { ...before.current, validated: false };
+      const active = !before.active.persistent && before.active.cwd === before.current.cwd ? current : before.active;
+      const error = !currentResult.ok
+        ? "Current directory is not available as a workspace."
+        : !registry.ok
+          ? "Workspace registry is unavailable. Current directory remains available."
+          : undefined;
+      state = {
+        ...state,
+        workspace: {
+          ...before,
+          current,
+          active,
+          data: registry.ok ? registry.data : before.data,
+          status: error ? "error" : "ready",
+          error,
+        },
+      };
+      // Keep an already-dismissed picker dismissed if a refresh resolves after Esc.
+      const overlay = state.overlay;
+      if (overlay?.kind === "workspacePicker" && overlay.returnToWizard === returnToWizard) {
+        const count = filteredWorkspaces(state, overlay.query).length;
+        state = { ...state, overlay: { ...overlay, selected: clampIndex(overlay.selected, count) } };
+      }
+      if (!disposed) render();
+    }
+
+    async function addLaunchWorkspace(cwd: string, label: string, returnToWizard: boolean): Promise<void> {
+      const result = await createWorkspace({ cwd, label });
+      if (!result.ok) {
+        const workspace = workspaceOf(state);
+        state = { ...state, workspace: { ...workspace, status: "error", error: "Workspace could not be added. Check the directory and label." } };
+        if (state.tab === "launch") render();
+        return;
+      }
+      // Re-read the strict store rather than constructing an optimistic registry in the TUI.
+      const registry = await fetchWorkspaces();
+      const workspace = workspaceOf(state);
+      const nextWorkspace: WorkspaceSlice = {
+        ...workspace,
+        data: registry.ok ? registry.data : workspace.data,
+        status: registry.ok ? "ready" : "error",
+        error: registry.ok ? undefined : "Workspace was added, but the registry could not be refreshed.",
+      };
+      const nextState = { ...state, workspace: nextWorkspace };
+      state = selectWorkspace(nextState, selectionFromRecord(result.data), returnToWizard);
+      if (state.tab === "launch") render();
+    }
+
     async function openLaunchWizard(): Promise<void> {
       const launch = launchOf(state);
       state = { ...state, launch: { ...launch, status: "loading", error: undefined } };
       if (state.tab === "launch") render();
+      const selectedWorkspace = await resolveLaunchWorkspace();
+      if (!selectedWorkspace) return;
       const [targets, profiles] = await Promise.all([fetchTargets(), fetchProfiles()]);
       const current = launchOf(state);
       if (!targets.ok || !profiles.ok || !profiles.data.initialized || profiles.data.profiles.length === 0 || targets.data.length === 0) {
@@ -3024,7 +3327,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
               targetSelected: 0,
               profileSelected: 0,
               capability: first.capabilities.includes(capability) ? capability : first.capabilities[0]!,
-              cwd: callerCwd(),
+              cwd: selectedWorkspace.cwd,
               focus: "target",
               plan: null,
             },
@@ -3208,6 +3511,8 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
           await performLaunch(effect.agent, effect.cwd, effect.reason, effect.prompt ?? "");
           break;
         case "openLaunchWizard": await openLaunchWizard(); break;
+        case "openWorkspacePicker": await openWorkspacePicker(effect.returnToWizard); break;
+        case "addWorkspace": await addLaunchWorkspace(effect.cwd, effect.label, effect.returnToWizard); break;
         case "initializeProfiles": await initializeLaunchProfiles(); break;
         case "planLaunchWizard": await planLaunchWizard(); break;
         case "requestTargetLaunch": await requestTargetLaunch(effect.plan, effect.intent); break;
@@ -3224,6 +3529,9 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
 
       screen.enter();
       render();
+      // Make the caller directory and registry available without forcing the user through a
+      // modal. Direct/guided launch revalidate again, so this is only UX warming, never trust.
+      void openWorkspacePicker(false);
       peekTimer = setInterval(peekTick, 1000); // Sessions peek refresh (self-gated ≤1Hz)
       void refreshStatus(); // home lands first — populate its live summary immediately
     } catch (err) {

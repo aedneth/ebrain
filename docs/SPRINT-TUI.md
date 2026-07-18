@@ -61,9 +61,12 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
   transition remains intact. **Verify:** Launch reducer/geometry/exact-prompt/no-accidental-launch
   regressions; TUI `414 pass / 0 fail`; CLI `218 pass / 0 fail`; real 80x24 tmux captures of the
   compact Launch, category guide, and singleton wizard.
-- [ ] 7.3 **Workspace registry + picker:** CLI-first, canonical realpath validation, client deny
-  enforcement, and launch cwd snapshots across multiple registered workspaces. **Verify:**
-  temp-dir contract tests plus fake-agent tmux E2E with two different cwd values.
+- [x] 7.3 **Workspace registry + picker:** CLI-first, canonical realpath validation, client deny
+  enforcement, and launch cwd snapshots across multiple registered workspaces. `[g]` opens a
+  searchable picker; `a` opens the explicit directory/label form; Guided Launch reuses the same
+  validated picker and no longer accepts a free-form cwd. **Verify:** temp-dir strict-store tests,
+  pure reducer/render tests at 80x24/100x30/160x48, and fake-agent tmux E2E with two distinct cwd
+  values. Full-suite evidence is recorded in `HANDOFF-BACK.md`.
 - [ ] 7.4 **Global entry point:** bare `ebrain` opens the TUI only on a real TTY; `ebrain ui` and
   non-TTY help remain compatible. **Verify:** dispatcher invocation-matrix tests.
 - [ ] 7.5 **Product gate:** full independent audit plus real tmux captures at compact and wide

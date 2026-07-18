@@ -4,6 +4,27 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-17 -- Validated multi-workspace Launch
+
+- **Workspace registry:** added `ebrain workspaces list|validate|add|rename|remove`, a strict
+  local schema that persists only generated IDs, labels, and canonical directories. Each read and
+  write revalidates `realpath`, rejects duplicates, missing/non-directory paths, and literal or
+  symlinked client repositories; the directory and store file use private modes.
+- **Low-friction picker:** Launch now has `[g] workspace`. Its searchable picker exposes the
+  validated caller directory plus registered workspaces, can register a directory through an
+  explicit two-field dialog, and shows the active workspace in both Launch and the footer. It is
+  a structured control-plane surface, not an internal shell or command runner.
+- **Launch integrity:** direct sessions validate the active workspace immediately before the RAM
+  gate, and Guided Launch validates it before opening then reuses the same picker for its workspace
+  field. Existing sessions retain their original cwd; selecting another workspace only affects a
+  later launch. The previous free-form wizard directory path is removed.
+- **Verification:** registry contracts cover strict schema, canonicalization, duplicate rejection,
+  private atomic persistence, and literal/symlink client denial. A real tmux fake-agent E2E starts
+  two sessions from separate registered directories and verifies each recorded cwd; responsive
+  picker/add-dialog render tests cover 80x24, 100x30, and 160x48.
+
+---
+
 ## 2026-07-17 -- Manual-first Launch and deterministic Task Setup
 
 - **Visual hierarchy:** Launch is now tab `2` and Sessions tab `3`. Manual Agents is the primary

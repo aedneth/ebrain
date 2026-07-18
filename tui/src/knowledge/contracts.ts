@@ -359,14 +359,34 @@ export function parseTaskProfile(j: unknown): TaskProfileData | null {
 export interface WorkspaceData { id: string; label: string; cwd: string }
 export interface WorkspacesData { schemaVersion: 1; workspaces: WorkspaceData[] }
 
+function parseWorkspaceData(value: unknown): WorkspaceData | null {
+  if (!isObj(value)) return null;
+  const id = asStr(value.id);
+  const label = scrubSecrets(asStr(value.label));
+  const cwd = scrubSecrets(asStr(value.cwd));
+  return id && label && cwd.startsWith("/") ? { id, label, cwd } : null;
+}
+
 /** TUI consumes the registry only through the CLI contract. Scrub labels and paths at the
  * subprocess boundary just like search results, even though the registry itself rejects secrets. */
 export function parseWorkspaces(j: unknown): WorkspacesData | null {
   if (!isObj(j) || j.schema_version !== 1 || !Array.isArray(j.workspaces)) return null;
-  const workspaces = j.workspaces.filter(isObj).map((workspace) => ({
-    id: asStr(workspace.id), label: scrubSecrets(asStr(workspace.label)), cwd: scrubSecrets(asStr(workspace.cwd)),
-  })).filter((workspace) => Boolean(workspace.id && workspace.label && workspace.cwd.startsWith("/")));
+  const workspaces = j.workspaces.map(parseWorkspaceData).filter((workspace): workspace is WorkspaceData => workspace !== null);
+  if (workspaces.length !== j.workspaces.length) return null;
   return { schemaVersion: 1, workspaces };
+}
+
+/** `workspaces validate` returns only the canonical, validated directory. */
+export function parseWorkspaceValidation(j: unknown): { cwd: string } | null {
+  if (!isObj(j) || j.ok !== true) return null;
+  const cwd = scrubSecrets(asStr(j.cwd));
+  return cwd.startsWith("/") ? { cwd } : null;
+}
+
+/** `workspaces add` returns the stored record after the CLI has canonicalized it. */
+export function parseWorkspaceMutation(j: unknown): WorkspaceData | null {
+  if (!isObj(j) || j.ok !== true) return null;
+  return parseWorkspaceData(j.workspace);
 }
 
 export interface ProfileSummaryData {

@@ -23,6 +23,9 @@ import {
   parseWorkflowRun,
   parseCost,
   parseSearch,
+  parseWorkspaces,
+  parseWorkspaceValidation,
+  parseWorkspaceMutation,
 } from "../../src/knowledge/contracts.ts";
 
 describe("parseStatus (status --json)", () => {
@@ -191,6 +194,23 @@ describe("parseTaskProfile / parseRouteRun", () => {
     expect(d.tokensIn).toBe(10);
     expect(d.estimated).toBe(false);
     expect(d.content).toBe("ok");
+  });
+});
+
+describe("workspace registry contracts", () => {
+  test("accepts a complete schema-v1 registry and rejects malformed rows", () => {
+    expect(parseWorkspaces({ schema_version: 1, workspaces: [{ id: "my-project", label: "My Project", cwd: "/tmp/project" }] }))
+      .toEqual({ schemaVersion: 1, workspaces: [{ id: "my-project", label: "My Project", cwd: "/tmp/project" }] });
+    expect(parseWorkspaces({ schema_version: 1, workspaces: [{ id: "bad", label: "Bad", cwd: "relative" }] })).toBeNull();
+    expect(parseWorkspaces({ schema_version: 2, workspaces: [] })).toBeNull();
+  });
+
+  test("accepts only canonical validation and mutation output shapes", () => {
+    expect(parseWorkspaceValidation({ ok: true, cwd: "/tmp/project" })).toEqual({ cwd: "/tmp/project" });
+    expect(parseWorkspaceValidation({ ok: true, cwd: "relative" })).toBeNull();
+    expect(parseWorkspaceMutation({ ok: true, workspace: { id: "project", label: "Project", cwd: "/tmp/project" } }))
+      .toEqual({ id: "project", label: "Project", cwd: "/tmp/project" });
+    expect(parseWorkspaceMutation({ ok: true, workspace: { label: "missing" } })).toBeNull();
   });
 });
 

@@ -34,7 +34,7 @@ export type DialogBlock =
   /** Preserve user-entered line breaks and spacing while wrapping at cell boundaries. */
   | { kind: "pre"; text: string; tone?: ColorRole; bold?: boolean }
   /** A single-line editor rendered as wrapped content so its complete value stays inspectable. */
-  | { kind: "input"; value: string; cursor: number; placeholder: string; tone?: ColorRole }
+  | { kind: "input"; value: string; cursor?: number; placeholder: string; tone?: ColorRole }
   | { kind: "keyValue"; key: string; value: string; keyTone?: ColorRole; valueTone?: ColorRole }
   | { kind: "actions"; items: DialogAction[] }
   | { kind: "spacer" };
@@ -147,10 +147,11 @@ function textLines(text: string, width: number, theme: Theme, tone?: ColorRole, 
 }
 
 function inputLines(block: Extract<DialogBlock, { kind: "input" }>, width: number, theme: Theme): string[] {
-  const cursor = Math.max(0, Math.min(block.cursor, block.value.length));
+  const focused = block.cursor !== undefined;
+  const cursor = Math.max(0, Math.min(block.cursor ?? 0, block.value.length));
   const text = block.value.length > 0
-    ? block.value.slice(0, cursor) + "▏" + block.value.slice(cursor)
-    : block.placeholder + "▏";
+    ? focused ? block.value.slice(0, cursor) + "▏" + block.value.slice(cursor) : block.value
+    : focused ? block.placeholder + "▏" : block.placeholder;
   const tone = block.value.length > 0 ? block.tone ?? "text.primary" : "text.muted";
   return wrapDialogText(text, width).map((line) => styled(line, theme, tone));
 }
