@@ -195,9 +195,11 @@ discovery gate. It is not silently smuggled into the workspace program.
 ### F7.1 -- Responsive dialog foundation
 
 - Add the pure responsive dialog layout primitive and semantic content descriptors.
-- Migrate all existing modal renderers without changing their side effects or confirmation keys.
-- Add render-matrix and keyboard-scroll tests. Verify every row exact-width and no explanatory
-  string is silently clipped at supported terminal sizes.
+- Migrate read-only and confirmation modal renderers without changing their side effects or
+  confirmation keys. Rebuilt interactive overlays adopt it in their owning F7.2/F7.3 phases so
+  selection and editor keys are never accidentally hijacked by generic scrolling.
+- Add render-matrix and keyboard-scroll tests. Verify every migrated row exact-width and no
+  explanatory string is silently clipped at supported terminal sizes.
 - Gate: full TUI suite, `git diff --check`, zero-hex scan, real 80x24 and wide tmux captures.
 
 ### F7.2 -- Launch hierarchy and task setup

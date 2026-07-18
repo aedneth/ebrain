@@ -46,12 +46,13 @@ import {
   toItems,
 } from "./palette.js";
 import { commandPalette } from "./widgets/input/commandpalette.js";
-import { renderHelp, type HelpContext } from "./help.js";
+import { renderHelpLayout, type HelpContext } from "./help.js";
 
 import { scrolllist } from "./widgets/data/scrolllist.js";
 import { terminalPeek } from "./widgets/layout/terminalpeek.js";
 import { badge } from "./widgets/core/badge.js";
-import { confirm } from "./widgets/dialog/confirm.js";
+import { confirmLayout } from "./widgets/dialog/confirm.js";
+import { responsiveDialog } from "./widgets/dialog/responsive.js";
 import { promptBox } from "./widgets/input/promptbox.js";
 import { table } from "./widgets/data/table.js";
 import { spinner } from "./widgets/core/spinner.js";
@@ -290,7 +291,7 @@ function doctorOf(state: AppState): DoctorSlice {
 /** A transient modal overlay composited over the base view. palette/help (6.3.4/6.3.5);
  * confirmKill/prompt are the Sessions panel's `k`/`p` actions (6.4.3); remember is the
  * Memory panel's `r` action (6.5.2). */
-export type Overlay =
+export type Overlay = { scroll?: number } & (
   | { kind: "palette"; palette: PaletteState }
   | { kind: "help" }
   | { kind: "confirmKill"; name: string }
@@ -308,7 +309,8 @@ export type Overlay =
   | { kind: "remember"; line: LineState }
   | { kind: "memorySearch"; line: LineState }
   /** Read-only drill-in detail (Enter on a memory/check) — a titled, word-wrapped modal. */
-  | { kind: "detail"; title: string; body: string };
+  | { kind: "detail"; title: string; body: string }
+);
 
 export interface LaunchSlice {
   selected: number;
@@ -567,6 +569,14 @@ function runCommand(state: AppState, command: Command): ReduceResult {
 
 function settle(state: AppState, effect?: AppEffect): ReduceResult {
   return { state, quit: false, forceRedraw: false, effect };
+}
+
+/** Read-only dialogs and confirmation copy can be taller than a compact terminal. The renderer
+ * clamps the offset against its semantic content; the reducer deliberately needs no frame size. */
+function scrollDialog(state: AppState, overlay: Overlay, key: Key): ReduceResult | null {
+  const delta = key.name === "up" || key.name === "left" ? -1 : key.name === "down" || key.name === "right" ? 1 : 0;
+  if (delta === 0) return null;
+  return settle({ ...state, overlay: { ...overlay, scroll: Math.max(0, (overlay.scroll ?? 0) + delta) } });
 }
 
 /** Clamp `i` into [0, count-1] (count>0 assumed by callers). */
@@ -870,6 +880,8 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       ) {
         return settle({ ...state, overlay: null });
       }
+      const scrolled = scrollDialog(state, ov, key);
+      if (scrolled) return scrolled;
       return settle(state);
     }
 
@@ -878,6 +890,8 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       if (key.name === "escape" || key.name === "enter" || (key.name === "char" && key.char === "q")) {
         return settle({ ...state, overlay: null });
       }
+      const scrolled = scrollDialog(state, ov, key);
+      if (scrolled) return scrolled;
       return settle(state);
     }
 
@@ -893,6 +907,8 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       ) {
         return settle({ ...state, overlay: null });
       }
+      const scrolled = scrollDialog(state, ov, key);
+      if (scrolled) return scrolled;
       return settle(state);
     }
 
@@ -913,6 +929,8 @@ export function reduce(state: AppState, key: Key): ReduceResult {
       ) {
         return settle({ ...state, overlay: null });
       }
+      const scrolled = scrollDialog(state, ov, key);
+      if (scrolled) return scrolled;
       return settle(state);
     }
 
@@ -977,22 +995,30 @@ export function reduce(state: AppState, key: Key): ReduceResult {
     if (ov.kind === "confirmTargetLaunch") {
       if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "requestTargetLaunch", plan: ov.plan, intent: ov.intent });
       if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: wizardOf(launchOf(state)) ? { kind: "launchWizard" } : null });
+      const scrolled = scrollDialog(state, ov, key);
+      if (scrolled) return scrolled;
       return settle(state);
     }
     if (ov.kind === "confirmTargetGovernor") {
       if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "launchTarget", plan: ov.plan, intent: ov.intent, reason: ov.reason });
       if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: wizardOf(launchOf(state)) ? { kind: "launchWizard" } : null });
+      const scrolled = scrollDialog(state, ov, key);
+      if (scrolled) return scrolled;
       return settle(state);
     }
     if (ov.kind === "confirmProfilesInit") {
       if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "initializeProfiles" });
       if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: null });
+      const scrolled = scrollDialog(state, ov, key);
+      if (scrolled) return scrolled;
       return settle(state);
     }
 
     if (ov.kind === "confirmSend") {
       if (key.name === "char" && (key.char === "y" || key.char === "Y")) return settle({ ...state, overlay: null }, { type: "send", name: ov.name, text: ov.text });
       if (key.name === "escape" || (key.name === "char" && /[nNq]/.test(key.char))) return settle({ ...state, overlay: null });
+      const scrolled = scrollDialog(state, ov, key);
+      if (scrolled) return scrolled;
       return settle(state);
     }
 
@@ -1206,6 +1232,7 @@ export function buildFrame(state: AppState, size: FrameSize, theme: Theme): stri
 // ---------------------------------------------------------------------------
 
 function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: number, theme: Theme): { box: string[]; top: number; left: number } {
+  const maxDialogHeight = Math.max(6, rows - 4);
   if (overlay.kind === "palette") {
     const width = Math.min(64, Math.max(20, cols - 4));
     const maxItems = Math.max(1, rows - 8);
@@ -1219,7 +1246,7 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
 
   if (overlay.kind === "confirmKill") {
     const width = Math.min(52, Math.max(30, cols - 8));
-    const box = confirm(
+    const box = confirmLayout(
       {
         title: "kill session",
         message: `kill ${overlay.name}? this cannot be undone.`,
@@ -1229,9 +1256,11 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
         cancelKey: "n",
         cancelLabel: "cancel",
         width,
+        maxHeight: maxDialogHeight,
+        scroll: overlay.scroll,
       },
       theme,
-    );
+    ).rows;
     const left = Math.max(0, Math.floor((cols - width) / 2));
     const top = Math.max(0, Math.floor((rows - box.length) / 2));
     return { box, top, left };
@@ -1239,7 +1268,7 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
 
   if (overlay.kind === "confirmLaunch") {
     const width = Math.min(80, Math.max(40, cols - 6));
-    const box = confirm(
+    const box = confirmLayout(
       {
         title: "RAM governor",
         message: overlay.reason,
@@ -1249,9 +1278,11 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
         cancelKey: "n",
         cancelLabel: "cancel",
         width,
+        maxHeight: maxDialogHeight,
+        scroll: overlay.scroll,
       },
       theme,
-    );
+    ).rows;
     const left = Math.max(0, Math.floor((cols - width) / 2));
     const top = Math.max(0, Math.floor((rows - box.length) / 2));
     return { box, top, left };
@@ -1267,7 +1298,7 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
 
   if (overlay.kind === "confirmSend") {
     const width = Math.min(84, Math.max(44, cols - 6));
-    const box = buildSendPreviewBox(overlay, width, theme);
+    const box = buildSendPreviewBox(overlay, width, maxDialogHeight, theme);
     return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
   }
 
@@ -1305,12 +1336,12 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
     const wfLine = overlay.intent.workflowId ? `workflow: ${overlay.intent.workflowId}` : "";
     const head = governor ? overlay.reason : `${plan.target} · ${plan.profile} · ${plan.model} · ${plan.costStatus}`;
     const message = [head, taskLine, wfLine].filter(Boolean).join("\n");
-    const box = confirm({ title: governor ? "RAM governor" : "launch target", message, danger: governor, confirmKey: "y", confirmLabel: governor ? "launch anyway" : "launch", cancelKey: "n", cancelLabel: "cancel", width }, theme);
+    const box = confirmLayout({ title: governor ? "RAM governor" : "launch target", message, danger: governor, confirmKey: "y", confirmLabel: governor ? "launch anyway" : "launch", cancelKey: "n", cancelLabel: "cancel", width, maxHeight: maxDialogHeight, scroll: overlay.scroll }, theme).rows;
     return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
   }
   if (overlay.kind === "confirmProfilesInit") {
     const width = Math.min(84, Math.max(44, cols - 6));
-    const box = confirm({ title: "Initialize execution profile", message: "Create a local profile from existing ebrain routing? No provider call or credential is stored.", danger: false, confirmKey: "y", confirmLabel: "initialize", cancelKey: "n", cancelLabel: "cancel", width }, theme);
+    const box = confirmLayout({ title: "Initialize execution profile", message: "Create a local profile from existing ebrain routing? No provider call or credential is stored.", danger: false, confirmKey: "y", confirmLabel: "initialize", cancelKey: "n", cancelLabel: "cancel", width, maxHeight: maxDialogHeight, scroll: overlay.scroll }, theme).rows;
     return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
   }
 
@@ -1331,7 +1362,7 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
 
   if (overlay.kind === "detail") {
     const width = Math.min(76, Math.max(36, cols - 8));
-    const box = buildDetailBox(overlay, width, theme);
+    const box = buildDetailBox(overlay, width, maxDialogHeight, theme);
     const left = Math.max(0, Math.floor((cols - width) / 2));
     const top = Math.max(0, Math.floor((rows - box.length) / 2));
     return { box, top, left };
@@ -1340,7 +1371,7 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
   // help (fallthrough): `?` is a focused action reference, while direct unit
   // callers can still render the full command registry without a context.
   const width = Math.min(66, Math.max(20, cols - 4));
-  const box = renderHelp(theme, COMMANDS, width, actionReferenceFor(state));
+  const box = renderHelpLayout(theme, COMMANDS, width, actionReferenceFor(state), maxDialogHeight, overlay.scroll).rows;
   const left = Math.max(0, Math.floor((cols - width) / 2));
   const top = Math.max(0, Math.floor((rows - box.length) / 2));
   return { box, top, left };
@@ -1362,13 +1393,21 @@ function buildPromptBox(overlay: Extract<Overlay, { kind: "prompt" }>, width: nu
   );
 }
 
-function buildSendPreviewBox(overlay: Extract<Overlay, { kind: "confirmSend" }>, width: number, theme: Theme): string[] {
+function buildSendPreviewBox(overlay: Extract<Overlay, { kind: "confirmSend" }>, width: number, maxHeight: number, theme: Theme): string[] {
   const target = overlay.name.startsWith("ebr-") ? overlay.name.slice(4) : overlay.name;
-  const content = overlay.text.split("\n").slice(0, 6).map((line) => theme.fg("text.primary") + truncate(line || " ", width - 6) + theme.reset);
-  if (overlay.text.split("\n").length > content.length) content.push(theme.fg("text.muted") + "…" + theme.reset);
-  content.push(theme.fg("text.muted") + "exact payload · not saved" + theme.reset);
-  content.push(theme.fg("accent.teal") + "[y] send" + theme.reset + theme.fg("text.muted") + "   [n] cancel" + theme.reset);
-  return panel({ title: `review prompt → ${target}`, dialog: true, focus: true, width, height: content.length + 2, body: content }, theme);
+  return responsiveDialog({
+    title: `review prompt → ${target}`,
+    focus: true,
+    width,
+    maxHeight,
+    scroll: overlay.scroll,
+    blocks: [
+      { kind: "pre", text: overlay.text, tone: "text.primary" },
+      { kind: "spacer" },
+      { kind: "line", text: "Exact payload · not saved", tone: "text.muted" },
+      { kind: "actions", items: [{ key: "y", label: "send" }, { key: "n", label: "cancel", tone: "text.primary", labelTone: "text.muted" }] },
+    ],
+  }, theme).rows;
 }
 
 function buildLaunchTaskBox(overlay: Extract<Overlay, { kind: "launchTask" }>, width: number, theme: Theme): string[] {
@@ -1460,35 +1499,21 @@ function buildLaunchWizardBox(launch: LaunchSlice, width: number, theme: Theme):
   return panel({ title: "guided launch", dialog: true, focus: true, width, height: body.length + 2, body }, theme);
 }
 
-/** Word-wrap `text` into lines of at most `width` display cells (plain text — the
- * detail modal body carries no ANSI). */
-function wrapText(text: string, width: number): string[] {
-  const words = text.replace(/\s+/g, " ").trim().split(" ");
-  const lines: string[] = [];
-  let line = "";
-  for (const w of words) {
-    if (line.length === 0) line = w;
-    else if (displayWidth(line) + 1 + displayWidth(w) <= width) line += " " + w;
-    else {
-      lines.push(line);
-      line = w;
-    }
-  }
-  if (line.length > 0) lines.push(line);
-  return lines.length > 0 ? lines : [""];
-}
-
 /** Read-only detail modal (Enter drill-in): a teal-bordered dialog with the title and a
  * word-wrapped body, capped in height so it never overflows the screen. */
-function buildDetailBox(overlay: Extract<Overlay, { kind: "detail" }>, width: number, theme: Theme): string[] {
-  const inner = Math.max(0, width - 4);
-  const wrapped = wrapText(overlay.body, inner).slice(0, 12);
-  const body = [
-    ...wrapped.map((l) => theme.fg("text.primary") + l + theme.reset),
-    "",
-    theme.fg("text.muted") + "esc close" + theme.reset,
-  ];
-  return panel({ title: overlay.title, dialog: true, focus: true, width, height: body.length + 2, body }, theme);
+function buildDetailBox(overlay: Extract<Overlay, { kind: "detail" }>, width: number, maxHeight: number, theme: Theme): string[] {
+  return responsiveDialog({
+    title: overlay.title,
+    focus: true,
+    width,
+    maxHeight,
+    scroll: overlay.scroll,
+    blocks: [
+      { kind: "paragraph", text: overlay.body, tone: "text.primary" },
+      { kind: "spacer" },
+      { kind: "line", text: "esc close", tone: "text.muted" },
+    ],
+  }, theme).rows;
 }
 
 /** Remember overlay box: a PromptBox wrapped in a titled dialog panel. Writes to

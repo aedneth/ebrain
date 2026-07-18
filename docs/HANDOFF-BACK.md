@@ -5,7 +5,7 @@ from: Codex (maker/constructor)
 to: Opus (Claude Code, auditor) + Fable 5 (gate)
 created: 2026-07-14
 updated: 2026-07-17
-status: F7 workspace-first Launch plan complete; implementation pending
+status: F7.1 responsive dialog foundation complete; F7.2 Launch hierarchy and Task Setup next
 scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX + workflow/cost loop + launch UX polish + F7 planning
 ---
 
@@ -65,10 +65,10 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 
 ### Exact next action
 
-Start **F7.1 Responsive Dialog Foundation** in a fresh maker pass. Build the pure semantic dialog
-layout and scroll model first, with a test matrix for every existing overlay at 80x24, 100x30, and
-160x48. Do not touch Launch hierarchy or workspace persistence until that primitive and its visual
-captures are green.
+Continue with **F7.2 Launch Hierarchy and Task Setup**. Make Manual Agents the primary focused
+panel, change the visible concept from automatic signals to explicit task categories plus an
+optional prompt, and make reset/singleton affordances truthful. Do not begin workspace persistence
+until the F7.2 reducer, geometry, exact-prompt and no-accidental-launch tests are green.
 
 ### What the later checker must audit
 
@@ -79,6 +79,47 @@ captures are green.
   or tmux launch; no registry field can carry a command, environment, credential, or prompt.
 - Bare `ebrain` remains non-interactive under non-TTY invocation and `ebrain ui` stays compatible.
 - Final visual captures cover compact and wide terminal sizes. This plan itself is not an audit pass.
+
+## 2026-07-17 — F7.1 responsive dialog foundation complete
+
+### What changed
+
+- Added [`tui/src/widgets/dialog/responsive.ts`](../tui/src/widgets/dialog/responsive.ts), a pure
+  semantic modal renderer. It wraps prose before ANSI styling, preserves preformatted prompt text,
+  computes a capped viewport, reports a clamped scroll position, and never relies on `panel()`'s
+  dense-row truncation for explanatory content.
+- Migrated help/action references, read-only details, all confirmation paths, target launch review,
+  profile initialization, and session prompt review. Long dialogs show `[up/down] scroll` plus the
+  visible range. Generic arrows are routed only after each overlay's own safety/selection keys;
+  confirmations remain `y`-only.
+- The session prompt preview now retains the exact complete payload in the viewport rather than
+  showing the previous six-line summary. It remains review-only until `y`; no prompt is persisted.
+- Interactive editors and selection dialogs are deliberately not force-migrated: F7.2 rebuilds the
+  Launch wizard/Task Setup and F7.3 builds the workspace picker. This avoids giving a generic
+  scroller ownership of keys currently needed by a cursor or selector.
+
+### Verification performed
+
+- Focused dialog/help/session integration: **33 pass / 0 fail**.
+- Full TUI suite: **409 pass / 0 fail** (35 files, 1,878 expectations).
+- Full CLI suite: **218 pass / 0 fail** (23 files, 603 expectations).
+- `git diff --check` clean; zero-hex scan outside `tui/src/theme.ts` clean.
+- Real tmux renders inspected at **80x24** and **160x48** with the contextual action dialog:
+  centered square contour, no overflow, and an intact underlying frame.
+
+### Durable implementation note
+
+- `ResponsiveDialog` accepts semantic blocks rather than ANSI-composed strings. This is required
+  to wrap long paths, identifiers and action labels without losing cells or corrupting display
+  widths. Dashboard panels deliberately keep their existing dense truncation behavior.
+- Ran `ebrain remember` for that rule. The local record was written, but the command emitted the
+  known MCP write-through warning, so its cross-agent searchability is not claimed.
+
+### Next action
+
+Implement **F7.2** according to `ULTRAPLAN-LAUNCH-WORKSPACES.md`: primary Manual Agents geometry,
+explicit Task Setup, truthful singleton wizard fields, `r` reset, and the existing automatic
+post-launch transition to Sessions. Then run the scoped and full suites before committing.
 
 ## 2026-07-17 — Launch UX polish complete
 

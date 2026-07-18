@@ -147,6 +147,19 @@ describe("reduce — sessions nav & actions emit effects (pure, no tmux)", () =>
     expect(sent.state.overlay).toBeNull();
   });
 
+  test("a long prompt review is scrollable at 80x24 and still sends only after y", () => {
+    const text = "A detailed prompt line that remains reviewable on a compact terminal.\n".repeat(24);
+    const review: AppState = { ...base, overlay: { kind: "confirmSend", name: "ebr-claude-korvex", text } };
+    const compact = { cols: 80, rows: 24 };
+    const frame = buildFrame(review, compact, t).map(strip).join("\n");
+    expect(frame).toContain("[↑↓] scroll");
+    for (const row of buildFrame(review, compact, t)) expect(displayWidth(row)).toBe(compact.cols);
+
+    const scrolled = reduce(review, { name: "down" });
+    expect(scrolled.state.overlay).toMatchObject({ kind: "confirmSend", scroll: 1 });
+    expect(reduce(scrolled.state, parseKey("y")).effect).toEqual({ type: "send", name: "ebr-claude-korvex", text });
+  });
+
   test("prompt composer preserves multiline paste and does not persist it in session state", () => {
     const opened = reduce(base, parseKey("p")).state;
     const pasted = reduce(opened, { name: "paste", text: "first line\nsecond line" }).state;

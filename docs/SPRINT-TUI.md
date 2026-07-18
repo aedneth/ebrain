@@ -50,9 +50,11 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
   affordance rather than a reducer failure. Defined Task Setup as an explicit user capability
   preset, not an automatic profile mutation. **Verify:** reducer/render/session/ADR review plus
   baseline `bun test ./tui/test/` = 403 pass / 0 fail.
-- [ ] 7.1 **Responsive dialogs:** semantic wrapped dialog foundation, viewport scrolling, and
-  migration of every overlay. **Verify:** overlay matrix at 80x24, 100x30 and 160x48 with no
-  silently clipped explanatory content.
+- [x] 7.1 **Responsive dialogs:** semantic wrapped dialog foundation and viewport scrolling for
+  read-only/confirmation overlays (help, details, confirmations, target review, profile setup,
+  and exact session-prompt review). Input and selection overlays retain their key ownership until
+  the F7.2/F7.3 rebuilds. **Verify:** focused integration `33 pass / 0 fail`; full TUI
+  `409 pass / 0 fail`; CLI `218 pass / 0 fail`; exact-width, no-hex, and diff checks clean.
 - [ ] 7.2 **Launch hierarchy + Task Setup:** Manual Agents primary at left; Guided Launch
   upper-right; deterministic category/prompt setup lower-right; singleton affordances; `r` reset;
   preserve post-launch Sessions transition. **Verify:** reducer, geometry, exact-prompt, and
