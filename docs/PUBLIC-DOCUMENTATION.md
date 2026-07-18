@@ -53,6 +53,10 @@ remain outside this navigation and are not implicitly public-safe.
 ## Reference
 
 - [CLI reference](reference/cli.md)
+- [Diagnostics reference](reference/diagnostics.md)
+- [Memory commands reference](reference/memory-commands.md)
+- [Workspace and session commands reference](reference/session-commands.md)
+- [Routing and cost commands reference](reference/routing-commands.md)
 - [TUI reference](reference/tui.md)
 - [MCP reference](reference/mcp.md)
 - [Configuration reference](reference/configuration.md)

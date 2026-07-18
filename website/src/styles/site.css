@@ -13,7 +13,7 @@
   --violet: #a78bfa;
   --danger: #f87171;
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  --sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --sans: ui-sans-serif, system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -116,18 +116,19 @@ button, input { font: inherit; }
 [data-tooltip]:hover::after, [data-tooltip]:focus-visible::after { display: block; }
 
 .home { max-width: 1280px; margin: 0 auto; padding: 56px 32px 0; }
-.home-intro { display: grid; grid-template-columns: minmax(300px, 0.82fr) minmax(0, 1.18fr); align-items: center; gap: 48px; padding-bottom: 64px; }
+.home-intro { display: block; padding-bottom: 64px; }
 .eyebrow { margin: 0 0 8px; color: var(--teal); font-family: var(--mono); font-size: 12px; letter-spacing: 0; text-transform: uppercase; }
 h1, h2, h3 { color: var(--text); font-family: var(--mono); font-weight: 600; letter-spacing: 0; line-height: 1.18; }
 h1 { margin: 0; font-size: clamp(42px, 6vw, 70px); }
 h2 { margin: 0; font-size: clamp(27px, 3vw, 38px); }
 h3 { margin: 0; font-size: 18px; }
+.home-intro__copy { max-width: 720px; }
 .home-intro__lede { margin: 16px 0 10px; color: var(--text); font-size: 21px; line-height: 1.35; }
-.home-intro__copy > p:not(.eyebrow):not(.home-intro__lede) { margin: 0; max-width: 560px; color: var(--text-muted); }
+.home-intro__copy > p:not(.eyebrow):not(.home-intro__lede) { margin: 0; max-width: 640px; color: var(--text-muted); }
 .home-intro__links { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 26px; }
 .home-intro__links a { display: inline-flex; align-items: center; gap: 7px; color: var(--teal); font-family: var(--mono); }
-.terminal-figure { margin: 0; }
-.terminal-figure img { display: block; width: 100%; border: 1px solid var(--teal); }
+.terminal-figure { max-width: 1040px; margin: 34px 0 0; }
+.terminal-figure img { display: block; width: 100%; height: auto; border: 1px solid var(--teal); }
 .terminal-figure figcaption { margin-top: 8px; color: var(--text-faint); font-family: var(--mono); font-size: 12px; }
 
 .local-proof, .docs-paths, .docs-catalog { border-top: 1px solid var(--line-soft); padding: 52px 0; }
@@ -244,7 +245,7 @@ kbd { padding: 1px 4px; border: 1px solid var(--line); border-radius: 3px; color
   .brand img { width: 128px; height: auto; }
   .primary-nav { display: none; }
   .home { padding: 36px 20px 0; }
-  .home-intro { grid-template-columns: 1fr; gap: 28px; padding-bottom: 42px; }
+  .home-intro { padding-bottom: 42px; }
   h1 { font-size: 46px; }
   .home-intro__lede { font-size: 19px; }
   .local-proof { grid-template-columns: 1fr; gap: 18px; }

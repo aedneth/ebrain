@@ -38,7 +38,7 @@ for (const file of walk(DIST).filter((path) => path.endsWith(".html") || path.en
   for (const match of text.matchAll(HTML_LINK)) {
     const target = match[1] ?? "";
     if (!targetExists(target)) throw new Error(`broken output link in ${file}: ${target}`);
-    if (target.includes(".md")) throw new Error(`unrewritten Markdown link in ${file}: ${target}`);
+    if (!/^(?:https?:|mailto:|tel:|#)/.test(target) && target.includes(".md")) throw new Error(`unrewritten Markdown link in ${file}: ${target}`);
   }
 }
 

@@ -87,6 +87,14 @@ Start with the [public documentation index](docs/PUBLIC-DOCUMENTATION.md):
 - [CLI and MCP reference](docs/reference/cli.md)
 - [Open-source readiness](docs/release/open-source-readiness.md)
 
+The static documentation site is generated directly from that public Markdown tree:
+
+```bash
+bun run website:build
+```
+
+This creates local static output only. It does not deploy a website or alter repository visibility.
+
 ## Supported integrations
 
 The onboarding layer recognizes supported local CLI adapters, including Claude Code, Codex, Gemini,
@@ -99,7 +107,8 @@ explains the boundary.
 - Hosted embeddings and provider routing are optional user configuration. Keyword-based local
   fallback remains available when semantic embeddings are not configured.
 - A native workspace shell is an architecture proposal, not an implemented embedded terminal.
-- A documentation website and public deployment are planned local deliverables, not a live service.
+- The documentation website builds locally from this public Markdown tree; no public deployment has
+  been approved.
 - The public-release privacy/history remediation tracked in
   [open-source readiness](docs/release/open-source-readiness.md) remains a gate before visibility.
 

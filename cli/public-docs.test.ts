@@ -36,6 +36,10 @@ const PUBLIC_FILES = [
   "docs/guides/migration.md",
   "docs/guides/troubleshooting.md",
   "docs/reference/cli.md",
+  "docs/reference/diagnostics.md",
+  "docs/reference/memory-commands.md",
+  "docs/reference/session-commands.md",
+  "docs/reference/routing-commands.md",
   "docs/reference/tui.md",
   "docs/reference/mcp.md",
   "docs/reference/configuration.md",
@@ -66,7 +70,7 @@ function localLinks(file: string): string[] {
   return links;
 }
 
-describe("F10.2 public documentation contract", () => {
+describe("F10 public documentation contract", () => {
   test("ships the public navigation tree and keeps every local Markdown/image link within the public allowlist", () => {
     for (const file of PUBLIC_FILES) expect(existsSync(join(ROOT, file))).toBe(true);
     for (const file of PUBLIC_FILES) {

@@ -8,6 +8,9 @@ The project story should make only evidence-backed statements:
   are implemented and tested locally;
 - the product was developed under a maker/checker discipline with phase evidence.
 
+The static documentation website may be built and inspected locally as demonstration support. A
+local build is not evidence of a public deployment, repository visibility, or external submission.
+
 Before submission, use the current test counts and a scrubbed live demonstration. Do not use personal
 workspaces, credential output, customer material, stale benchmark rankings, subscription prices, or
 an unreviewed public repository claim as evidence.

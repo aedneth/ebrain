@@ -30,3 +30,4 @@ graphify-out/
 
 # F10.3 static documentation build output
 website/dist/
+website/.astro/

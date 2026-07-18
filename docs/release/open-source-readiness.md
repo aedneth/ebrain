@@ -7,6 +7,8 @@ visibility is still a gated operation.
 
 - claim matrix distinguishing verified, configured, and planned behavior;
 - source-first onboarding documentation and sanitized renderer-derived assets;
+- a static local documentation website generated from the allowlisted public Markdown tree, with
+  local search, responsive navigation, and no deployment adapter;
 - root license metadata and third-party attribution boundary;
 - CLI/TUI contracts and maker reports for high-risk memory work.
 

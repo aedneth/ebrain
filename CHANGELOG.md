@@ -4,6 +4,25 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-18 -- F10.3 Complete static documentation website
+
+- **Public Markdown remains canonical:** added an isolated Astro static-site package that derives
+  38 allowlisted public documentation routes directly from the repository source tree. It adds a
+  docs-first home, four workflow paths, responsive navigation, adjacent reading, local static
+  search, and local social/control assets without a deploy adapter, runtime service, copied docs,
+  external font, analytics, or Vercel configuration.
+- **Operational reference expanded:** documented onboarding, launch modes, sessions, context,
+  episodes, procedures/workflows, signals, profiles/targets, TUI, diagnostics, memory,
+  workspace/session, and routing/cost commands with explicit action and confirmation boundaries.
+- **Static safety contract:** source/output tests now enforce public navigation parity, static-only
+  configuration, local assets, valid rendered links, Markdown-link rewrite, and private-pattern
+  exclusions. Generated Astro cache and build output are ignored. Mobile visual QA fixed an SVG
+  aspect-ratio regression at narrow widths.
+- **Verification status:** focused site/docs contracts `7/0`, static type check `0/0/0`, static
+  build 40 pages/38 docs, CLI `280/0`, TUI `442/0`, and local desktop/mobile browser QA passed.
+  Independent review and F10.0 public-release blockers remain required; no deploy or visibility
+  change occurred.
+
 ## 2026-07-18 -- F10.2 Public documentation and native product assets
 
 - **Public surface, not historical disclosure:** rebuilt the README and added a structured English
