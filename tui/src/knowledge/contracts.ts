@@ -356,6 +356,19 @@ export function parseTaskProfile(j: unknown): TaskProfileData | null {
   };
 }
 
+export interface WorkspaceData { id: string; label: string; cwd: string }
+export interface WorkspacesData { schemaVersion: 1; workspaces: WorkspaceData[] }
+
+/** TUI consumes the registry only through the CLI contract. Scrub labels and paths at the
+ * subprocess boundary just like search results, even though the registry itself rejects secrets. */
+export function parseWorkspaces(j: unknown): WorkspacesData | null {
+  if (!isObj(j) || j.schema_version !== 1 || !Array.isArray(j.workspaces)) return null;
+  const workspaces = j.workspaces.filter(isObj).map((workspace) => ({
+    id: asStr(workspace.id), label: scrubSecrets(asStr(workspace.label)), cwd: scrubSecrets(asStr(workspace.cwd)),
+  })).filter((workspace) => Boolean(workspace.id && workspace.label && workspace.cwd.startsWith("/")));
+  return { schemaVersion: 1, workspaces };
+}
+
 export interface ProfileSummaryData {
   id: string;
   label: string;

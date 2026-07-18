@@ -25,6 +25,7 @@ import {
   parseWorkflows,
   parseWorkflowRun,
   parseTaskProfile,
+  parseWorkspaces,
   parseProfiles,
   parseTargets,
   parseTargetPlan,
@@ -40,6 +41,7 @@ import {
   type WorkflowsData,
   type WorkflowRunData,
   type TaskProfileData,
+  type WorkspacesData,
   type ProfilesData,
   type TargetData,
   type TargetPlanData,
@@ -141,6 +143,7 @@ export function runWorkflow(id: string): Promise<KResult<WorkflowRunData>> {
 export function fetchTaskProfile(task: string): Promise<KResult<TaskProfileData>> {
   return fetchParsed(["task-profile", task, "--json"], 15000, parseTaskProfile);
 }
+export function fetchWorkspaces(): Promise<KResult<WorkspacesData>> { return fetchParsed(["workspaces", "list", "--json"], 15000, parseWorkspaces); }
 export function fetchProfiles(): Promise<KResult<ProfilesData>> { return fetchParsed(["profiles", "list", "--json"], 15000, parseProfiles); }
 /** Explicit first-use migration of the user's existing local routing into a profile. */
 export function initializeProfiles(): Promise<KResult<ProfilesData>> {

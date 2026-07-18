@@ -1,0 +1,194 @@
+#!/usr/bin/env bun
+/**
+ * ebrain workspaces -- validated local directory registry (F7.3 / ADR-006).
+ *
+ * This store is intentionally narrower than a terminal profile: it persists only an id, a
+ * display label, and a canonical directory. It never carries a command, environment, token,
+ * prompt, or session output. Session creation remains owned by `sessions new` / targets launch.
+ */
+import { chmod, mkdir, realpath, rename, stat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { isClientPath } from "./sessions.ts";
+
+const HOME = homedir();
+const CONFIG_DIR = process.env.EBRAIN_CONFIG_DIR || join(HOME, ".config", "ebrain");
+const STORE_PATH = process.env.EBRAIN_WORKSPACE_STORE || join(CONFIG_DIR, "workspaces.json");
+const SAFE_ID = /^[a-z][a-z0-9-]{0,63}$/;
+
+export interface Workspace { id: string; label: string; cwd: string }
+export interface WorkspaceStore { schema_version: 1; workspaces: Workspace[] }
+
+function die(message: string, code = 1): never {
+  console.error(`error: ${message}`);
+  process.exit(code);
+}
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function hasOnly(value: Record<string, unknown>, keys: string[]): boolean {
+  return Object.keys(value).every((key) => keys.includes(key));
+}
+
+/** Resolve a submitted directory through symlinks and reject it before it can reach the store. */
+export async function canonicalWorkspacePath(input: string): Promise<string> {
+  const submitted = resolve(input);
+  if (isClientPath(submitted)) throw new Error("client repository paths are not allowed as workspaces");
+  let canonical: string;
+  try {
+    canonical = await realpath(submitted);
+  } catch {
+    throw new Error("workspace directory does not exist");
+  }
+  if (isClientPath(canonical)) throw new Error("workspace resolves into a client repository");
+  let info;
+  try {
+    info = await stat(canonical);
+  } catch {
+    throw new Error("workspace directory cannot be inspected");
+  }
+  if (!info.isDirectory()) throw new Error("workspace path is not a directory");
+  return canonical;
+}
+
+function parseWorkspace(value: unknown): Workspace {
+  if (!isRecord(value) || !hasOnly(value, ["id", "label", "cwd"]) || typeof value.id !== "string" || !SAFE_ID.test(value.id)) {
+    throw new Error("invalid workspace record");
+  }
+  if (typeof value.label !== "string" || value.label.trim().length === 0 || value.label.length > 120) throw new Error("invalid workspace label");
+  if (typeof value.cwd !== "string" || !value.cwd.startsWith("/") || value.cwd.length > 4096) throw new Error("invalid workspace directory");
+  return { id: value.id, label: value.label.trim(), cwd: value.cwd };
+}
+
+/** Strict store parser: an unknown field could otherwise become a covert command/config channel. */
+export function parseWorkspaceStore(value: unknown): WorkspaceStore {
+  if (!isRecord(value) || !hasOnly(value, ["schema_version", "workspaces"]) || value.schema_version !== 1 || !Array.isArray(value.workspaces)) {
+    throw new Error("invalid workspace store (schema_version=1 required)");
+  }
+  const workspaces = value.workspaces.map(parseWorkspace);
+  const ids = new Set<string>();
+  const paths = new Set<string>();
+  for (const workspace of workspaces) {
+    if (ids.has(workspace.id)) throw new Error(`duplicate workspace id: ${workspace.id}`);
+    if (paths.has(workspace.cwd)) throw new Error(`duplicate workspace directory: ${workspace.cwd}`);
+    ids.add(workspace.id);
+    paths.add(workspace.cwd);
+  }
+  return { schema_version: 1, workspaces };
+}
+
+/** Stored directories are revalidated on every read/write. A hand-edited store cannot turn a
+ * formerly harmless symlink into a client path or a non-canonical launch target. */
+export async function validateWorkspaceStore(store: WorkspaceStore): Promise<WorkspaceStore> {
+  const parsed = parseWorkspaceStore(store);
+  for (const workspace of parsed.workspaces) {
+    const canonical = await canonicalWorkspacePath(workspace.cwd);
+    if (canonical !== workspace.cwd) throw new Error(`workspace directory is not canonical: ${workspace.id}`);
+  }
+  return parsed;
+}
+
+export async function readWorkspaceStore(path = STORE_PATH): Promise<WorkspaceStore> {
+  const file = Bun.file(path);
+  if (!(await file.exists())) return { schema_version: 1, workspaces: [] };
+  try {
+    return await validateWorkspaceStore(parseWorkspaceStore(JSON.parse(await file.text())));
+  } catch (error) {
+    throw new Error(`invalid workspace store: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+export async function writeWorkspaceStore(store: WorkspaceStore, path = STORE_PATH): Promise<void> {
+  const parsed = await validateWorkspaceStore(store);
+  const dir = dirname(path);
+  await mkdir(dir, { recursive: true, mode: 0o700 });
+  await chmod(dir, 0o700);
+  const temp = `${path}.tmp-${process.pid}`;
+  await writeFile(temp, `${JSON.stringify(parsed, null, 2)}\n`, { mode: 0o600 });
+  await chmod(temp, 0o600);
+  await rename(temp, path);
+  await chmod(path, 0o600);
+}
+
+function idBase(label: string): string {
+  const base = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 56);
+  return /^[a-z]/.test(base) ? base || "workspace" : `workspace-${base}`;
+}
+
+/** Generated safe ID. Labels are display text, never shell input. */
+export function nextWorkspaceId(label: string, existing: Iterable<string>): string {
+  const used = new Set(existing);
+  const base = idBase(label);
+  if (!used.has(base)) return base;
+  for (let suffix = 2; suffix < 10_000; suffix += 1) {
+    const id = `${base.slice(0, 63 - String(suffix).length)}-${suffix}`;
+    if (!used.has(id)) return id;
+  }
+  throw new Error("could not generate a unique workspace id");
+}
+
+export async function addWorkspace(store: WorkspaceStore, input: { label: string; cwd: string }): Promise<WorkspaceStore> {
+  const label = input.label.trim();
+  if (!label || label.length > 120) throw new Error("workspace label must be 1-120 characters");
+  const cwd = await canonicalWorkspacePath(input.cwd);
+  if (store.workspaces.some((workspace) => workspace.cwd === cwd)) throw new Error("workspace directory is already registered");
+  const id = nextWorkspaceId(label, store.workspaces.map((workspace) => workspace.id));
+  return parseWorkspaceStore({ ...store, workspaces: [...store.workspaces, { id, label, cwd }] });
+}
+
+export function renameWorkspace(store: WorkspaceStore, id: string, label: string): WorkspaceStore {
+  const nextLabel = label.trim();
+  if (!SAFE_ID.test(id) || !nextLabel || nextLabel.length > 120) throw new Error("invalid workspace rename");
+  if (!store.workspaces.some((workspace) => workspace.id === id)) throw new Error("workspace not found");
+  return parseWorkspaceStore({ ...store, workspaces: store.workspaces.map((workspace) => workspace.id === id ? { ...workspace, label: nextLabel } : workspace) });
+}
+
+export function removeWorkspace(store: WorkspaceStore, id: string): WorkspaceStore {
+  if (!SAFE_ID.test(id)) throw new Error("invalid workspace id");
+  if (!store.workspaces.some((workspace) => workspace.id === id)) throw new Error("workspace not found");
+  return parseWorkspaceStore({ ...store, workspaces: store.workspaces.filter((workspace) => workspace.id !== id) });
+}
+
+function parseArgs(argv: string[]): { command: string; rest: string[]; json: boolean; yes: boolean } {
+  const [command = "list", ...raw] = argv;
+  return { command, rest: raw.filter((arg) => arg !== "--json" && arg !== "--yes"), json: raw.includes("--json"), yes: raw.includes("--yes") };
+}
+function flagValue(args: string[], flag: string): string | null {
+  const index = args.indexOf(flag);
+  const value = index >= 0 ? args[index + 1] : undefined;
+  return typeof value === "string" && !value.startsWith("--") ? value : null;
+}
+function print(value: unknown): void { console.log(JSON.stringify(value, null, 2)); }
+
+async function main(): Promise<void> {
+  const args = parseArgs(process.argv.slice(2));
+  const store = await readWorkspaceStore();
+  if (args.command === "list") return print(store);
+  if (!args.yes) die(`workspaces ${args.command} writes local config; confirm with --yes`, 2);
+  if (args.command === "add") {
+    const label = flagValue(args.rest, "--label");
+    const cwd = flagValue(args.rest, "--cwd");
+    if (!label || !cwd) die("usage: ebrain workspaces add --label LABEL --cwd DIR --yes [--json]", 2);
+    const next = await addWorkspace(store, { label, cwd });
+    await writeWorkspaceStore(next);
+    return print({ ok: true, workspace: next.workspaces.at(-1) });
+  }
+  if (args.command === "rename") {
+    const id = flagValue(args.rest, "--id");
+    const label = flagValue(args.rest, "--label");
+    if (!id || !label) die("usage: ebrain workspaces rename --id ID --label LABEL --yes [--json]", 2);
+    const next = renameWorkspace(store, id, label);
+    await writeWorkspaceStore(next);
+    return print({ ok: true, workspace: next.workspaces.find((workspace) => workspace.id === id) });
+  }
+  if (args.command === "remove") {
+    const id = flagValue(args.rest, "--id");
+    if (!id) die("usage: ebrain workspaces remove --id ID --yes [--json]", 2);
+    const next = removeWorkspace(store, id);
+    await writeWorkspaceStore(next);
+    return print({ ok: true, removed: id });
+  }
+  die("usage: ebrain workspaces <list|add|rename|remove> [--json]", 2);
+}
+
+if (import.meta.main) main().catch((error) => die(error instanceof Error ? error.message : String(error)));
