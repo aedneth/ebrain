@@ -12,8 +12,8 @@ related: [F11-RELEASE-GATE-PLAN.md, F11-REVIEW-PACKET.md, F10.0-PUBLIC-CLAIM-AUD
 
 ## What the maker completed
 
-- Prepared a reproducible independent-review candidate for the F8-F10.3 range
-  `6ab8023^..235412b`.
+- Prepared a reproducible independent-review candidate for the full F8-F11 maker range
+  `6ab8023^..4d7bbe7`.
 - Added a focused release-readiness contract that keeps generated website state untracked, requires
   static Astro output, rejects a Vercel adapter/configuration, and proves the public claim is only
   local buildability.
@@ -35,7 +35,7 @@ does not convert local tests into `[AUDIT_PASS]`.
 
 | Check | Result |
 | --- | --- |
-| `bun test cli/release-readiness.test.ts` | `3/0`, 18 assertions |
+| `bun test cli/release-readiness.test.ts` | `3/0`, 21 assertions |
 | `bun run --cwd website check` | 0 errors, 0 warnings, 0 hints |
 | `bun run website:build` | 40 static pages; verifier passed 38 documentation routes |
 | `bun test ./cli/` | `283/0`, 1,581 assertions |

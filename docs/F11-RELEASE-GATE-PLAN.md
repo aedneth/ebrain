@@ -19,11 +19,11 @@ reproduce the candidate without guessing which claims, boundaries, or commands m
 
 ## Candidate boundary
 
-The independent review range begins at the first F8 implementation commit and ends at the F10.3
-phase closure:
+The independent review range begins at the first F8 implementation commit and ends at the F11 maker
+preparation commit:
 
 ```text
-6ab8023^..235412b
+6ab8023^..4d7bbe7
 ```
 
 The automatic local checkpoints inside that range preserve work but do not constitute phase approval.

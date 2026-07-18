@@ -1,7 +1,7 @@
 ---
 type: independent-review-packet
 project: ebrain
-candidate: 6ab8023^..235412b
+candidate: 6ab8023^..4d7bbe7
 status: ready-for-independent-checker -- no verdict recorded
 created: 2026-07-18
 maker: Codex
@@ -18,7 +18,7 @@ report. Do not accept the maker's counts or claims without reproducing them. Do 
 change repository visibility, tag a release, create a Vercel project, submit Devpost material, or
 edit credential files. Do not read dotenv, token, key, account, or customer-project data.
 
-The candidate range is `6ab8023^..235412b`. Review the final tree in a clean checkout or isolated
+The candidate range is `6ab8023^..4d7bbe7`. Review the final tree in a clean checkout or isolated
 worktree. Automatic checkpoint commits are provenance only; they are not audit verdicts.
 
 ## Reproduction sequence
@@ -30,7 +30,7 @@ bun test ./cli/
 bun test ./tui/test/
 bun run --cwd website check
 bun run website:build
-git diff --check 6ab8023^ 235412b
+git diff --check 6ab8023^ 4d7bbe7
 ```
 
 For browser QA, start a local static preview only after the build, inspect the home, docs hub, one

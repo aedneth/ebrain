@@ -14,12 +14,16 @@ describe("F11 release readiness preparation", () => {
     const plan = read("docs/F11-RELEASE-GATE-PLAN.md");
     const packet = read("docs/F11-REVIEW-PACKET.md");
     const readiness = read("docs/release/open-source-readiness.md");
+    const handoff = read("docs/HANDOFF-BACK.md");
 
     expect(plan).toContain("independent checker");
     expect(plan).toContain("not complete");
     expect(packet).toContain("required-checker: Opus");
     expect(packet).toContain("no verdict recorded");
     expect(packet).toContain("Do not push, deploy");
+    expect(plan).toContain("6ab8023^..4d7bbe7");
+    expect(packet).toContain("6ab8023^..4d7bbe7");
+    expect(handoff).toContain("review-candidate: 6ab8023^..4d7bbe7");
     expect(readiness).toContain("Remaining release gates");
     expect(readiness).toContain("independent review");
     expect(readiness).toContain("explicit approval");
