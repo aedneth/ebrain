@@ -15,6 +15,7 @@
     "test:cli": "bun test ./cli/",
     "test:tui": "bun test ./tui/test/",
     "docs:assets": "bun run scripts/generate-doc-assets.ts",
+    "website:build": "bun --cwd website run build",
     "doctor": "bun run cli/ebrain doctor"
   },
   "keywords": [

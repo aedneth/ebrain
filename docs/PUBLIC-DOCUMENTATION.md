@@ -7,8 +7,27 @@ remain outside this navigation and are not implicitly public-safe.
 ## Start here
 
 - [Installation](getting-started/install.md)
+- [Quick start](getting-started/quickstart.md)
+- [Boot and onboarding](getting-started/onboarding.md)
 - [First durable memory](getting-started/first-memory.md)
 - [Workspace and session](getting-started/workspace-session.md)
+
+## Launch and sessions
+
+- [Manual launch](launch/manual-launch.md)
+- [Guided launch](launch/guided-launch.md)
+- [Sessions](launch/sessions.md)
+
+## Governed memory
+
+- [Context packs](memory/context-packs.md)
+- [Episodes](memory/episodes.md)
+- [Procedures and workflows](memory/procedures-and-workflows.md)
+
+## Routing choices
+
+- [Task signals](routing/task-signals.md)
+- [Profiles and targets](routing/profiles-and-targets.md)
 
 ## Concepts
 
@@ -34,6 +53,7 @@ remain outside this navigation and are not implicitly public-safe.
 ## Reference
 
 - [CLI reference](reference/cli.md)
+- [TUI reference](reference/tui.md)
 - [MCP reference](reference/mcp.md)
 - [Configuration reference](reference/configuration.md)
 - [JSON contract boundary](reference/json-contracts.md)

@@ -1,0 +1,21 @@
+{
+  "name": "ebrain-docs",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "assets:sync": "bun run scripts/sync-assets.ts",
+    "build": "bun run assets:sync && astro build && bun run scripts/verify-build.ts",
+    "check": "astro check",
+    "dev": "astro dev",
+    "preview": "astro preview"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.9",
+    "@types/node": "^26.1.1",
+    "astro": "^5.0.0",
+    "lucide-static": "^1.24.0",
+    "simple-icons": "^16.26.0",
+    "typescript": "^6"
+  }
+}

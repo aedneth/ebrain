@@ -1,0 +1,66 @@
+---
+import "../styles/site.css";
+import { SOCIAL_LINKS } from "../lib/navigation";
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#101317" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
+    <slot />
+    <dialog class="search-dialog" id="search-dialog" aria-labelledby="search-title">
+      <div class="search-dialog__head">
+        <div>
+          <p class="eyebrow">Documentation</p>
+          <h2 id="search-title">Search eBrain docs</h2>
+        </div>
+        <button class="icon-button" type="button" data-search-close aria-label="Close search" data-tooltip="Close search">
+          <img src="/icons/x.svg" alt="" width="18" height="18" />
+        </button>
+      </div>
+      <label class="search-field" for="doc-search">Search by workflow, command, or concept</label>
+      <input id="doc-search" type="search" autocomplete="off" placeholder="Try workspace, context, or profile" />
+      <ul class="search-results" id="search-results" aria-live="polite"></ul>
+      <p class="search-dialog__hint"><kbd>Esc</kbd> close <span aria-hidden="true">·</span> <kbd>Ctrl</kbd><kbd>K</kbd> open</p>
+    </dialog>
+    <footer class="site-footer">
+      <div>
+        <img src="/assets/ebrain-wordmark.svg" alt="eBrain" width="153" height="30" loading="lazy" />
+        <p>Local memory and workspace orchestration for coding agents.</p>
+      </div>
+      <nav aria-label="Project links" class="footer-links">
+        <a href="/docs/">Documentation</a>
+        <a href={`${SOCIAL_LINKS.github}/blob/main/LICENSE`}>AGPL-3.0-only</a>
+        <a href={`${SOCIAL_LINKS.github}/blob/main/SECURITY.md`}>Security</a>
+      </nav>
+      <nav aria-label="Social links" class="social-links">
+        <a class="icon-link" href={SOCIAL_LINKS.github} aria-label="eBrain on GitHub" data-tooltip="GitHub">
+          <img src="/icons/github.svg" alt="" width="18" height="18" />
+        </a>
+        <a class="icon-link" href={SOCIAL_LINKS.x} aria-label="Eduardo on X" data-tooltip="X">
+          <img src="/icons/x.svg" alt="" width="18" height="18" />
+        </a>
+        <a class="icon-link icon-link--linkedin" href={SOCIAL_LINKS.linkedin} aria-label="Eduardo on LinkedIn" data-tooltip="LinkedIn">
+          <span aria-hidden="true">in</span>
+        </a>
+      </nav>
+    </footer>
+    <script>
+      import "../scripts/search";
+    </script>
+  </body>
+</html>
