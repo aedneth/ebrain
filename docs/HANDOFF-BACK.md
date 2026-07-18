@@ -5,7 +5,7 @@ from: Codex (maker/constructor)
 to: Opus (Claude Code, auditor) + Fable 5 (gate)
 created: 2026-07-14
 updated: 2026-07-17
-status: F7.3 validated workspace registry and picker complete; F7.4 bare entry point next
+status: F7.4 bare interactive entry complete; F7.5 QA package and independent checker next
 scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX + workflow/cost loop + launch UX polish + F7 planning
 ---
 
@@ -16,6 +16,36 @@ scope: P1/P2 daemon + D.5.4/F-F1/F-D2 bridge closure + F6.6A-E orchestration UX 
 > [`AUDIT-FABLE-F6-CORRECTIONS.md`](AUDIT-FABLE-F6-CORRECTIONS.md); F-CF-3 was closed
 > afterwards in `0c887c4`. This addendum is a post-gate UX phase, not a claim that its
 > maker self-approved a new security gate. Historical entries below remain evidence only.
+
+## 2026-07-17 — F7.4 bare interactive entry complete
+
+### What changed
+
+- `ebrain` with no arguments now opens the TUI when both stdin and stdout are TTYs and `TERM` is
+  neither unset nor `dumb`. `ebrain ui` is preserved as the explicit compatible alias.
+- A non-interactive no-argument invocation retains the historical help output and exits cleanly.
+  Explicit `ebrain ui` in a pipe or CI context fails before Bun starts, with a clear message that a
+  real terminal is required. This prevents alt-screen escape sequences or an interactive hang in
+  scripts while keeping the daily command short.
+- Updated README Quickstart, TUI README, runbook, human checklist, public demo command, CLI usage,
+  sprint record, plan, and changelog to present bare `ebrain` as the normal cockpit entry.
+
+### Verification performed
+
+- Added [`cli/ebrain.test.ts`](../cli/ebrain.test.ts): non-TTY bare invocation returns help;
+  explicit `ui` rejects before dispatch; a real pseudo-TTY fixture proves both `ebrain` and
+  `ebrain ui` invoke the same `tui/src/app.ts` path without running the actual UI in the test.
+- `bash -n cli/ebrain` passed.
+- Real 100x30 tmux smoke started bare `ebrain`, navigated to Launch, opened `[g] workspace`, and
+  rendered the wrapped picker without error. The temporary tmux pane was terminated afterwards.
+
+### Next action / checker scope
+
+Proceed with **F7.5**. The maker must run final suites, secret-safety diff scan, zero-hex, clean
+diff check, and visual captures. An independent checker must then inspect the final F7 diff and
+verify the TTY guard, alias compatibility, non-TTY behavior, workspace isolation/revalidation,
+modal key ownership/overflow, prompt privacy, and two-workspace tmux cwd evidence. Do not mark
+this program accepted from maker tests alone.
 
 ## 2026-07-17 — F7.3 validated workspace registry and picker complete
 

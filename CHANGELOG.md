@@ -4,6 +4,19 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-17 -- Frictionless TUI entry point
+
+- **Bare command:** `ebrain` now opens the interactive cockpit when stdin and stdout are TTYs and
+  `TERM` is usable. `ebrain ui` remains a compatible explicit alias.
+- **Script safety:** no-argument non-interactive invocation continues to print ordinary help rather
+  than hanging or emitting an alternate-screen UI. Explicit `ebrain ui` in a pipe/CI context fails
+  before starting Bun with a clear terminal requirement.
+- **Verification:** dispatcher tests cover non-TTY help, non-TTY alias rejection, and a pseudo-TTY
+  fixture proving both invocation forms dispatch to the same TUI entrypoint; live bare-command
+  tmux smoke opened the Launch workspace picker successfully.
+
+---
+
 ## 2026-07-17 -- Validated multi-workspace Launch
 
 - **Workspace registry:** added `ebrain workspaces list|validate|add|rename|remove`, a strict

@@ -142,7 +142,7 @@ ebrain remember "Judges test: eBrain shares one memory across agents."
 ebrain q "what did we note for judges?"
 
 # Open the cockpit
-ebrain ui
+ebrain
 ```
 
 Expected: `ebrain doctor` is healthy; `ebrain q` returns the note just written; opening any

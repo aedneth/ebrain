@@ -1,6 +1,7 @@
 # ebrain TUI
 
-Run `ebrain ui` from a terminal at least 80x24. The TUI is a control plane: sessions live
+Run `ebrain` from a terminal at least 80x24. `ebrain ui` remains a compatible explicit alias.
+The TUI is a control plane: sessions live
 in tmux and the data views consume the same contract-tested ebrain CLI commands.
 
 ## Navigation

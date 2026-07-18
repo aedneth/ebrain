@@ -67,8 +67,10 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
   validated picker and no longer accepts a free-form cwd. **Verify:** temp-dir strict-store tests,
   pure reducer/render tests at 80x24/100x30/160x48, and fake-agent tmux E2E with two distinct cwd
   values. Full-suite evidence is recorded in `HANDOFF-BACK.md`.
-- [ ] 7.4 **Global entry point:** bare `ebrain` opens the TUI only on a real TTY; `ebrain ui` and
-  non-TTY help remain compatible. **Verify:** dispatcher invocation-matrix tests.
+- [x] 7.4 **Global entry point:** bare `ebrain` opens the TUI only on a real stdin/stdout TTY with
+  usable `TERM`; `ebrain ui` remains a compatible alias and no-argument non-TTY use retains help.
+  **Verify:** dispatcher invocation matrix covers pipe help, explicit non-TTY rejection, and
+  pseudo-TTY entry for both bare and alias forms.
 - [ ] 7.5 **Product gate:** full independent audit plus real tmux captures at compact and wide
   terminal sizes, documentation/handoff, and human two-workspace daily-driver acceptance.
 

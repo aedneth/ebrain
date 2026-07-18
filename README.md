@@ -63,7 +63,7 @@ ebrain remember "We route coding tasks to DeepSeek V4; agentic tasks to Kimi K2.
 ebrain q "how do we route coding tasks?"
 
 # Open the cockpit:
-ebrain ui
+ebrain
 
 # Check everything is healthy:
 ebrain doctor

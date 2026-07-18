@@ -30,6 +30,21 @@ run_bun() {
   (cd "$CFG/wd" 2>/dev/null || cd /tmp; exec "$BUN_BIN" run "$f" "$@")
 }
 
+# A bare `ebrain` is the daily interactive entry point, but only when both ends are real
+# terminals. Piped/cron/CI invocations must keep the historical help output rather than hang or
+# emit an alternate-screen UI. `TERM=dumb` is likewise not a usable terminal for the TUI.
+interactive_tui() {
+  [ -t 0 ] && [ -t 1 ] && [ -n "${TERM:-}" ] && [ "$TERM" != "dumb" ]
+}
+
+run_ui() {
+  if ! interactive_tui; then
+    echo "ebrain ui: needs a real interactive terminal (stdin/stdout TTY and TERM not 'dumb')." >&2
+    exit 1
+  fi
+  run_bun "$EBRAIN_HOME/tui/src/app.ts" "$@"
+}
+
 usage() {
   cat <<'EOF'
 ebrain — unified harness + agentic-memory layer (provider-agnostic)
@@ -42,7 +57,8 @@ ebrain — unified harness + agentic-memory layer (provider-agnostic)
   ebrain harness status                                      harness fleet status + MCP mode
   ebrain doctor [--json]                                     full CKIS health (launchers/config/contract/sources/spend)
   ebrain status [--json]                                     quick snapshot (brain/spend/fleet/memory)
-  ebrain ui                                                   interactive TUI (sessions + launch router + memory/routing/doctor)
+  ebrain                                                       interactive TUI on a real terminal (non-TTY: this help)
+  ebrain ui                                                    compatible explicit TUI alias
   ebrain spend [--json]                                      MTD spend per capability vs routing.yaml cap
   ebrain routing [--json]                                    OpenRouter stack: chains, models and spend
   ebrain cost [--json]                                       unified ledger by provider/agent/model/session/workflow
@@ -70,7 +86,16 @@ Agents supported by install: claude · codex · gemini · generic
 EOF
 }
 
-cmd="${1:-help}"; shift || true
+if [ "$#" -eq 0 ]; then
+  if interactive_tui; then
+    run_ui
+    exit $?
+  fi
+  usage
+  exit 0
+fi
+
+cmd="$1"; shift
 case "$cmd" in
   remember)  run "$CORE/remember.sh" "$@" ;;
   q|query)   run "$SCRIPTS/ebrain-q" "$@" ;;
@@ -92,16 +117,7 @@ case "$cmd" in
   onboard)    run "$SCRIPTS/ebrain-up" onboard "$@" ;;
   daemon)    run "$SCRIPTS/ebrain-daemon" "$@" ;;
   route)     if [ -x "$CFG/ebrain-route" ]; then "$CFG/ebrain-route" "$@"; else echo "ebrain: missing $CFG/ebrain-route" >&2; exit 127; fi ;;
-  ui)
-    # Guard BEFORE run_bun: an interactive alt-screen app needs a real terminal —
-    # TERM unset/dumb means no ANSI escapes will render sanely (piped output, cron,
-    # a dumb serial console). app.ts's own min-80x24 self-check (buildFrame) covers
-    # the OTHER half of "can this actually run" once a real terminal is confirmed.
-    if [ -z "${TERM:-}" ] || [ "$TERM" = "dumb" ]; then
-      echo "ebrain ui: needs a real interactive terminal (TERM unset or 'dumb')." >&2
-      exit 1
-    fi
-    run_bun "$EBRAIN_HOME/tui/src/app.ts" "$@" ;;
+  ui)       run_ui "$@" ;;
   harness)
     sub="${1:-}"; shift || true
     all_agents() { for m in "$EBRAIN_HOME"/harness/adapters/*/manifest.yaml; do [ -f "$m" ] && basename "$(dirname "$m")"; done; }

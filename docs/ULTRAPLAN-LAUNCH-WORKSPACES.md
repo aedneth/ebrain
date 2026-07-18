@@ -3,7 +3,7 @@ type: ultraplan
 project: ebrain
 program: F7 -- workspace-first launch experience
 created: 2026-07-17
-status: approved-for-implementation
+status: in-progress-f7-5
 owner: Codex (maker)
 checker: independent auditor after maker gate
 related: [SPRINT-TUI.md, UX-LAUNCH-POLISH.md, TUI-CLI-COVERAGE.md, adr/ADR-003-tui-stack.md, adr/ADR-005-user-governed-model-selection.md, adr/ADR-006-workspace-first-control-plane.md]
@@ -224,12 +224,14 @@ discovery gate. It is not silently smuggled into the workspace program.
 - Gate: CLI + TUI suites; fake-agent tmux E2E launches two sessions in separate temporary workspaces
   and verifies each recorded cwd.
 
-### F7.4 -- Entry-point and docs reconciliation
+### F7.4 -- Entry-point and docs reconciliation (complete)
 
-- Make bare `ebrain` start the TUI only when stdin/stdout are TTYs and `TERM` is usable; keep
-  `ebrain ui`, help flags, and non-TTY no-argument help behavior compatible.
-- Update root README quickstart, TUI README, runbook, CLI coverage, changelog, and human checklist.
-- Gate: dispatcher tests for each invocation class plus the full suites.
+- Bare `ebrain` starts the TUI only when stdin/stdout are TTYs and `TERM` is usable; `ebrain ui`,
+  help flags, and non-TTY no-argument help remain compatible.
+- Root README quickstart, TUI README, runbook, CLI coverage, changelog, and human checklist use
+  the bare command while retaining the alias where it aids discovery.
+- Verify: dispatcher matrix tests pipe help, explicit non-TTY rejection, and both bare/alias forms
+  under a pseudo-TTY fixture; full suites run in F7.5.
 
 ### F7.5 -- QA, review, and handoff
 
