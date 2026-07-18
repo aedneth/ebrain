@@ -4,6 +4,19 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-18 -- F10.0 Public claim and privacy audit
+
+- **Evidence before public copy:** added a claim matrix that distinguishes verified local behavior,
+  user-configured dependencies, and planned work. It maps daemon onboarding, MCP boundaries,
+  governed memory, workspaces, routing/cost telemetry, source install, and future website/shell
+  claims to implementation and tests.
+- **Release blockers made explicit:** the audit records historical operator material and
+  operator-specific isolation identities as public-release blockers. It requires a neutral
+  configurable policy, a public-document allowlist, and an owner-approved history strategy before
+  any public visibility change. No private data was read, copied, or exposed by this audit.
+- **Verification status:** focused implementation evidence passed `138/0`; independent review is
+  still required before licensing or public-copy changes are treated as release-ready.
+
 ## 2026-07-18 -- F9.3 Fixture-only migration recovery and audit closure
 
 - **No private-data migration:** F9.3 adds an internal synthetic-fixture proof only. It neither
