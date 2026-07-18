@@ -2,7 +2,7 @@
   "name": "ebrain",
   "version": "0.1.0",
   "description": "One permanent memory for every AI coding agent — a unified agentic harness with shared memory and capability-based multi-provider routing, local-first.",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "bin": {
     "ebrain": "cli/ebrain"

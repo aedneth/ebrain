@@ -6,7 +6,7 @@
 
 **eBrain is a unified agentic harness: it gives any AI coding agent — Claude Code, Codex, Gemini, Cursor, OpenCode — a single permanent memory they all share, and routes work across providers by capability under a hard cost cap. One brain. Every agent. Local-first.**
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: AGPL-3.0-only](https://img.shields.io/badge/license-AGPL--3.0--only-blue.svg)](LICENSE)
 [![Built with Bun](https://img.shields.io/badge/runtime-Bun-black.svg)](https://bun.sh)
 [![Protocol: MCP](https://img.shields.io/badge/protocol-MCP-6E56CF.svg)](https://modelcontextprotocol.io)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -112,7 +112,7 @@ ebrain up
 - **Routing as a governed layer.** A capability→model map you own (execution profiles) picks the provider for a task, with native fallback and a hard spend cap. Cost accounting is factual token/provider telemetry — eBrain reports what was actually spent, never an invented number and never a subscription estimate.
 - **Sessions survive the UI.** Agents run in persistent tmux workspaces; the TUI is the control plane, not the process. Close the cockpit, the work keeps running.
 
-The engine underneath is the open-source [gbrain](https://github.com/garrytan/gbrain) knowledge engine (vendored, MIT). eBrain is the harness, routing, isolation, onboarding, and cockpit that wrap it into a plug-and-play developer tool.
+The engine underneath is the open-source [gbrain](https://github.com/garrytan/gbrain) knowledge engine. The installer fetches its pinned upstream revision separately under its upstream MIT terms; eBrain is the AGPL-3.0-only harness, routing, isolation, onboarding, and cockpit around it.
 
 ---
 
@@ -177,4 +177,4 @@ Built on the [gbrain](https://github.com/garrytan/gbrain) knowledge engine by Ga
 
 ## License
 
-[MIT](LICENSE) © Eduardo Borjas
+[GNU AGPL v3.0 only](LICENSE) © 2026 eBrain contributors

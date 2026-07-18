@@ -4,6 +4,18 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-18 -- F10.1 AGPL-3.0-only distribution metadata
+
+- **Root licensing aligned:** replaced the root MIT text with the exact GNU AGPL v3 text and set
+  package, README, and contributor metadata to `AGPL-3.0-only`. A regression test fixes the exact
+  official license digest so the root declaration cannot silently drift.
+- **Upstream terms preserved:** added `THIRD_PARTY_NOTICES.md` and corrected the distribution
+  description: the installer/CI obtain the pinned gbrain engine separately in ignored local vendor
+  state, under its upstream MIT terms. Root AGPL terms do not relicense it or other dependencies.
+- **Verification status:** focused license/install/onboarding/English checks passed `23/0`; full
+  suites and static checks are recorded in the maker report. Independent licensing review remains
+  required before release.
+
 ## 2026-07-18 -- F10.0 Public claim and privacy audit
 
 - **Evidence before public copy:** added a claim matrix that distinguishes verified local behavior,

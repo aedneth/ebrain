@@ -41,4 +41,5 @@ its users:
 - Conventional-ish commit subjects (`feat:`, `fix:`, `docs:`) with a short body explaining *why*.
 - Link the issue you're closing. Include test output for behavior changes.
 
-By contributing, you agree your work is licensed under the [MIT License](LICENSE).
+By contributing, you agree your contribution is licensed under the
+[GNU Affero General Public License v3.0 only](LICENSE).
