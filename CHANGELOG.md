@@ -25,6 +25,10 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
   the same versioned rules as local development.
 - **License metadata correction:** restored the canonical `GNU AGPL v3.0 only` README wording that
   is enforced by the root distribution contract.
+- **Hermetic CI completion:** CI now installs the pinned engine's locked dependencies with package
+  scripts disabled and gives the CLI suite the checked-out `EBRAIN_HOME`. A fresh runner can now
+  resolve MCP bridge modules and the repository's adapter manifests without inheriting a developer
+  home-directory installation.
 - **Gate state:** the release branch is published as draft PR #1 so remote CI and a future checker
   can inspect a stable candidate. No Vercel project/deployment, repository-visibility change, or
   merge has occurred. Independent Opus review remains required before the draft becomes mergeable.

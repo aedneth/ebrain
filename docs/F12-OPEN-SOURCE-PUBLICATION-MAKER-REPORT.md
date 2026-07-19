@@ -50,9 +50,13 @@ The first draft CI run failed in the CLI suite before the TUI or website stages.
 failure was that `task-profile.ts` used a home-directory checkout assumption and could not find the
 already versioned rules in a GitHub workspace. The source-root fallback above resolves that issue.
 The full suite then exposed a separate exact-license-copy assertion in the rewritten README; the
-canonical short-form AGPL wording was restored. Final local reproduction after both fixes:
+canonical short-form AGPL wording was restored. A second fresh-run report confirmed those fixes,
+then exposed the next missing CI prerequisites: the pinned gbrain clone had no installed modules
+for MCP bridge imports and the CLI suite had no checkout-root `EBRAIN_HOME` for adapter fixtures.
+CI now installs gbrain's frozen lockfile with scripts disabled and supplies the workspace override.
+Final local reproduction after the fixes:
 
-- `bun test ./cli/`: 284 pass, 0 fail, 1,666 assertions;
+- `bun test ./cli/`: 284 pass, 0 fail, 1,672 assertions;
 - `bun test ./tui/test/`: 442 pass, 0 fail, 2,710 assertions;
 - `bun run --cwd website check`: 0 errors, 0 warnings, 0 hints; and
 - `bun run website:build`: 40 pages and 38 documentation routes verified.
