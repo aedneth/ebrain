@@ -29,9 +29,13 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
   scripts disabled and gives the CLI suite the checked-out `EBRAIN_HOME`. A fresh runner can now
   resolve MCP bridge modules and the repository's adapter manifests without inheriting a developer
   home-directory installation.
-- **Gate state:** the release branch is published as draft PR #1 so remote CI and a future checker
-  can inspect a stable candidate. No Vercel project/deployment, repository-visibility change, or
-  merge has occurred. Independent Opus review remains required before the draft becomes mergeable.
+- **Remote verification:** draft PR #1 now has a fully green clean-checkout CI run covering CLI,
+  TUI, static docs type/build, shell syntax, zero-hex, and secret scanning. The two preceding
+  failures are recorded in the F12 maker report with their narrow fixes.
+- **Gate state:** the release branch remains draft. Opus and Fable audit attempts were blocked by
+  the local account's weekly limit before either could issue a verdict. No Vercel
+  project/deployment, repository-visibility change, or merge has occurred; an independent checker
+  remains mandatory before the draft becomes mergeable.
 
 ## 2026-07-18 -- F11 Release gate preparation
 

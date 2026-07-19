@@ -61,6 +61,17 @@ Final local reproduction after the fixes:
 - `bun run --cwd website check`: 0 errors, 0 warnings, 0 hints; and
 - `bun run website:build`: 40 pages and 38 documentation routes verified.
 
+## Remote CI and independent-gate status
+
+GitHub Actions run `29667492937` completed successfully on the current draft head. It independently
+executed the full CLI and TUI suites, Astro check/build, shell syntax, zero-hex, and secret scan in
+a clean checkout. This is CI evidence, not a substitute for a maker/checker gate.
+
+Two read-only independent-audit invocations were attempted after CI passed. The first Opus attempt
+did not emit a report; subsequent Opus and Fable attempts returned the account's weekly-limit
+message before reviewing the branch. There is therefore no audit verdict. Keep PR #1 as draft and
+do not merge or deploy until a different checker independently completes the required review.
+
 ## Deliberate boundaries
 
 - The README describes an installable source checkout and a locally buildable static site. It does

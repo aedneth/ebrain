@@ -2,145 +2,105 @@
 type: handoff-back
 project: ebrain
 from: Codex-maker
-to: Opus-independent-checker and optional Fable/GPT second checker
+to: Opus or Fable independent checker
 created: 2026-07-18
-status: F10.3 maker-complete; F11 maker-prepared; independent verdict and owner approval pending
-branch: main
-review-candidate: 6ab8023^..4d7bbe7
-external-actions: prohibited pending explicit owner approval
+status: draft PR CI-green; independent audit blocked by checker account limit
+branch: release/open-source-publication
+pull-request: https://github.com/aedneth/ebrain/pull/1
+head: current-branch-head; verify with git rev-parse HEAD before audit
+external-actions-completed: branch push and draft PR only
+external-actions-pending: independent audit, squash merge, Vercel deployment, any visibility decision
 ---
 
-# eBrain Handoff Back -- F10.3 Website and F11 Release Gate
+# eBrain Handoff Back -- F12 Publication Candidate
 
 ## Current state
 
-All maker work planned through F10.3 is complete locally. The public documentation website is a
-static Astro package derived from the allowlisted Markdown tree; it is not deployed. F11 now has a
-reproducible independent-review packet and static readiness contract, but F11 itself cannot pass
-until Opus writes an independent audit verdict. No push, repository-visibility change, tag/release,
-website deploy, Vercel project, or Devpost submission occurred.
+The release candidate is published as draft PR #1 from `release/open-source-publication`. Its latest clean-checkout GitHub Actions run is green. The branch integrates the remote F7 dialog line with the local F8--F11 product work, completes F12 public documentation/community/CI work, and fixes the CI-only defects exposed by the draft.
 
-The exact review candidate is `6ab8023^..4d7bbe7`. Start with
-[`F11-REVIEW-PACKET.md`](F11-REVIEW-PACKET.md); it is the authoritative checker procedure.
+The gate is not complete. An Opus audit attempt did not produce a report; later Opus and Fable attempts were rejected by the local account's weekly limit. There is no independent verdict. Keep the PR as draft. Do not merge, deploy, change repository visibility, tag, publish, or submit externally until a distinct checker completes the review.
 
-## What was built
+## What changed
 
-### F10.3 static documentation website
+### Release integration
 
-- Added an isolated private `website/` package using Astro static output. It reads only the public
-  Markdown allowlist directly; it does not copy docs into a second source tree.
-- Built a documentation-first home, four workflow paths, desktop sidebar/article/on-page-index
-  reading flow, mobile disclosure navigation, previous/next links, static local search, local
-  icons, and supplied GitHub/X/LinkedIn destinations.
-- Expanded public documentation for onboarding, manual/guided launch, sessions, context packs,
-  episodes, procedures/workflows, task signals, profiles/targets, TUI, diagnostics, memory,
-  workspace/session, and routing/cost commands.
-- Added route/source parity, public-link, local-asset, static-only, output-safety, and no-deploy
-  contracts. Generated `website/.astro/` and `website/dist/` are ignored; previously tracked Astro
-  cache files were removed from the candidate.
-- Fixed a mobile SVG regression: `.terminal-figure img` now uses `height: auto`, preserving the
-  renderer-derived TUI image aspect ratio at narrow widths.
+- Created `release/open-source-publication` from the local F8--F11 line and merged the parallel remote F7 dialog commit.
+- Conflicting dialog files retained the later implementation: responsive input rendering, multiline composer, workspace picker, truthful singleton guided-launch fields, and compact-safe modal behavior. Non-conflicting remote work merged normally.
+- The complete TUI suite passed after integration, including responsive dialog, launch, workspace, multiline composer, and real tmux fake-agent coverage.
 
-Primary records: [`F10.3-WEBSITE-PLAN.md`](F10.3-WEBSITE-PLAN.md) and
-[`F10.3-WEBSITE-MAKER-REPORT.md`](F10.3-WEBSITE-MAKER-REPORT.md).
+### Public product documentation
 
-### F11 release-gate preparation
+- Rewrote `README.md` as an outcome-first developer guide: source proof, capability map, shared-daemon architecture, governed compound context, CKIS relationship, workspace/session flow, user-owned routing, factual token telemetry, security boundaries, documentation map, contribution workflow, roadmap, acknowledgements, and AGPL license.
+- Kept the native wordmark and sanitized renderer-derived TUI SVG as visual evidence. Public documentation contracts continue to reject private paths, token-shaped examples, historical-operator navigation, terminal control sequences, and public language drift.
+- Added a README regression contract for the core sections, CI badge, CKIS attribution, no-universal-model claim, and token-only usage boundary.
 
-- Added [`F11-RELEASE-GATE-PLAN.md`](F11-RELEASE-GATE-PLAN.md),
-  [`F11-REVIEW-PACKET.md`](F11-REVIEW-PACKET.md), and
-  [`F11-RELEASE-GATE-MAKER-REPORT.md`](F11-RELEASE-GATE-MAKER-REPORT.md).
-- Added `cli/release-readiness.test.ts`, which asserts independent review/owner approval language,
-  static docs configuration, ignored generated state, absent Vercel configuration, and the accurate
-  “locally buildable, not deployed” public claim.
-- Corrected the F10.0 claim matrix: the site is verified as locally buildable only. It must not be
-  described as a live public website.
+### Community and CI
 
-## Decisions and rationale
+- Added bug and feature issue forms, security/documentation contact links, and a PR template that requires privacy, boundary, test, documentation, and independent-review checks.
+- Added `.vercel/` to ignored local state. No Vercel project, configuration, adapter, or deployment was created.
+- CI now installs root, pinned engine, and website dependencies from frozen lockfiles; engine package scripts are disabled. It runs CLI with the repository checkout as `EBRAIN_HOME`, then TUI, Astro check/build, shell syntax, zero-hex, and secret scan.
 
-- **Markdown is canonical:** docs source stays in the existing public allowlist; the website adds
-  navigation and presentation only. This prevents README/site/docs drift and excludes historical
-  operator records from public navigation.
-- **Static, no deployment configuration:** Astro builds static output with no adapter, service,
-  analytics, external font, or runtime. This makes local verification possible without turning a
-  build into an external action.
-- **Herdr reference boundary:** only developer-doc interaction patterns were studied. No competitor
-  copy, identity, screenshots, claims, or installation instructions were reused.
-- **Release authority remains human:** a clean build and maker tests never authorize external
-  operations. Opus is the required checker; Fable/GPT can add evidence but cannot replace that role.
+### CI defects found and closed
 
-## Commits
+1. Fresh CI could not load task-profile rules because source execution defaulted to a home-directory checkout. `cli/task-profile.ts` now resolves its bundled source root when no installed override is present.
+2. The original CI cloned the pinned engine but did not install its modules, while CLI MCP bridge imports depend on them. CI now installs that lockfile with scripts disabled and passes checkout-root `EBRAIN_HOME` to the CLI suite.
+3. The README rewrite drifted from the exact AGPL short form asserted by the root license contract. The canonical wording is restored.
 
-- `457ceb4` and `86888b2`: automatic local checkpoints that captured F10.3 source work. They are
-  provenance only, not phase verdicts.
-- `235412b docs: complete static documentation website`: explicit F10.3 phase closure. It is empty
-  because the automatic checkpoint had already captured the final staged files.
-- `4d7bbe7 docs: prepare independent release gate`: F11 maker preparation.
+## Commits and remote state
 
-No commits were pushed.
+- `c02f7c4 merge: integrate remote TUI dialog updates`
+- `a040592 docs: prepare open-source publication surface`
+- `68e4b12 ckis-backup: auto ...` automatic checkpoint that captured the task-profile source-root fix during verification; it belongs to the candidate and squash will condense it.
+- `1b674c0 fix(ci): resolve source task-profile rules`
+- `f4e6fe0 ci: provision pinned engine for CLI tests`
+
+PR: `https://github.com/aedneth/ebrain/pull/1` (draft). The repository remains private. No merge, deletion, release, visibility change, Vercel project, deployment, or Devpost action occurred.
 
 ## Verification evidence
 
-Final F10.3 verification:
+Latest local reproduction after CI fixes:
 
-- `bun test cli/public-docs.test.ts cli/website.test.ts`: `7/0`, 755 assertions.
-- `bun run --cwd website check`: 0 errors, 0 warnings, 0 hints.
-- `bun run website:build`: 40 static pages, output verifier passed 38 documentation routes.
-- `bun test ./cli/`: `280/0`, 1,563 assertions.
-- `bun test ./tui/test/`: `442/0`, 2,710 assertions.
-- Local production browser QA at `1440x900` and `393x852`: home, docs hub, detailed guide,
-  navigation, local search button, `Ctrl+K`, `Esc`, mobile disclosure, tooltips, focus, assets, and
-  page-width checks passed with no browser console/page errors. Preview and browser were stopped.
+- `EBRAIN_HOME="$PWD" bun test ./cli/`: `284 pass`, `0 fail`, `1,672 assertions`.
+- `bun test ./tui/test/`: `442 pass`, `0 fail`, `2,710 assertions`.
+- `bun run --cwd website check`: `0 errors`, `0 warnings`, `0 hints`.
+- `bun run website:build`: `40` static pages and `38` documentation routes verified.
+- `bun install --cwd vendor/gbrain --frozen-lockfile --ignore-scripts`: clean.
+- `git diff --check`, shell syntax, TUI zero-hex scan, and repository secret scan: clean.
 
-Final F11 maker-preparation verification:
+Remote evidence:
 
-- `bun test cli/release-readiness.test.ts`: `3/0`, 21 assertions.
-- `bun run --cwd website check`: 0 errors, 0 warnings, 0 hints.
-- `bun run website:build`: 40 static pages, verifier passed 38 documentation routes.
-- `bun test ./cli/`: `283/0`, 1,581 assertions.
-- `bun test ./tui/test/`: `442/0`, 2,710 assertions.
-- `git diff --check` and staged diff checks passed before the F11 commit. New-line secret/path scans
-  found no token-shaped values, private paths, or historical-navigation patterns.
+- GitHub Actions run `29667492937`: success. It completed checkout, pinned engine clone/install, root and website dependency installs, CLI suite, TUI suite, Astro check/build, shell syntax, zero-hex, and secret scan.
+- Earlier runs `29667303912` and `29667418822` failed. Their concrete modes are documented above and in the F12 maker report; do not cite them as final status.
 
-## Durable learnings and environment notes
+## Required checker audit
 
-- Recorded the responsive SVG rule and the release-authority rule with `ebrain remember`.
-- Both writes created local learnings and episode mirrors, but the command emitted the known MCP
-  write-through warning. Do not claim those new learnings are immediately cross-agent searchable
-  until the daemon path is independently verified.
-- Current Bun invocation form is `bun run --cwd website <script>`; do not use the incompatible
-  `bun --cwd website run <script>` order in this environment.
-- Immediately after changing Markdown, Astro can emit a transient glob-loader duplicate-ID warning
-  from stale generated content. A subsequent `bun run --cwd website check` followed by a rebuild
-  produced a clean final check/build. Treat a recurrence from a clean checkout as a checker finding,
-  not as an accepted warning.
-- Git commit hooks warned that `.npmrc` is absent. Do not create or inspect credential configuration
-  as part of this documentation/release-gate work.
+Audit the exact current branch against `origin/main`. Do not reuse maker counts as a verdict. Do not edit, push, deploy, inspect dotenv/credential files, or access customer repositories.
 
-## Required Opus audit
-
-Follow [`F11-REVIEW-PACKET.md`](F11-REVIEW-PACKET.md) exactly. At minimum, independently reproduce:
+1. Read `docs/F12-OPEN-SOURCE-PUBLICATION-PLAN.md`, `docs/F12-OPEN-SOURCE-PUBLICATION-MAKER-REPORT.md`, `README.md`, public-doc contracts, CI workflow, and TUI dialog/launch merge surfaces.
+2. Reproduce:
 
 ```bash
-bun test ./cli/
+EBRAIN_HOME="$PWD" bun test ./cli/
 bun test ./tui/test/
 bun run --cwd website check
 bun run website:build
-git diff --check 6ab8023^ 4d7bbe7
+git diff --check origin/main...HEAD
 ```
 
-Audit F8 prompt/workspace boundaries; F8.3’s deliberate non-implementation; F9 context, episode,
-procedure, and fixture-only migration boundaries; F10 licensing/public docs/privacy; the static
-site’s route/source parity and responsive behavior; and F11’s no-deploy/owner-approval contract.
-Write a separate report with findings first and record `[AUDIT_PASS]` only after independent
-reproduction. Fable/GPT may then provide a second independent gate report.
+3. Confirm README commands/claims match `cli/ebrain` and public docs, especially CKIS separation, governed memory boundaries, workspace/session behavior, user-owned routing, token-only telemetry, AGPL attribution, and no deployment/visibility overclaim.
+4. Inspect CI pinned-engine installation for reproducibility and confirm scripts remain disabled. Check issue and PR templates for privacy-safe contributor guidance.
+5. Audit the F7/F8 merge for responsive dialog, guided launch, workspace, and multiline editor regressions beyond test coverage.
+6. Write a standalone findings-first report. End `[AUDIT_PASS]` only if no blocking finding remains; otherwise end `[AUDIT_FAIL]`.
 
-## Remaining blockers and next action
+## Pending actions
 
-1. Independent Opus audit for `6ab8023^..4d7bbe7`.
-2. Optional Fable/GPT second review after Opus, not instead of it.
-3. Resolve the F10.0 public-release blockers: portable source-isolation policy and an
-   owner-approved history/public-tree remediation strategy.
-4. Only after a genuine independent pass, ask Eduardo for explicit, separately named approval for
-   any push, visibility change, tag/release, website deployment, or Devpost submission.
+1. Obtain an independent Opus or Fable audit after the account limit resets, or use a separate checker account.
+2. If the audit passes and PR #1 remains green, mark it ready and squash merge with branch deletion.
+3. After merge, configure a static Vercel project rooted at `website/`, connect it to the GitHub repository, deploy production from `main`, and verify live root/docs/search paths. Update public docs only with the verified URL.
+4. Keep repository visibility unchanged unless Eduardo makes that separate irreversible decision after reviewing the public-history/privacy gate.
 
-F11 remains pending. There is no maker audit pass.
+## Durable learnings
+
+- Source-root defaults must not assume a developer home checkout; CI must exercise the same bundled configuration received by a source user.
+- Cloning a pinned upstream engine is insufficient when direct test imports require its modules; frozen dependency installation belongs in CI and must disable package scripts.
+- Green CI is reproducibility evidence, not a replacement for maker/checker separation.
