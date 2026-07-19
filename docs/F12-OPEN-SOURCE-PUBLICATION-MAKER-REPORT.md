@@ -63,14 +63,16 @@ Final local reproduction after the fixes:
 
 ## Remote CI and independent-gate status
 
-GitHub Actions run `29667492937` completed successfully on the current draft head. It independently
-executed the full CLI and TUI suites, Astro check/build, shell syntax, zero-hex, and secret scan in
-a clean checkout. This is CI evidence, not a substitute for a maker/checker gate.
+GitHub Actions runs `29667492937` and `29667750588` completed successfully on the draft branch.
+The latter repeated the full clean-checkout matrix after the F12 readiness-contract correction:
+CLI and TUI suites, Astro check/build, shell syntax, zero-hex, and secret scan. This is CI evidence,
+not a substitute for a maker/checker gate.
 
-Two read-only independent-audit invocations were attempted after CI passed. The first Opus attempt
-did not emit a report; subsequent Opus and Fable attempts returned the account's weekly-limit
-message before reviewing the branch. There is therefore no audit verdict. Keep PR #1 as draft and
-do not merge or deploy until a different checker independently completes the required review.
+Three read-only independent-audit invocations were attempted after CI passed. The first Opus attempt
+did not emit a report; later Opus and Fable attempts, including a post-`29667750588` Opus reattempt,
+returned the account's weekly-limit message before reviewing the branch. There is therefore no audit
+verdict. Keep PR #1 as draft and do not merge or deploy until a different checker independently
+completes the required review.
 
 ## Deliberate boundaries
 

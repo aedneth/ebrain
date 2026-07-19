@@ -4,7 +4,7 @@ project: ebrain
 from: Codex-maker
 to: Opus or Fable independent checker
 created: 2026-07-18
-status: draft PR; CI re-run required after the F12 readiness-contract correction; independent audit blocked by checker account limit
+status: draft PR CI-green; independent audit blocked by checker account limit
 branch: release/open-source-publication
 pull-request: https://github.com/aedneth/ebrain/pull/1
 head: current-branch-head; verify with git rev-parse HEAD before audit
@@ -16,7 +16,7 @@ external-actions-pending: independent audit, squash merge, Vercel deployment, an
 
 ## Current state
 
-The release candidate is published as draft PR #1 from `release/open-source-publication`. A prior clean-checkout GitHub Actions run passed, but the current candidate needs a re-run after a stale F11 provenance assertion was corrected in the F12 readiness contract. The branch integrates the remote F7 dialog line with the local F8--F11 product work, completes F12 public documentation/community/CI work, and fixes the CI-only defects exposed by the draft.
+The release candidate is published as draft PR #1 from `release/open-source-publication`. GitHub Actions run `29667750588` passed from a clean checkout after the F12 readiness-contract correction. The branch integrates the remote F7 dialog line with the local F8--F11 product work, completes F12 public documentation/community/CI work, and fixes the CI-only defects exposed by the draft.
 
 The gate is not complete. An Opus audit attempt did not produce a report; later Opus and Fable attempts were rejected by the local account's weekly limit. There is no independent verdict. Keep the PR as draft. Do not merge, deploy, change repository visibility, tag, publish, or submit externally until a distinct checker completes the review.
 
@@ -71,6 +71,7 @@ Latest local reproduction after CI fixes:
 Remote evidence:
 
 - GitHub Actions run `29667492937`: success. It completed checkout, pinned engine clone/install, root and website dependency installs, CLI suite, TUI suite, Astro check/build, shell syntax, zero-hex, and secret scan.
+- GitHub Actions run `29667750588`: success on `cb04044`. It repeated the full clean-checkout matrix after the live-handoff readiness-contract correction.
 - Earlier runs `29667303912` and `29667418822` failed. Their concrete modes are documented above and in the F12 maker report; do not cite them as final status.
 
 ## Required checker audit
