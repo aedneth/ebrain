@@ -44,12 +44,14 @@ describe("F11 release readiness preparation", () => {
     expect(trackedGenerated).toBe("");
   });
 
-  test("classifies the documentation website as locally buildable rather than deployed", () => {
+  test("classifies the documentation website as static and does not imply a deployment before one is verified", () => {
     const audit = read("docs/F10.0-PUBLIC-CLAIM-AUDIT.md");
     const readme = read("README.md");
 
     expect(audit).toContain("can be built locally");
     expect(audit).toContain("Do not link a live site");
-    expect(readme).toMatch(/no public deployment has\s+been approved/);
+    expect(readme).toContain("Build the static site locally");
+    expect(readme).toContain("no server adapter, analytics, provider calls, or runtime credential requirement");
+    expect(readme).not.toContain("https://ebrain.vercel.app");
   });
 });

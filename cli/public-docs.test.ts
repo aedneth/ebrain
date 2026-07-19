@@ -50,7 +50,7 @@ const PUBLIC_FILES = [
   "docs/release/devpost-evidence.md",
 ];
 const PUBLIC_ASSETS = ["assets/ebrain-wordmark.svg", "assets/ebrain-tui-demo.svg"];
-const PUBLIC_ROOT_DESTINATIONS = ["LICENSE"];
+const PUBLIC_ROOT_DESTINATIONS = ["LICENSE", "CODE_OF_CONDUCT.md"];
 const PUBLIC_DESTINATIONS = new Set([...PUBLIC_FILES, ...PUBLIC_ASSETS, ...PUBLIC_ROOT_DESTINATIONS].map((file) => normalize(join(ROOT, file))));
 const LINK = /!?\[[^\]]*\]\(([^)]+)\)/g;
 const ANSI = /\x1b\[/;
@@ -114,5 +114,25 @@ describe("F10 public documentation contract", () => {
     expect(index).not.toContain("SPRINT-");
     expect(index).not.toContain("AUDIT-");
     expect(index).not.toContain("F10.0-");
+  });
+
+  test("keeps the README outcome-first, linked to its CI contract, and precise about CKIS", () => {
+    const readme = read("README.md");
+
+    for (const heading of [
+      "## Five-minute proof",
+      "## What you can do",
+      "## Compound personal context",
+      "## From CKIS to eBrain",
+      "## Token and provider telemetry",
+      "## Security and privacy boundaries",
+      "## Contributing",
+    ]) {
+      expect(readme).toContain(heading);
+    }
+    expect(readme).toContain("actions/workflows/ci.yml/badge.svg");
+    expect(readme).toContain("https://github.com/aedneth/ckis");
+    expect(readme).toContain("does not choose a universally best model");
+    expect(readme).toContain("does not report subscription charges as token usage");
   });
 });

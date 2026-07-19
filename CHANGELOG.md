@@ -4,6 +4,25 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-18 -- F12 Open-source publication surface
+
+- **Outcome-first README:** expanded the public landing document into a source-install proof,
+  capability and boundary map, shared-daemon architecture, compound-context lifecycle, CKIS
+  evolution, workspace/session workflow, user-owned routing, factual token telemetry, security
+  boundary, documentation map, and contribution guide. The repository-owned wordmark and
+  sanitized TUI frame remain the visual evidence; no personal paths, credentials, or raw terminal
+  output were added.
+- **Community and CI posture:** added structured bug/feature issue forms, a security/documentation
+  contact configuration, and a PR template. CI now installs and type-checks/builds the static docs
+  site in addition to the existing local CLI/TUI/security checks. Vercel link state is ignored.
+- **Release discipline:** added F12's explicit publication plan and updated README/site contracts
+  so they distinguish a static local build from an unverified public deployment. The remote F7
+  dialog line was merged into the release branch; conflicting implementation files preserved the
+  later F8 implementation and the complete TUI suite passed.
+- **Gate state:** maker implementation only. No Vercel project, deployment, repository visibility
+  change, push, PR, or merge has occurred. Independent Opus review remains required before an
+  external action.
+
 ## 2026-07-18 -- F11 Release gate preparation
 
 - **Independent-review candidate:** defined the exact F8-F10.3 range and supplied a separate Opus
