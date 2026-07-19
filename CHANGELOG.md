@@ -29,8 +29,12 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
   scripts disabled and gives the CLI suite the checked-out `EBRAIN_HOME`. A fresh runner can now
   resolve MCP bridge modules and the repository's adapter manifests without inheriting a developer
   home-directory installation.
-- **Remote verification:** draft PR #1 now has a fully green clean-checkout CI run covering CLI,
-  TUI, static docs type/build, shell syntax, zero-hex, and secret scanning. The two preceding
+- **Release-readiness continuity:** the F11 contract keeps its immutable historical review range,
+  while the live F12 handoff is now checked for its current independent-audit and no-merge/no-deploy
+  gates. It no longer treats a replaced candidate SHA as live provenance.
+- **Remote verification:** a pre-correction draft PR #1 head has a fully green clean-checkout CI
+  run covering CLI, TUI, static docs type/build, shell syntax, zero-hex, and secret scanning. The
+  corrected head requires the same fresh run before the independent audit; the two preceding
   failures are recorded in the F12 maker report with their narrow fixes.
 - **Gate state:** the release branch remains draft. Opus and Fable audit attempts were blocked by
   the local account's weekly limit before either could issue a verdict. No Vercel

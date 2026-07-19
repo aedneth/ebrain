@@ -23,7 +23,11 @@ describe("F11 release readiness preparation", () => {
     expect(packet).toContain("Do not push, deploy");
     expect(plan).toContain("6ab8023^..4d7bbe7");
     expect(packet).toContain("6ab8023^..4d7bbe7");
-    expect(handoff).toContain("review-candidate: 6ab8023^..4d7bbe7");
+    // F11 keeps its immutable review packet, while the handoff tracks the live F12 candidate.
+    expect(handoff).toContain("## Required checker audit");
+    expect(handoff).toContain("Keep the PR as draft");
+    expect(handoff).toContain("Do not merge, deploy");
+    expect(handoff).toContain("independent Opus or Fable audit");
     expect(readiness).toContain("Remaining release gates");
     expect(readiness).toContain("independent review");
     expect(readiness).toContain("explicit approval");

@@ -4,7 +4,7 @@ project: ebrain
 from: Codex-maker
 to: Opus or Fable independent checker
 created: 2026-07-18
-status: draft PR CI-green; independent audit blocked by checker account limit
+status: draft PR; CI re-run required after the F12 readiness-contract correction; independent audit blocked by checker account limit
 branch: release/open-source-publication
 pull-request: https://github.com/aedneth/ebrain/pull/1
 head: current-branch-head; verify with git rev-parse HEAD before audit
@@ -16,7 +16,7 @@ external-actions-pending: independent audit, squash merge, Vercel deployment, an
 
 ## Current state
 
-The release candidate is published as draft PR #1 from `release/open-source-publication`. Its latest clean-checkout GitHub Actions run is green. The branch integrates the remote F7 dialog line with the local F8--F11 product work, completes F12 public documentation/community/CI work, and fixes the CI-only defects exposed by the draft.
+The release candidate is published as draft PR #1 from `release/open-source-publication`. A prior clean-checkout GitHub Actions run passed, but the current candidate needs a re-run after a stale F11 provenance assertion was corrected in the F12 readiness contract. The branch integrates the remote F7 dialog line with the local F8--F11 product work, completes F12 public documentation/community/CI work, and fixes the CI-only defects exposed by the draft.
 
 The gate is not complete. An Opus audit attempt did not produce a report; later Opus and Fable attempts were rejected by the local account's weekly limit. There is no independent verdict. Keep the PR as draft. Do not merge, deploy, change repository visibility, tag, publish, or submit externally until a distinct checker completes the review.
 
@@ -45,6 +45,7 @@ The gate is not complete. An Opus audit attempt did not produce a report; later 
 1. Fresh CI could not load task-profile rules because source execution defaulted to a home-directory checkout. `cli/task-profile.ts` now resolves its bundled source root when no installed override is present.
 2. The original CI cloned the pinned engine but did not install its modules, while CLI MCP bridge imports depend on them. CI now installs that lockfile with scripts disabled and passes checkout-root `EBRAIN_HOME` to the CLI suite.
 3. The README rewrite drifted from the exact AGPL short form asserted by the root license contract. The canonical wording is restored.
+4. The F11 readiness test incorrectly required its historical review-candidate identifier inside the live F12 handoff. The contract now verifies the live independent-audit and no-merge/no-deploy gates instead.
 
 ## Commits and remote state
 
