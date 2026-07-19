@@ -273,4 +273,4 @@ eBrain integrates the separately installed [gbrain](https://github.com/garrytan/
 
 ## License
 
-eBrain-authored source is licensed under the [GNU Affero General Public License v3.0 only](LICENSE).
+eBrain-authored source is licensed under the [GNU AGPL v3.0 only](LICENSE).

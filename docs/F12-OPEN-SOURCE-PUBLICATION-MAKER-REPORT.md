@@ -29,6 +29,8 @@ audit verdict, Vercel deployment, squash merge, or repository-visibility change.
   source execution now resolves the bundled `config/task-profile-rules.yaml` beside the CLI source
   when no installed `EBRAIN_HOME` override exists. This makes CI and a nonstandard source checkout
   exercise the same versioned rules.
+- Restored the README's exact AGPL short-form wording after the full CLI distribution contract
+  caught the otherwise cosmetic phrasing drift.
 - Added the F12 plan and release trace in `CHANGELOG.md`.
 
 ## Verification
@@ -41,6 +43,19 @@ audit verdict, Vercel deployment, squash merge, or repository-visibility change.
 | Static site build | `bun run website:build`: 40 pages, 38 documentation routes verified |
 | Markdown and whitespace | `git diff --check`: clean |
 | Website lock reproducibility | `bun install --cwd website --frozen-lockfile`: no changes |
+
+## Draft CI follow-up
+
+The first draft CI run failed in the CLI suite before the TUI or website stages. The concrete
+failure was that `task-profile.ts` used a home-directory checkout assumption and could not find the
+already versioned rules in a GitHub workspace. The source-root fallback above resolves that issue.
+The full suite then exposed a separate exact-license-copy assertion in the rewritten README; the
+canonical short-form AGPL wording was restored. Final local reproduction after both fixes:
+
+- `bun test ./cli/`: 284 pass, 0 fail, 1,666 assertions;
+- `bun test ./tui/test/`: 442 pass, 0 fail, 2,710 assertions;
+- `bun run --cwd website check`: 0 errors, 0 warnings, 0 hints; and
+- `bun run website:build`: 40 pages and 38 documentation routes verified.
 
 ## Deliberate boundaries
 

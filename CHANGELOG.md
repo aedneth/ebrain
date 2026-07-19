@@ -23,6 +23,8 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
   root when `EBRAIN_HOME` is not set, instead of assuming a checkout always resides in `~/eBrain`.
   Installed launchers retain their explicit environment override; clean GitHub checkouts now load
   the same versioned rules as local development.
+- **License metadata correction:** restored the canonical `GNU AGPL v3.0 only` README wording that
+  is enforced by the root distribution contract.
 - **Gate state:** the release branch is published as draft PR #1 so remote CI and a future checker
   can inspect a stable candidate. No Vercel project/deployment, repository-visibility change, or
   merge has occurred. Independent Opus review remains required before the draft becomes mergeable.
