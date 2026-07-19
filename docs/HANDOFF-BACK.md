@@ -104,3 +104,4 @@ git diff --check origin/main...HEAD
 - Source-root defaults must not assume a developer home checkout; CI must exercise the same bundled configuration received by a source user.
 - Cloning a pinned upstream engine is insufficient when direct test imports require its modules; frozen dependency installation belongs in CI and must disable package scripts.
 - Green CI is reproducibility evidence, not a replacement for maker/checker separation.
+- The F12 CI learning was recorded with `ebrain remember` and mirrored locally as a bounded episode. The command reported the known daemon write-through warning, so do not claim it is immediately searchable across agents until the daemon path is independently checked.
