@@ -26,8 +26,8 @@ audited pull request, and an owner-authorized static documentation deployment.
    calls, or runtime credentials.
 4. Updated public claims, release-readiness contracts, CHANGELOG, maker report, and handoff that
    state the deployment truthfully.
-5. Independent Opus review of the final branch, followed by GitHub PR CI and an authorized squash
-   merge only when both are green.
+5. A draft GitHub PR for reproducible remote CI, independent Opus review of the final branch, an
+   authorized squash merge only when both are green, then a production static deployment.
 
 ## Non-goals
 
@@ -52,7 +52,7 @@ audited pull request, and an owner-authorized static documentation deployment.
 
 ```text
 merge remote line -> documentation/community implementation -> local verification
--> Opus independent audit -> Vercel static deployment -> PR + CI -> squash merge
+-> draft PR + CI -> Opus independent audit -> squash merge -> Vercel static deployment
 -> post-merge verification -> changelog and handoff
 ```
 

@@ -5,11 +5,12 @@
  * It reports matched capabilities and execution modes. It deliberately has no concept of the
  * best agent/model, pricing, subscriptions, benchmarks, or automatic execution.
  */
-import { homedir } from "node:os";
 import { join } from "node:path";
 
-const HOME = homedir();
-const EBRAIN_HOME = process.env.EBRAIN_HOME || join(HOME, "eBrain");
+// Source checkouts can live outside ~/eBrain (for example in CI). The dispatcher still supplies
+// EBRAIN_HOME for an installed instance, while this fallback keeps the bundled rules colocated
+// with the CLI source instead of inheriting the caller's home-directory layout.
+const EBRAIN_HOME = process.env.EBRAIN_HOME || join(import.meta.dir, "..");
 const RULES_PATH = process.env.EBRAIN_TASK_PROFILE_RULES || join(EBRAIN_HOME, "config", "task-profile-rules.yaml");
 
 export const CAPABILITIES = ["coding", "agentic", "web_design", "long_context", "terminal", "general"] as const;

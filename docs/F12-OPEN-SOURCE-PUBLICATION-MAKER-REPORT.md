@@ -2,9 +2,9 @@
 
 ## Scope
 
-This report records the local implementation phase for the owner-authorized publication program.
-It does not record an audit verdict, a Vercel deployment, a GitHub push, a pull request, a merge,
-or a repository-visibility change.
+This report records the maker implementation phase for the owner-authorized publication program.
+The branch is published as draft PR #1 for remote CI and future independent review. This is not an
+audit verdict, Vercel deployment, squash merge, or repository-visibility change.
 
 ## Implemented
 
@@ -25,6 +25,10 @@ or a repository-visibility change.
   from becoming repository content.
 - Expanded CI with the private static-site dependency install, Astro type check, and static build.
   The site remains adapter-free and does not use provider calls or runtime credentials.
+- Corrected task-profile rule discovery after the draft CI reproduced a clean-checkout failure:
+  source execution now resolves the bundled `config/task-profile-rules.yaml` beside the CLI source
+  when no installed `EBRAIN_HOME` override exists. This makes CI and a nonstandard source checkout
+  exercise the same versioned rules.
 - Added the F12 plan and release trace in `CHANGELOG.md`.
 
 ## Verification
@@ -43,7 +47,7 @@ or a repository-visibility change.
 - The README describes an installable source checkout and a locally buildable static site. It does
   not invent a public URL before a verified deployment.
 - The GitHub repository remains private in this maker phase. Changing visibility is not a side
-  effect of branch, PR, or static-site work.
+  effect of the draft PR or static-site work.
 - No Vercel configuration or adapter is needed for Astro static output. A project link will create
   ignored local state only; deployment must happen after independent review.
 - No installation, source policy, model/provider, or memory semantics changed in this phase.

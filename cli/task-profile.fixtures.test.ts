@@ -9,7 +9,7 @@ describe("F6.6.6 canonical task fixtures -- signals, not model winners", () => {
     expect(new Set(CANONICAL_TASKS.map((fixture) => fixture.capability))).toEqual(new Set(["coding", "agentic", "web_design", "long_context", "terminal", "general"]));
   });
 
-  test("all canonical tasks emit only explainable capability signals and compatible modes", async () => {
+  test("loads colocated source rules and emits only explainable capability signals and compatible modes", async () => {
     const rules = await loadTaskProfileRules();
     for (const fixture of CANONICAL_TASKS) {
       const profile = buildTaskProfile(fixture.task, rules);

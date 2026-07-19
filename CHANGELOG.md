@@ -19,9 +19,13 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
   so they distinguish a static local build from an unverified public deployment. The remote F7
   dialog line was merged into the release branch; conflicting implementation files preserved the
   later F8 implementation and the complete TUI suite passed.
-- **Gate state:** maker implementation only. No Vercel project, deployment, repository visibility
-  change, push, PR, or merge has occurred. Independent Opus review remains required before an
-  external action.
+- **CI source-root correction:** task-profile rule discovery now defaults to the bundled source
+  root when `EBRAIN_HOME` is not set, instead of assuming a checkout always resides in `~/eBrain`.
+  Installed launchers retain their explicit environment override; clean GitHub checkouts now load
+  the same versioned rules as local development.
+- **Gate state:** the release branch is published as draft PR #1 so remote CI and a future checker
+  can inspect a stable candidate. No Vercel project/deployment, repository-visibility change, or
+  merge has occurred. Independent Opus review remains required before the draft becomes mergeable.
 
 ## 2026-07-18 -- F11 Release gate preparation
 
