@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { scrubSecrets } from "./sessions.ts";
+import { referencesDeniedRepo } from "./deny-policy.ts";
 import { readWorkspaceStore } from "./workspaces.ts";
 
 const HOME = homedir();
@@ -146,7 +147,7 @@ export function validateEpisodeText(value: unknown): string {
   if (text.length > MAX_TEXT_CHARS) throw new Error("episode text exceeds the bounded limit");
   if (/\u0000/.test(text)) throw new Error("episode text contains a control byte");
   if (scrubSecrets(text) !== text) throw new Error("episode text contains secret-shaped content");
-  if (/(?:brisas-del-golfo|dekko)/i.test(text)) throw new Error("episode text references a denied client repository");
+  if (referencesDeniedRepo(text)) throw new Error("episode text references a denied client repository");
   return text;
 }
 

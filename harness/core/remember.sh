@@ -13,10 +13,15 @@
 # se NIEGA a escribir (exit ≠ 0). Robusto en lo demás. NO es un hook: lo invoca el agente/CLI a mano.
 set -uo pipefail
 
-MEM="$HOME/eBrain/memory"
+# Resolve the eBrain root ONCE: explicit override, else this script's own location
+# ($EBRAIN_HOME/harness/core/remember.sh, so up two levels). Never a "$HOME/eBrain" literal — the
+# checkout path is the operator's choice and the installer explicitly supports overriding it.
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+EBRAIN_HOME="${EBRAIN_HOME:-$(dirname -- "$(dirname -- "$SCRIPT_DIR")")}"
+MEM="${EBRAIN_MEMORY_HOME:-$EBRAIN_HOME/memory}"
 LEARN="$MEM/learnings"
-# Política de confianza compartida (deny de cliente + redact unificado) — fuente única del harness.
-. "$HOME/eBrain/harness/core/trust.sh"
+# Shared trust policy (deny policy + unified redaction) — single source of truth for the harness.
+. "$EBRAIN_HOME/harness/core/trust.sh"
 
 PROJECT_OVERRIDE=""; TAGS=""; PTYPE="agent-learning"; SYNC=1
 ARGS=()
@@ -56,14 +61,14 @@ fi
 # --- Seguridad FAIL-CLOSED ---
 # 1) trust-policy: repo de cliente por slug O por remote → negar (hard-deny; no default-deny, para no
 #    bloquear learnings legítimos en repos OSS/ajenos — el sweep sí es default-deny, remember es intencional).
-if printf '%s' "$SLUG" | grep -Eiq "$TRUST_DENY"; then
-  echo "remember: DENEGADO — '$SLUG' es repo de cliente (deny-policy). Su contexto no entra a ebrain." >&2
+if trust_denied "$SLUG"; then
+  echo "remember: REFUSED — this repository is denied by the local deny policy; its context does not enter eBrain." >&2
   exit 3
 fi
 if [ -n "$REPO" ]; then
   RURL="$(git -C "$REPO" remote get-url origin 2>/dev/null || true)"
-  if printf '%s' "$RURL" | grep -Eiq "$TRUST_DENY"; then
-    echo "remember: DENEGADO — el remote de este repo es de cliente (deny-policy)." >&2
+  if trust_denied "$RURL"; then
+    echo "remember: REFUSED — this repository's remote is denied by the local deny policy." >&2
     exit 3
   fi
 fi
@@ -113,8 +118,8 @@ if [ -d "$MEM/.git" ]; then
   git -C "$MEM" commit -q -m "remember: $AGENT/$SLUG $DATE_TAG" >/dev/null 2>&1 || true
 fi
 
-# Write-through por MCP al daemon para que sea buscable sin pelear el lock PGLite.
-EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
+# MCP write-through to the daemon, so the learning is searchable without fighting the PGLite lock.
+# EBRAIN_HOME is already resolved at the top of this script.
 REMOTE="$EBRAIN_HOME/cli/remote-tools.ts"
 if [ -z "${BUN_BIN:-}" ]; then
   BUN_BIN="$HOME/.bun/bin/bun"

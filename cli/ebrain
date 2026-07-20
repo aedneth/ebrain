@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# ebrain — CLI unificado del harness/knowledge layer. Dispatcher fino sobre las piezas canónicas.
-# Instalado como ~/.local/bin/ebrain (launcher) → este archivo. Todo vive en $EBRAIN_HOME (~/eBrain).
+# ebrain — unified CLI for the harness/knowledge layer. Thin dispatcher over the canonical pieces.
+# Installed as ~/.local/bin/ebrain (launcher) → this file. Everything lives under $EBRAIN_HOME.
 set -uo pipefail
 
-EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
+# Default to this dispatcher's own checkout ($EBRAIN_HOME/cli/ebrain → up one level) rather than a
+# "$HOME/eBrain" literal, so a checkout at any path works when invoked directly.
+EBRAIN_HOME="${EBRAIN_HOME:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)}"
 CORE="$EBRAIN_HOME/harness/core"
 SCRIPTS="$EBRAIN_HOME/scripts"
 CFG="$HOME/.config/ebrain"

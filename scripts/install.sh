@@ -12,6 +12,9 @@ set -eu
 
 EBRAIN_REPO="${EBRAIN_REPO:-https://github.com/aedneth/ebrain.git}"
 EBRAIN_REF="${EBRAIN_REF:-main}"
+# Track whether the operator chose the location explicitly: --from-source below falls back to this
+# script's own checkout, but an explicit EBRAIN_HOME always wins.
+EBRAIN_HOME_EXPLICIT="${EBRAIN_HOME:+1}"
 EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
 GBRAIN_REPO="${GBRAIN_REPO:-https://github.com/garrytan/gbrain.git}"
 # Pinned engine commit (v0.42.58.0). See docs/SPRINT.md §0.1.5 and docs/ARCHITECTURE.md.
@@ -27,7 +30,7 @@ eBrain installer
 
 Usage: install.sh [--from-source] [--name <bin-name>]
 
-  --from-source   Use an existing checkout at $EBRAIN_HOME instead of cloning.
+  --from-source   Use this script's own checkout instead of cloning (override: EBRAIN_HOME).
   --name <name>   Install the launcher under a custom name (default: ebrain).
   -h, --help      Show this help.
 EOF
@@ -61,6 +64,14 @@ have git || die "git is required"
 
 # 2. eBrain source
 if [ "$FROM_SOURCE" -eq 1 ]; then
+  # Resolve the checkout from this script's own location unless EBRAIN_HOME was set explicitly.
+  # The documented quickstart clones into a directory of the user's choosing and runs
+  # ./scripts/install.sh from inside it, so defaulting to "$HOME/eBrain" would reject the very
+  # checkout the user just made.
+  if [ -z "$EBRAIN_HOME_EXPLICIT" ]; then
+    SCRIPT_ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/.." 2>/dev/null && pwd)" || SCRIPT_ROOT=""
+    if [ -n "$SCRIPT_ROOT" ] && [ -d "$SCRIPT_ROOT/cli" ]; then EBRAIN_HOME="$SCRIPT_ROOT"; fi
+  fi
   [ -d "$EBRAIN_HOME/cli" ] || die "--from-source expects an existing checkout at $EBRAIN_HOME"
   say "Using existing checkout at $EBRAIN_HOME"
 elif [ -d "$EBRAIN_HOME/.git" ]; then

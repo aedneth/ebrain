@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { scrubSecrets } from "./sessions.ts";
+import { referencesDeniedRepo } from "./deny-policy.ts";
 import { readWorkspaceStore } from "./workspaces.ts";
 
 const HOME = homedir();
@@ -113,9 +114,9 @@ export function validateContextText(value: unknown, maxChars: number, field: str
   if (text.length > maxChars) throw new Error(`${field} exceeds the bounded limit`);
   if (/\u0000/.test(text)) throw new Error(`${field} contains a control byte`);
   if (scrubSecrets(text) !== text) throw new Error(`${field} contains secret-shaped content`);
-  // Context is an eBrain-wide memory input. Do not allow a user/agent to smuggle a denied-client
+  // Context is an eBrain-wide memory input. Do not allow a user/agent to smuggle a denied
   // path or repository identity into an otherwise local store.
-  if (/(?:brisas-del-golfo|dekko)/i.test(text)) throw new Error(`${field} references a denied client repository`);
+  if (referencesDeniedRepo(text)) throw new Error(`${field} references a denied client repository`);
   return text;
 }
 

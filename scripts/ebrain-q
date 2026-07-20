@@ -2,7 +2,7 @@
 # Thin executable entrypoint; structured parsing and isolation live in cli/query.ts.
 set -euo pipefail
 
-EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
+EBRAIN_HOME="${EBRAIN_HOME:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)}"
 BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"
 command -v bun >/dev/null 2>&1 && BUN_BIN=bun
 

@@ -1,29 +1,27 @@
 /**
- * cli/isolation.ts — superficie única de los invariantes de aislamiento que el
- * CANAL COMPARTIDO del daemon (FASE D / ADR-004 criterio 4) debe preservar.
+ * cli/isolation.ts — the single surface for the isolation invariants that the daemon's SHARED
+ * CHANNEL (phase D / ADR-004 criterion 4) must preserve.
  *
- * Dos planos, ambos PUROS y testeables en CI (ver cli/isolation.test.ts):
- *   1. plano-sesión: `isClientPath` — ningún agente puede lanzar una sesión cuyo cwd
- *      resuelva bajo un repo de cliente (brisas/dekko). Es la puerta por la que el código
- *      de cliente NUNCA entra al brain vía una sesión. (SoT del denylist: cli/sessions.ts.)
- *   2. plano-source: `isClientSource` / `federatedSources` / `assertNoClientSources` —
- *      ningún repo de cliente puede aparecer como source federado del host compartido.
- *      Reproduce el filtro de discovery de `scripts/ebrain-q` (federated · !default · !cliente)
- *      como función pura, para que el host (D.4/D.6) pueda ENFORZARLo, no solo documentarlo
- *      (ADR-001 §Frontera brisas: brisas/dekko nunca son sources; ni el code-graph del Dev
- *      Brain — se registra por sub-path omitiéndolo).
+ * Two planes, both testable in CI (see cli/isolation.test.ts):
+ *   1. session plane: `isClientPath` — no agent may launch a session whose cwd resolves under a
+ *      denied repository. This is the door through which denied code would otherwise enter the
+ *      brain via a session. (Policy source of truth: cli/deny-policy.ts, operator-configured.)
+ *   2. source plane: `isClientSource` / `federatedSources` / `assertNoClientSources` — no denied
+ *      repository may appear as a federated source of the shared host. Reproduces the discovery
+ *      filter of `scripts/ebrain-q` (federated · !default · !denied) as a function, so the host
+ *      can ENFORCE it rather than merely document it.
  */
-import { CLIENT_DENYLIST, isClientPath } from "./sessions.ts";
+import { clientDenylist, isClientPath } from "./sessions.ts";
+import { isDeniedSourceName } from "./deny-policy.ts";
 
-export { CLIENT_DENYLIST, isClientPath };
+export { clientDenylist, isClientPath };
 
 /**
- * Un nombre de source es de repo-cliente (jamás federable) si contiene un nombre del
- * denylist, case-insensitive. Espeja la semántica de `grep -vE 'brisas|dekko'` de ebrain-q.
+ * A source name identifies a denied repository (never federable) when it contains a denied entry,
+ * case-insensitively. Mirrors the discovery filter of `scripts/ebrain-q`.
  */
 export function isClientSource(name: string): boolean {
-  const n = name.toLowerCase();
-  return CLIENT_DENYLIST.some((d) => n.includes(d.toLowerCase()));
+  return isDeniedSourceName(name);
 }
 
 export interface SourceIdentity {
@@ -43,9 +41,9 @@ export function isClientSourceRecord(source: SourceIdentity): boolean {
 }
 
 /**
- * Filtro de discovery de sources como fn pura: de la salida cruda de `sources list`,
- * quedarse SOLO con los federados, no-'default', no-cliente. Mismo criterio que el
- * `awk '/federated/ && $1 != "default"' | grep -vE 'brisas|dekko'` de ebrain-q.
+ * Source discovery filter as a function: from the raw `sources list` output,
+ * keep ONLY the federated, non-'default', non-denied entries — the same criterion the
+ * `ebrain-q` discovery pipeline applies.
  */
 export function federatedSources(rawSourcesList: string): string[] {
   return rawSourcesList
@@ -56,17 +54,16 @@ export function federatedSources(rawSourcesList: string): string[] {
 }
 
 /**
- * Aserción de gate: ningún source de cliente puede aparecer NUNCA en un set federado.
- * Hoy la ejerce el CI test (cli/isolation.test.ts); cablearla al boot del host
- * (scripts/ebrain-brain, antes de exponer MCP) es la tarea D.5.4, PENDIENTE.
- * Auditoría Opus 2026-07-14: la enforcement en runtime del host aún NO está cableada
- * — el aislamiento vivo hoy se apoya en federación default-deny + fail-check de doctor.
+ * Gate assertion: a denied source may NEVER appear in a federated set.
+ *
+ * Enforced at runtime, not by convention: `cli/daemon-preflight.ts` calls this over the live
+ * source list before the host binds HTTP, and `scripts/ebrain-brain` runs that preflight ahead of
+ * `serve --http`. The CI test (cli/isolation.test.ts) covers the predicate itself.
  */
 export function assertNoClientSources(sources: readonly string[]): void {
   const leaked = sources.filter(isClientSource);
   if (leaked.length > 0) {
-    throw new Error(
-      `aislamiento roto: sources de repo-cliente filtrados a la federación: ${leaked.join(", ")}`,
-    );
+    // Count, never names: this can surface in daemon boot output.
+    throw new Error(`isolation broken: ${leaked.length} denied source(s) reached the federated set`);
   }
 }
