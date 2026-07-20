@@ -22,7 +22,11 @@ import { homedir } from "os";
 
 const HOME = homedir();
 const EBRAIN_HOME = process.env.EBRAIN_HOME || join(HOME, "eBrain");
-const LEARNINGS_DIR = join(EBRAIN_HOME, "memory", "learnings");
+// Memory is USER DATA and may live outside the code checkout. Readers must agree with the writer
+// (harness/core/remember.sh) or a set override produces a silent split brain: writes land in one
+// tree while `ebrain memory recent` reports an empty other one.
+const MEMORY_HOME = process.env.EBRAIN_MEMORY_HOME || join(EBRAIN_HOME, "memory");
+const LEARNINGS_DIR = join(MEMORY_HOME, "learnings");
 const DEV_BRAIN = process.env.DEV_BRAIN_VAULT || join(HOME, "Documents", "Dev Brain");
 const SESSIONS_INDEX = join(DEV_BRAIN, "sessions", "index.md");
 const DEFAULT_LIMIT = 10;

@@ -20,19 +20,50 @@
 # gate and this is the second.
 TRUST_DENY_CONFIG="${EBRAIN_DENY_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/ebrain/denied-repos}"
 TRUST_POLICY_ERROR=0
+TRUST_DENY=''
+
+# trust__load <origin> <raw> — parse AND VALIDATE the policy into an ERE alternation.
+#
+# Validation is not optional here. This string is spliced into `grep -E`, so an unvalidated entry
+# is a fail-OPEN hole, not a cosmetic issue: `foo(` makes the whole pattern an invalid ERE, grep
+# exits 2, and "no match" reads as ALLOW — disabling every other valid entry too. A leading dash is
+# parsed as a grep option with the same result, and a CR left by a CRLF-saved file makes an entry
+# match nothing at all, silently. The grammar is deliberately identical to SAFE_ENTRY in
+# cli/deny-policy.ts: the two halves must agree on what a policy means.
+trust__load() {
+  local origin="$1" raw="$2" tok esc out='' n=0
+  raw="$(printf '%s\n' "$raw" | tr -d '\r' | sed 's/#.*//' | tr ', \t' '\n\n\n')"
+  while IFS= read -r tok; do
+    [ -n "$tok" ] || continue
+    tok="$(printf '%s' "$tok" | tr '[:upper:]' '[:lower:]')"
+    n=$((n + 1))
+    if ! printf '%s' "$tok" | grep -Eq '^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$'; then
+      # Report the position, never the token: a malformed entry can still contain a real name.
+      TRUST_POLICY_ERROR=1
+      TRUST_DENY=''
+      printf 'trust.sh: %s: entry %s is not a bare repository name — treating every repository as denied\n' "$origin" "$n" >&2
+      return 1
+    fi
+    # Escape dots so a validated entry matches literally, matching the TS substring semantics
+    # (an unescaped `.` would make `a.b` match `aXb`).
+    esc="$(printf '%s' "$tok" | sed 's/\./\\./g')"
+    out="${out:+$out|}$esc"
+  done <<EOF
+$raw
+EOF
+  TRUST_DENY="$out"
+}
+
 if [ -n "${EBRAIN_DENIED_REPOS+x}" ]; then
-  TRUST_DENY="$(printf '%s' "$EBRAIN_DENIED_REPOS" | tr ', \t' '\n\n\n' | grep -v '^$' | paste -sd'|' -)"
+  trust__load "EBRAIN_DENIED_REPOS" "$EBRAIN_DENIED_REPOS" || :
 elif [ -e "$TRUST_DENY_CONFIG" ]; then
   if [ -r "$TRUST_DENY_CONFIG" ]; then
-    TRUST_DENY="$(sed 's/#.*//' "$TRUST_DENY_CONFIG" | tr ', \t' '\n\n\n' | grep -v '^$' | paste -sd'|' -)"
+    trust__load "$TRUST_DENY_CONFIG" "$(cat "$TRUST_DENY_CONFIG")" || :
   else
     # Present but unreadable: we cannot know the policy, so we assume the strictest one.
     TRUST_POLICY_ERROR=1
-    TRUST_DENY=''
     printf 'trust.sh: deny policy exists but is unreadable — treating every repository as denied\n' >&2
   fi
-else
-  TRUST_DENY=''
 fi
 
 # trust_denied <text> → 0 when the text matches the deny policy.

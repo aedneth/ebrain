@@ -44,8 +44,10 @@ function parseEntries(raw: string, origin: string): string[] {
     for (const token of stripped.split(/[\s,]+/)) {
       if (!token) continue;
       if (!SAFE_ENTRY.test(token)) {
+        // Position, never the token: a malformed entry can still contain a real denied name, and
+        // this message reaches stderr.
         throw new Error(
-          `${origin}: invalid deny entry "${token}" on line ${index + 1} — expected a bare directory or source name (letters, digits, '.', '_', '-')`,
+          `${origin}: invalid deny entry on line ${index + 1} — expected a bare directory or source name (letters, digits, '.', '_', '-')`,
         );
       }
       if (!entries.includes(token)) entries.push(token);

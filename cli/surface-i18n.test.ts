@@ -36,23 +36,48 @@ const SPANISH_WORDS = new RegExp(
 // diacritic, so it passed this guard for two phases. Function words are the robust tell — each
 // entry below is a non-word in English, so an English sink line cannot accumulate two of them,
 // while Spanish prose reaches two almost immediately.
+// Two tiers, because the two kinds of evidence differ in strength.
+//
+// STRONG: content words that are not words in English at all. One is conclusive — this is what the
+// single-signal miss in remember.sh ("buscable en ebrain") taught us; a density rule alone needs a
+// second word that a short output line may simply not have.
+// NOTE: no `g` flag. A global regex carries `lastIndex` across `.test()` calls, so a shared global
+// pattern used with `.test()` alternates between true and false on identical input — which would
+// make this guard miss every other Spanish line.
+const SPANISH_STRONG =
+  /\b(?:pude|pudo|crear|escribir|buscable|leer|borrar|guardar|encontrar|resuelve|rechaza|rechazado|denegado|aislamiento|archivo|nombre|texto|contener|parece|guardo|duro|cliente|falta|vacio|creada|matada|enviado)\b/i;
+// FUNCTION: grammatical glue. Individually weak (some are English words in other contexts), but two
+// on one output line is not English prose.
 const SPANISH_FUNCTION_WORDS =
-  /\b(?:el|la|los|las|un|una|unos|unas|de|del|que|para|por|sin|bajo|sobre|entre|hacia|desde|hasta|como|pero|cuando|donde|porque|este|esta|ese|esa|eso|su|sus|se|ya|muy|cada|toda|nunca|siempre|debe|puede|tiene|fue|ser|otro|otra|antes|aunque|nada|texto|archivo|nombre|falta|cliente|resuelve|rechazado|aislamiento|duro|guardo|parece|contener)\b/gi;
+  /\b(?:el|la|los|las|un|una|unos|unas|de|del|que|para|por|sin|bajo|sobre|entre|hacia|desde|hasta|como|pero|cuando|donde|porque|este|esta|ese|esa|eso|su|sus|se|ya|muy|cada|toda|nunca|siempre|debe|puede|tiene|fue|ser|otro|otra|antes|aunque|nada)\b/gi;
 
 function spanishFunctionWords(line: string): number {
   return (line.match(SPANISH_FUNCTION_WORDS) ?? []).length;
 }
 
-function scan(rel: string): string[] {
-  const text = readFileSync(join(ROOT, rel), "utf8");
+function looksSpanish(line: string): boolean {
+  return (
+    SPANISH_DIACRITIC.test(line) ||
+    SPANISH_WORDS.test(line) ||
+    SPANISH_STRONG.test(line) ||
+    spanishFunctionWords(line) >= 2
+  );
+}
+
+// Split from `scan` so the regression test below can pin the whole detector — SINK selection plus
+// all three signals — instead of only the density helper. A refactor that drops a signal from here
+// must fail a test, not pass because the helper it no longer calls is still correct.
+function scanText(text: string, label: string): string[] {
   const hits: string[] = [];
   text.split("\n").forEach((line, i) => {
     if (!SINK.test(line)) return;
-    if (SPANISH_DIACRITIC.test(line) || SPANISH_WORDS.test(line) || spanishFunctionWords(line) >= 2) {
-      hits.push(`${rel}:${i + 1}: ${line.trim()}`);
-    }
+    if (looksSpanish(line)) hits.push(`${label}:${i + 1}: ${line.trim()}`);
   });
   return hits;
+}
+
+function scan(rel: string): string[] {
+  return scanText(readFileSync(join(ROOT, rel), "utf8"), rel);
 }
 
 const SURFACES = [
@@ -86,11 +111,27 @@ describe("G56-F6 — the visible surface is English-only", () => {
       'message: `cwd resuelve bajo un repo de cliente (${CLIENT_DENYLIST.join(" / ")}) - rechazado (aislamiento duro, ver CLAUDE.md)`';
     expect(SPANISH_DIACRITIC.test(escaped)).toBe(false);
     expect(SPANISH_WORDS.test(escaped)).toBe(false);
-    expect(spanishFunctionWords(escaped)).toBeGreaterThanOrEqual(2);
+    // Pinned through the real detector, not the helper.
+    expect(scanText(escaped, "fixture")).toHaveLength(1);
 
-    // …and an English sink line of comparable length must stay clean.
-    const english = 'message: "cwd resolves under a repository denied by the local deny policy — refused"';
-    expect(spanishFunctionWords(english)).toBeLessThan(2);
+    // The three lines that survived in remember.sh past the first hardening, same reason.
+    for (const line of [
+      'echo "remember: no pude crear $DEST" >&2',
+      'echo "remember: no pude escribir $OUT" >&2',
+      'echo "  MCP put_page agent-memory OK (buscable en ebrain)"',
+    ]) {
+      expect(scanText(line, "fixture")).toHaveLength(1);
+    }
+
+    // …and English sink lines of comparable shape must stay clean.
+    for (const line of [
+      'message: "cwd resolves under a repository denied by the local deny policy — refused"',
+      'echo "remember: could not create $DEST" >&2',
+      'throw new Error("the text appears to contain a secret; nothing was written")',
+      'console.log("no session found for that workspace, and no default is configured")',
+    ]) {
+      expect(scanText(line, "fixture")).toEqual([]);
+    }
   });
 
   test("task-profile disclaimer is English (the live probe returned false)", () => {

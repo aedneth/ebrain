@@ -78,7 +78,7 @@ if trust_redact_hit_text "$CONTENT"; then
 fi
 
 # --- Escritura ---
-DEST="$LEARN/$SLUG"; mkdir -p "$DEST" 2>/dev/null || { echo "remember: no pude crear $DEST" >&2; exit 1; }
+DEST="$LEARN/$SLUG"; mkdir -p "$DEST" 2>/dev/null || { echo "remember: could not create $DEST" >&2; exit 1; }
 NOW_UTC="$(date -u +%FT%TZ)"; DATE_TAG="$(date +%Y-%m-%d-%H%M)"; DAY="$(date +%Y-%m-%d)"
 HASH="$(printf '%s%s' "$NOW_UTC" "$CONTENT" | (sha1sum 2>/dev/null || shasum 2>/dev/null) | cut -c1-8)"
 [ -z "$HASH" ] && HASH="$RANDOM"
@@ -107,7 +107,7 @@ fi
   echo "# $TITLE"
   echo
   printf '%s\n' "$CONTENT"
-} > "$OUT" 2>/dev/null || { echo "remember: no pude escribir $OUT" >&2; exit 1; }
+} > "$OUT" 2>/dev/null || { echo "remember: could not write $OUT" >&2; exit 1; }
 
 echo "remember ✓ ($AGENT/$SLUG) → $OUT"
 
@@ -142,7 +142,7 @@ fi
 SLUG_PATH="learnings/$SLUG/${DATE_TAG}-${AGENT}-${HASH}"
 if [ "$SYNC" = "1" ] && [ -f "$REMOTE" ]; then
   if "$BUN_BIN" run "$REMOTE" put-page --source agent-memory --slug "$SLUG_PATH" --file "$OUT" >/dev/null 2>&1; then
-    echo "  MCP put_page agent-memory ✓ (buscable en ebrain)"
+    echo "  MCP put_page agent-memory ✓ (searchable in ebrain)"
   else
     echo "  WARN: MCP write-through failed; the learning is on disk but is not searchable via the daemon yet"
   fi

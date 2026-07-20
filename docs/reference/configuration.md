@@ -42,11 +42,19 @@ How entries are matched:
 Segment matching is deliberate for paths: a directory named `acme-client-notes` is not
 `acme-client`, because over-blocking teaches people to switch the guard off.
 
-The policy fails closed. A policy file that exists but cannot be read, or an entry that is not a
-bare name, aborts the operation instead of continuing with a silently smaller policy. An **empty**
-policy denies nothing by name — federation is already default-deny, so a source must be registered
-before it can be read at all; this list is the second gate for directories you want refused even if
-something tries to register them.
+The policy fails closed, identically in the CLI and in the shell harness. A policy file that exists
+but cannot be read, or an entry that is not a bare name, aborts the operation instead of continuing
+with a silently smaller policy — the shell half reports the offending line number and denies every
+repository until the file is fixed. Entries match literally (a `.` is a dot, not a wildcard) and
+CRLF line endings are tolerated, so the same file always means the same thing on both paths.
+
+An **empty** policy denies nothing by name — federation is already default-deny, so a source must be
+registered before it can be read at all; this list is the second gate for directories you want
+refused even if something tries to register them.
+
+> **Upgrading:** earlier builds carried a deny list compiled into the source. If you relied on it,
+> create this file — a fresh install starts with no entries. Run `ebrain doctor` to see the policy
+> state (`sources:deny-policy` reports the number of entries loaded, or that none are configured).
 
 ## Safety constraints
 

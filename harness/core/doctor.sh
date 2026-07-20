@@ -108,31 +108,49 @@ done
 # copy is exactly how this check silently drifted out of sync with the harness before.
 c_sec "sources (repository isolation)"
 . "$CORE/trust.sh"
+
+# Surface the policy state FIRST. Every isolation verdict below is conditional on it, and a policy
+# doctor cannot read is the one case where a green isolation line would be a lie.
+if [ "$TRUST_POLICY_ERROR" -eq 1 ]; then
+  c_fail "sources:deny-policy" "deny policy exists but is unreadable or invalid — every repository is being treated as denied"
+elif [ -n "$TRUST_DENY" ]; then
+  c_ok "sources:deny-policy" "deny policy loaded ($(printf '%s' "$TRUST_DENY" | tr '|' '\n' | grep -c .) entries)"
+else
+  c_ok "sources:deny-policy" "no deny entries configured (federation remains default-deny)"
+fi
+
 serve_pid="$(pgrep -f 'cli\.ts serve' 2>/dev/null | head -1 || true)"
 REMOTE_TOOLS="$EBRAIN_HOME/cli/remote-tools.ts"
 BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN_BIN=bun
 if [ -n "$serve_pid" ] && [ -f "$REMOTE_TOOLS" ]; then
   src_json="$(mktemp)"; src_err="$(mktemp)"
   if "$BUN_BIN" run "$REMOTE_TOOLS" sources-list --json >"$src_json" 2>"$src_err"; then
-    if [ -n "$TRUST_DENY" ] && jq -e --arg deny "$TRUST_DENY" '.sources[] | select(((.id // "") + " " + (.name // "") + " " + (.local_path // "")) | test($deny; "i"))' "$src_json" >/dev/null 2>&1; then
+    if [ "$TRUST_POLICY_ERROR" -eq 1 ]; then
+      # Never claim isolation is clean under a policy we could not parse.
+      c_warn "sources:isolation" "cannot verify: the deny policy did not load (see sources:deny-policy)"
+    elif [ -n "$TRUST_DENY" ] && jq -e --arg deny "$TRUST_DENY" '.sources[] | select(((.id // "") + " " + (.name // "") + " " + (.local_path // "")) | test($deny; "i"))' "$src_json" >/dev/null 2>&1; then
       c_fail "sources:isolation" "denied source detected via the MCP daemon"
     elif jq -e '.sources[] | select(.id == "second-brain" or .id == "company-brain" or .id == "agent-memory")' "$src_json" >/dev/null 2>&1; then
-      c_ok "sources:isolation" "sources vía daemon MCP = propios/federados; cero cliente"
+      c_ok "sources:isolation" "sources via the MCP daemon are federated and none is denied"
     else
-      c_warn "sources:isolation" "daemon MCP respondió, pero no vi sources propios esperados"
+      c_warn "sources:isolation" "the MCP daemon responded, but no expected federated source was visible"
     fi
   else
-    c_warn "sources:isolation" "no pude leer sources vía daemon MCP: $(head -1 "$src_err")"
+    c_warn "sources:isolation" "could not read sources via the MCP daemon: $(head -1 "$src_err")"
   fi
   rm -f "$src_json" "$src_err"
 else
   src_out="$(cd /tmp && timeout 60 "$RUN" sources list --timeout=45000 2>&1 || true)"
-  if trust_denied "$src_out"; then
+  if [ "$TRUST_POLICY_ERROR" -eq 1 ]; then
+    # trust_denied answers "denied" for everything in this state; that is correct for enforcement
+    # but would be a false isolation verdict here.
+    c_warn "sources:isolation" "cannot verify: the deny policy did not load (see sources:deny-policy)"
+  elif trust_denied "$src_out"; then
     # Report that a denied source is present, never which one — doctor output gets pasted into
     # issues and chats.
     c_fail "sources:isolation" "a denied source is registered in the brain (check 'sources list' locally)"
   elif printf '%s' "$src_out" | grep -qiE 'second-brain|company-brain|agent-memory'; then
-    c_ok "sources:isolation" "sources = solo propios (second-brain / company-brain / agent-memory); cero cliente"
+    c_ok "sources:isolation" "sources are federated and none is denied"
   else
     c_warn "sources:isolation" "no pude leer sources: $(printf '%s' "$src_out" | head -1)"
   fi
