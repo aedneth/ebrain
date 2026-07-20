@@ -28,6 +28,16 @@ import { join } from "path";
 /** A deny entry is a bare directory/source name: no separators, no globs, no whitespace. */
 const SAFE_ENTRY = /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/;
 
+// Separators are spelled out as an explicit ASCII set rather than `\s`, and trimming uses the same
+// set instead of `String.trim()`. Both of those are Unicode-aware in JavaScript and locale-aware in
+// the shell, so they were the two places where one policy file could mean different things on the
+// two halves: JS treats U+00A0 as whitespace and would split or trim it away, while `tr` in the
+// shell leaves it inside the token, where it fails validation. Neither half is wrong — but they
+// have to be wrong the same way. With this set, a non-ASCII space is never a separator anywhere,
+// so it stays in the token and both halves reject the line. See harness/core/trust.sh.
+const SEPARATORS = /[ \t\v\f\r,]+/;
+const EDGE_SEPARATORS = /^[ \t\v\f\r]+|[ \t\v\f\r]+$/g;
+
 /** Path of the deny configuration, whether or not it exists. Exposed for `doctor` and docs. */
 export function denyConfigPath(): string {
   const explicit = process.env.EBRAIN_DENY_CONFIG;
@@ -39,9 +49,9 @@ export function denyConfigPath(): string {
 function parseEntries(raw: string, origin: string): string[] {
   const entries: string[] = [];
   raw.split("\n").forEach((line, index) => {
-    const stripped = line.replace(/#.*$/, "").trim().toLowerCase();
+    const stripped = line.replace(/#.*$/, "").replace(EDGE_SEPARATORS, "").toLowerCase();
     if (!stripped) return;
-    for (const token of stripped.split(/[\s,]+/)) {
+    for (const token of stripped.split(SEPARATORS)) {
       if (!token) continue;
       if (!SAFE_ENTRY.test(token)) {
         // Position, never the token: a malformed entry can still contain a real denied name, and

@@ -101,6 +101,13 @@ else
     git clone --quiet "$GBRAIN_REPO" "$GBRAIN_DIR"
   fi
   git -C "$GBRAIN_DIR" checkout --quiet "$GBRAIN_REF" || die "could not pin gbrain @ $GBRAIN_REF"
+  # The engine is a separate package with its own lockfile — cloning it is not enough. The CLI's
+  # MCP bridge imports its modules directly, so `ebrain up` fails on a fresh machine unless these
+  # are installed here. Scripts stay disabled: this is vendored upstream code, and a pinned commit
+  # is only a supply-chain guarantee if its postinstall hooks never run.
+  log "Installing engine dependencies"
+  ( cd "$GBRAIN_DIR" && { bun install --frozen-lockfile --ignore-scripts 2>/dev/null || bun install --ignore-scripts; } ) \
+    || die "could not install gbrain engine dependencies at $GBRAIN_DIR"
 fi
 
 # 4. Dependencies (reproducible; falls back if the lockfile is ahead of the checkout)

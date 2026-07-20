@@ -44,17 +44,42 @@ function withConfig<T>(path: string | undefined, fn: () => T): T {
   }
 }
 
+// A UTF-8 locale is set deliberately. glibc's `[a-z]` is collation-aware, so under en_US.UTF-8 a
+// bare `grep -E '[a-z]'` accepts `café` while the TS regex rejects it — the F-P1 divergence. Running
+// these under the default C locale would hide it and make the parity assertions below vacuous. On a
+// host without this locale glibc falls back to C, so the test stays correct, just less adversarial.
+const SHELL_ENV = (configPath: string) => ({
+  PATH: process.env.PATH ?? "",
+  HOME: process.env.HOME ?? "",
+  LANG: "en_US.UTF-8",
+  LC_ALL: "en_US.UTF-8",
+  EBRAIN_DENY_CONFIG: configPath,
+});
+
 /** Run the SHELL half against the same fixture: does `trust_denied <probe>` deny? */
 function shellDenies(configPath: string, probe: string): { denied: boolean; stderr: string } {
   const proc = Bun.spawnSync(
     ["bash", "-c", `. "${TRUST_SH}"; trust_denied "$1" && echo DENIED || echo ALLOWED`, "bash", probe],
-    {
-      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", EBRAIN_DENY_CONFIG: configPath },
-      stdout: "pipe",
-      stderr: "pipe",
-    },
+    { env: SHELL_ENV(configPath), stdout: "pipe", stderr: "pipe" },
   );
   return { denied: proc.stdout.toString().includes("DENIED"), stderr: proc.stderr.toString() };
+}
+
+/**
+ * What the shell half actually LOADED: the error flag and the number of entries.
+ *
+ * `trust_denied` alone cannot distinguish "denied because this entry matches" from "denied because
+ * the policy failed to parse and everything is denied" — both answer DENIED. Several agreement
+ * cases below would have passed for that wrong reason. Comparing the loaded entry count against the
+ * TS entry list is what makes them mean something.
+ */
+function shellPolicy(configPath: string): { error: boolean; entries: number } {
+  const proc = Bun.spawnSync(
+    ["bash", "-c", `. "${TRUST_SH}"; printf '%s %s' "$TRUST_POLICY_ERROR" "$(printf '%s' "$TRUST_DENY" | tr '|' '\\n' | grep -c .)"`],
+    { env: SHELL_ENV(configPath), stdout: "pipe", stderr: "pipe" },
+  );
+  const [err, count] = proc.stdout.toString().trim().split(/\s+/);
+  return { error: err === "1", entries: Number(count ?? 0) };
 }
 
 afterEach(() => {
@@ -147,6 +172,12 @@ describe("deny policy — both halves agree on the same file", () => {
     // A dot is a literal in the TS matcher; the shell half must not treat it as a regex wildcard.
     { name: "dot is literal (no wildcard)", contents: "acme.com\n", probe: "acmeXcom", denied: false },
     { name: "dot matches itself", contents: "acme.com\n", probe: "repos/acme.com", denied: true },
+    // Pass-3 F-P2: the separator sets used to diverge. JS `\s` counts vertical tab and form feed;
+    // the shell's `tr` did not, so one file split into two entries on one half and one malformed
+    // entry on the other. Both are now the same explicit ASCII set.
+    { name: "vertical tab separates entries", contents: "denied-alpha\vdenied-beta\n", probe: "denied-beta", denied: true },
+    { name: "form feed separates entries", contents: "denied-alpha\fdenied-beta\n", probe: "denied-beta", denied: true },
+    { name: "comma and tab separate entries", contents: "denied-alpha,\tdenied-beta\n", probe: "denied-beta", denied: true },
   ];
 
   for (const c of cases) {
@@ -156,6 +187,39 @@ describe("deny policy — both halves agree on the same file", () => {
       const sh = shellDenies(path, c.probe);
       expect(ts).toBe(c.denied);
       expect(sh.denied).toBe(c.denied);
+
+      // Same verdict is not the same policy. Every case here is a WELL-FORMED file, so the shell
+      // must have parsed it cleanly and loaded exactly as many entries as the TS half — otherwise a
+      // "denied" answer may just be the fail-closed blanket, which would agree by accident.
+      const policy = shellPolicy(path);
+      expect(policy.error).toBe(false);
+      expect(policy.entries).toBe(withConfig(path, deniedRepos).length);
+    });
+  }
+});
+
+// Pass-3 F-P1/F-P2. Agreeing on what to DENY is only half of parity — the halves must also agree on
+// what they refuse to parse. These bytes previously validated on one side and failed on the other,
+// which meant a policy file could load with a silently different entry count depending on which
+// half read it. Neither direction was fail-open, but "the same file always means the same thing"
+// is a claim the configuration reference makes to users, so it has to be literally true.
+describe("deny policy — both halves reject the same bytes", () => {
+  const rejected: Array<{ name: string; contents: string }> = [
+    // Under a UTF-8 locale an unguarded `[a-z]` can collate this into range on the shell side.
+    { name: "accented letters", contents: "café\n" },
+    // Not a separator in either half, so it stays inside the token and fails validation in both.
+    { name: "non-breaking space inside an entry", contents: "denied\u00a0alpha\n" },
+    { name: "non-ASCII letters", contents: "дение\n" },
+  ];
+
+  for (const c of rejected) {
+    test(`${c.name} — TS throws and the shell denies everything`, () => {
+      const path = fixture(c.contents);
+      expect(() => withConfig(path, deniedRepos)).toThrow(/invalid deny entry/);
+      // The shell cannot throw, so its equivalent of refusing to parse is denying everything.
+      const unrelated = shellDenies(path, "totally-unrelated-name");
+      expect(unrelated.denied).toBe(true);
+      expect(unrelated.stderr).toContain("treating every repository as denied");
     });
   }
 });

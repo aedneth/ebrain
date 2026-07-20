@@ -32,12 +32,17 @@ TRUST_DENY=''
 # cli/deny-policy.ts: the two halves must agree on what a policy means.
 trust__load() {
   local origin="$1" raw="$2" tok esc out='' n=0
-  raw="$(printf '%s\n' "$raw" | tr -d '\r' | sed 's/#.*//' | tr ', \t' '\n\n\n')"
+  # The separator set is ASCII comma/space/tab/VT/FF (plus the newline this already splits on), and
+  # it is spelled out to match SEPARATORS in cli/deny-policy.ts byte for byte. LC_ALL=C is not
+  # cosmetic: under a UTF-8 locale `[a-z]` can collate accented letters into range, so `café` would
+  # validate here and be rejected by the TS half — one file, two policies. Forcing the C locale
+  # makes this grep test the same byte range the TS regex does.
+  raw="$(printf '%s\n' "$raw" | tr -d '\r' | sed 's/#.*//' | tr ', \t\013\014' '\n\n\n\n\n')"
   while IFS= read -r tok; do
     [ -n "$tok" ] || continue
-    tok="$(printf '%s' "$tok" | tr '[:upper:]' '[:lower:]')"
+    tok="$(printf '%s' "$tok" | LC_ALL=C tr '[:upper:]' '[:lower:]')"
     n=$((n + 1))
-    if ! printf '%s' "$tok" | grep -Eq '^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$'; then
+    if ! printf '%s' "$tok" | LC_ALL=C grep -Eq '^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$'; then
       # Report the position, never the token: a malformed entry can still contain a real name.
       TRUST_POLICY_ERROR=1
       TRUST_DENY=''
@@ -72,7 +77,9 @@ fi
 trust_denied() {
   [ "$TRUST_POLICY_ERROR" -eq 1 ] && return 0
   [ -n "$TRUST_DENY" ] || return 1
-  printf '%s' "$1" | grep -Eiq "$TRUST_DENY"
+  # LC_ALL=C for the same reason as in trust__load: entries are ASCII by construction, so byte-wise
+  # case folding is exactly what the TS half's toLowerCase() comparison does on them.
+  printf '%s' "$1" | LC_ALL=C grep -Eiq "$TRUST_DENY"
 }
 # Proyectos PROPIOS de Eduardo aunque el remote actual sea de un colaborador/temporal (el oficial será
 # suyo; se migran después). Override del deny-por-remote-ajeno, PERO nunca del hard-deny de cliente.

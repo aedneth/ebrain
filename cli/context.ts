@@ -478,8 +478,18 @@ function die(message: string, code = 1): never {
   process.exit(code);
 }
 
+// Pass-3 F-P6: docs/reference/memory-commands.md documents `ebrain context --help`, and it used to
+// fall through to the unrecognized-subcommand path — printing the usage line as an `error:` on
+// stderr with exit 2. A reader following the docs saw a failure instead of help.
+const USAGE = "usage: ebrain context <list|proposals|init|get|update|propose|review> [--json]";
+
 async function main(): Promise<void> {
-  const args = parseContextArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv.includes("--help") || argv.includes("-h")) {
+    console.log(USAGE);
+    return;
+  }
+  const args = parseContextArgs(argv);
   if (args.sub === "list") {
     onlyValues(args, []);
     if (args.positionals.length || args.yes) die("usage: ebrain context list [--json]", 2);
