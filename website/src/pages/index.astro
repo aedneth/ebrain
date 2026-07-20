@@ -1,0 +1,74 @@
+---
+import Base from "../layouts/Base.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+import { DOC_SECTIONS, docRoute } from "../lib/navigation";
+---
+
+<Base title="eBrain | Local agent memory and workspace control" description="Shared local memory, persistent workspace sessions, and governed routing for coding agents.">
+  <SiteHeader />
+  <main id="main-content" class="home">
+    <section class="home-intro" aria-labelledby="home-title">
+      <div class="home-intro__copy">
+        <p class="eyebrow">Local developer control plane</p>
+        <h1 id="home-title">eBrain</h1>
+        <p class="home-intro__lede">Shared memory and workspace orchestration for local coding agents.</p>
+        <p>One loopback MCP daemon, durable governed memory, persistent tmux sessions, user-owned routing choices, and factual token telemetry.</p>
+        <div class="home-intro__links" aria-label="Start documentation">
+          <a href="/docs/">Open documentation <img src="/icons/arrow-right.svg" alt="" width="16" height="16" /></a>
+          <a href={docRoute("getting-started/quickstart")}>Follow quick start</a>
+        </div>
+      </div>
+      <figure class="terminal-figure">
+        <img src="/assets/ebrain-tui-demo.svg" alt="Sanitized eBrain terminal cockpit showing daemon, fleet, sessions, memory, and factual spend summary." width="1018" height="533" />
+        <figcaption>Generated from the production renderer with a fixed sanitised fixture.</figcaption>
+      </figure>
+    </section>
+    <section class="local-proof" aria-labelledby="local-proof-title">
+      <div>
+        <p class="eyebrow">Local proof</p>
+        <h2 id="local-proof-title">Boot one shared daemon, then work from the cockpit.</h2>
+      </div>
+      <pre><code>ebrain up
+ebrain doctor
+ebrain remember "Review structural changes independently."
+ebrain</code></pre>
+      <p>`ebrain up` owns local credential creation and adapter registration. It does not ask users to paste OAuth material, writer locks, tokens, or curl commands.</p>
+    </section>
+    <section class="docs-paths" aria-labelledby="docs-paths-title">
+      <div class="section-heading">
+        <p class="eyebrow">Documentation paths</p>
+        <h2 id="docs-paths-title">Start from the work you need to do.</h2>
+      </div>
+      <div class="docs-paths__grid">
+        {[
+          { title: "Install eBrain", body: "Install from source, boot the daemon, check the machine, and onboard detected agents.", href: docRoute("getting-started/quickstart") },
+          { title: "Launch work", body: "Select a workspace, choose manual or guided launch, and keep the resulting session observable.", href: docRoute("launch/manual-launch") },
+          { title: "Build durable memory", body: "Store concise decisions, retrieve bounded context, and review procedure lifecycle deliberately.", href: docRoute("concepts/memory") },
+          { title: "Route and observe", body: "Use task signals as orientation, retain model choices in profiles, and inspect factual token telemetry.", href: docRoute("routing/task-signals") },
+        ].map((path) => (
+          <a class="path-link" href={path.href}>
+            <h3>{path.title}</h3>
+            <p>{path.body}</p>
+            <span>Read path <img src="/icons/arrow-right.svg" alt="" width="16" height="16" /></span>
+          </a>
+        ))}
+      </div>
+    </section>
+    <section class="docs-catalog" aria-labelledby="docs-catalog-title">
+      <div class="section-heading">
+        <p class="eyebrow">Complete reference</p>
+        <h2 id="docs-catalog-title">Every surface has a documented boundary.</h2>
+      </div>
+      <div class="docs-catalog__columns">
+        {DOC_SECTIONS.map((section) => (
+          <section>
+            <h3>{section.title}</h3>
+            <ul>
+              {section.links.map((doc) => <li><a href={docRoute(doc.id)}>{doc.title}</a></li>)}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </section>
+  </main>
+</Base>

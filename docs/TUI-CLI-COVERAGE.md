@@ -13,7 +13,7 @@ use. Administrative operations remain explicit CLI actions until they have an eq
 | `workflows` | Memory: browse, materialize, attach | integrated |
 | `routing`, `spend`, `cost` | Routing and Cost views | integrated |
 | `task-profile`, `profiles`, `targets` | Launch: signals and user-governed wizard | integrated |
-| `workspaces` | Launch workspace picker and validated cwd selection | planned F7; ADR-006 |
+| `workspaces` | Launch `[g]` picker, filter, explicit registration, validated cwd selection | integrated; ADR-006 |
 | `route` one-shot | Routing command and Launch workflow path | integrated where target declares it |
 | `up`, `onboard`, `daemon` | installation and host lifecycle | CLI administration; not a daily TUI action |
 | `harness`, `norms`, `federate` | installation, policy rendering and maintenance | CLI administration; future guarded palette actions |
@@ -21,6 +21,6 @@ use. Administrative operations remain explicit CLI actions until they have an eq
 `q` uses the daemon-backed cross-source fan-out and returns JSON only for the TUI boundary. The
 TUI does not inspect sources, PGLite files, routing YAML, tokens, or credentials directly.
 
-F7 keeps this boundary: its workspace registry will be a structured `--json` CLI contract before
-the picker renders it. It is not an unrestricted internal shell; a terminal-pane product remains a
-separate ADR and security/lifecycle decision.
+The F7 workspace picker consumes the structured `--json` registry contract. It is not an
+unrestricted internal shell; a terminal-pane product remains a separate ADR and
+security/lifecycle decision.

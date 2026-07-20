@@ -55,17 +55,25 @@ Convención: `[ ]` pendiente · `[~]` en curso · `[x]` hecho+auditado · `[!]` 
   and exact session-prompt review). Input and selection overlays retain their key ownership until
   the F7.2/F7.3 rebuilds. **Verify:** focused integration `33 pass / 0 fail`; full TUI
   `409 pass / 0 fail`; CLI `218 pass / 0 fail`; exact-width, no-hex, and diff checks clean.
-- [ ] 7.2 **Launch hierarchy + Task Setup:** Manual Agents primary at left; Guided Launch
-  upper-right; deterministic category/prompt setup lower-right; singleton affordances; `r` reset;
-  preserve post-launch Sessions transition. **Verify:** reducer, geometry, exact-prompt, and
-  no-accidental-launch regressions.
-- [ ] 7.3 **Workspace registry + picker:** CLI-first, canonical realpath validation, client deny
-  enforcement, and launch cwd snapshots across multiple registered workspaces. **Verify:**
-  temp-dir contract tests plus fake-agent tmux E2E with two different cwd values.
-- [ ] 7.4 **Global entry point:** bare `ebrain` opens the TUI only on a real TTY; `ebrain ui` and
-  non-TTY help remain compatible. **Verify:** dispatcher invocation-matrix tests.
-- [ ] 7.5 **Product gate:** full independent audit plus real tmux captures at compact and wide
-  terminal sizes, documentation/handoff, and human two-workspace daily-driver acceptance.
+- [x] 7.2 **Launch hierarchy + Task Setup:** Manual Agents is primary at left (or first when
+  compact); Guided Launch is upper-right; deterministic category/prompt setup is lower-right;
+  singleton affordances are locked/truthful; `r` resets transient setup; post-launch Sessions
+  transition remains intact. **Verify:** Launch reducer/geometry/exact-prompt/no-accidental-launch
+  regressions; TUI `414 pass / 0 fail`; CLI `218 pass / 0 fail`; real 80x24 tmux captures of the
+  compact Launch, category guide, and singleton wizard.
+- [x] 7.3 **Workspace registry + picker:** CLI-first, canonical realpath validation, client deny
+  enforcement, and launch cwd snapshots across multiple registered workspaces. `[g]` opens a
+  searchable picker; `a` opens the explicit directory/label form; Guided Launch reuses the same
+  validated picker and no longer accepts a free-form cwd. **Verify:** temp-dir strict-store tests,
+  pure reducer/render tests at 80x24/100x30/160x48, and fake-agent tmux E2E with two distinct cwd
+  values. Full-suite evidence is recorded in `HANDOFF-BACK.md`.
+- [x] 7.4 **Global entry point:** bare `ebrain` opens the TUI only on a real stdin/stdout TTY with
+  usable `TERM`; `ebrain ui` remains a compatible alias and no-argument non-TTY use retains help.
+  **Verify:** dispatcher invocation matrix covers pipe help, explicit non-TTY rejection, and
+  pseudo-TTY entry for both bare and alias forms.
+- [~] 7.5 **Product gate:** maker QA packet, full suites, static checks, and real tmux captures
+  are complete in `F7-REVIEW-PACKET.md`; an **independent checker** and human two-workspace
+  daily-driver acceptance remain required before this program is accepted.
 
 ## FASE 6.0 — Reverse engineering de las TUIs de referencia
 

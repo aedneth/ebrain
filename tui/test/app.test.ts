@@ -64,8 +64,8 @@ describe("buildFrame — home snapshot (120x32)", () => {
     expect(plain[0]).toContain("fleet 6/6");
   });
 
-  it("row2 (tabbar) contains all 6 tab names, with home styled active", () => {
-    for (const name of ["home", "sessions", "launch", "memory", "routing", "doctor"]) {
+  it("row2 (tabbar) contains all 7 tab names, with home styled active", () => {
+    for (const name of ["home", "launch", "sessions", "workspaces", "memory", "routing", "doctor"]) {
       expect(plain[1]).toContain(name);
     }
     // Active-tab styling is exact per tabbar.ts's contract: bg(raised)+bold+fg(primary).
@@ -95,7 +95,7 @@ describe("buildFrame — home snapshot (120x32)", () => {
   });
 
   it("the penultimate row is the centered hint bar, the last row is the footer", () => {
-    expect(plain[30]).toContain("[1-6] views");
+    expect(plain[30]).toContain("[1-7] views");
     expect(plain[30]).toContain("[?] help");
     expect(plain[31]).toContain("ebrain");
   });
@@ -124,10 +124,14 @@ describe("buildFrame — knowledge tabs are REAL views (F6.5), never stubs", () 
 // ---------------------------------------------------------------------------
 
 describe("reduce — pure key-driven navigation", () => {
-  it('"2" switches the active tab to sessions', () => {
+  it('"2" switches the active tab to the primary Launch view', () => {
     const r = reduce(initialState(), { name: "char", char: "2" });
-    expect(r.state.tab).toBe("sessions");
+    expect(r.state.tab).toBe("launch");
     expect(r.quit).toBe(false);
+  });
+
+  it('"3" switches to Sessions after launching', () => {
+    expect(reduce(initialState(), { name: "char", char: "3" }).state.tab).toBe("sessions");
   });
 
   it('"tab" moves the focus ring between boxes, NOT the view (F6.6)', () => {
@@ -142,8 +146,8 @@ describe("reduce — pure key-driven navigation", () => {
     expect(r.state.focusRegion).toBe(2); // home has 3 boxes; -1 wraps to the last
   });
 
-  it('"6" jumps directly to doctor', () => {
-    const r = reduce(initialState(), { name: "char", char: "6" });
+  it('"7" jumps directly to doctor', () => {
+    const r = reduce(initialState(), { name: "char", char: "7" });
     expect(r.state.tab).toBe("doctor");
   });
 

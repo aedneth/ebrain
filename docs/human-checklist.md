@@ -56,5 +56,5 @@ related: [SPRINT.md, f5-success-criteria.md, hermes-evaluation.md]
 - [ ] **F6a. Visual acceptance.** Compare Home, Sessions, Launch, Memory, Routing and Doctor against the vendored mockups in `design-system/ui_kits/ebrain/` at 80x24 and a normal desktop terminal. Record any clipping or unclear control.
 - [ ] **F6b. Real adapter write-back.** Launch one real Claude or Codex session from Launch, complete a small task, close it, then confirm the session log is present and available through Memory/search.
 - [ ] **F6c. OpenRouter first use.** In Launch press `w`, approve the one-time profile initialization, select a profile/target/capability/cwd, review the plan, then cancel before launch if no paid run is intended.
-- [ ] **F6d. Daily-driver friction.** Use `ebrain ui` for one workday. Note missing CLI controls, terminology, latency, or navigation friction in an issue or follow-up document.
+- [ ] **F6d. Daily-driver friction.** Use `ebrain` for one workday (`ebrain ui` remains an alias). Note missing CLI controls, terminology, latency, or navigation friction in an issue or follow-up document.
 - [ ] **F6e. Final audit package.** Provide `docs/f6-success-criteria.md`, `docs/TUI-EDGE-CASES.md`, `docs/TUI-CLI-COVERAGE.md`, test output and this checklist to GPT-5.6-sol. Do not mark the gate accepted without its independent verdict.

@@ -23,21 +23,48 @@ function launchState(selected = 0, focusRegion = 0): AppState {
     tab: "launch",
     confirmQuit: false,
     cwd: "~/eBrain",
-    launch: { selected, task: "", profile: null, status: "idle" },
+    launch: { selected, task: "", taskCapability: "general", status: "idle", wizard: null },
     focusRegion,
   };
 }
 
-describe("buildLaunchView — the guided information architecture", () => {
-  test("separates task, guided launch, and manual agents", () => {
+describe("buildLaunchView — workspace-first information hierarchy", () => {
+  test("prioritizes manual agents before guided launch and task setup", () => {
     const frame = buildFrame(launchState(), size, t).map(strip).join("\n");
-    expect(frame).toContain("1 · task & signals");
+    expect(frame).toContain("1 · manual agents");
     expect(frame).toContain("2 · guided launch");
-    expect(frame).toContain("3 · manual agents");
+    expect(frame).toContain("3 · task setup");
     expect(frame).toContain("claude");
     expect(frame).toContain("gemini");
     expect(frame).toContain("generic");
-    expect(frame).toContain("Start a direct local session");
+    expect(frame).toContain("workspace");
+    expect(frame).toContain("Current directory");
+  });
+
+  test("shows only reviewed context-pack identities and versions, never a pack body", () => {
+    const state = launchState();
+    state.workspace = {
+      data: { schemaVersion: 1, workspaces: [{ id: "api", label: "API", cwd: "/tmp/api" }] },
+      current: { label: "Current directory", cwd: "/tmp/current", persistent: false, validated: true },
+      active: { id: "api", label: "API", cwd: "/tmp/api", persistent: true, validated: true },
+      selected: 1,
+      activitySelected: 0,
+      status: "ready",
+    };
+    state.launch = {
+      ...state.launch!,
+      contexts: { packs: [
+        { id: "operator", scope: "operator", version: 2, updatedAt: "2026-07-18T00:01:00.000Z", chars: 81 },
+        { id: "workspace-api", scope: "workspace", workspaceId: "api", version: 1, updatedAt: "2026-07-18T00:00:00.000Z", chars: 42 },
+      ] },
+      contextStatus: "ready",
+    };
+    for (const frameSize of [{ cols: 80, rows: 24 }, size, { cols: 160, rows: 48 }]) {
+      const frame = buildFrame(state, frameSize, t).map(strip).join("\n");
+      expect(frame).toContain("context  operator v2");
+      expect(frame).not.toContain("must not enter TUI state");
+      for (const row of buildFrame(state, frameSize, t)) expect(displayWidth(row)).toBe(frameSize.cols);
+    }
   });
 
   test("shows heavy vs light class per agent", () => {
@@ -47,12 +74,12 @@ describe("buildLaunchView — the guided information architecture", () => {
   });
 
   test("manual-agent box reflects the selected agent", () => {
-    expect(buildFrame(launchState(0, 2), size, t).map(strip).join("\n")).toContain("New session with claude");
-    expect(buildFrame(launchState(2, 2), size, t).map(strip).join("\n")).toContain("New session with gemini");
+    expect(buildFrame(launchState(0, 0), size, t).map(strip).join("\n")).toContain("New session with claude");
+    expect(buildFrame(launchState(2, 0), size, t).map(strip).join("\n")).toContain("New session with gemini");
   });
 
   test("focused manual-agent box shows launch controls", () => {
-    const frame = buildFrame(launchState(0, 2), size, t).map(strip).join("\n");
+    const frame = buildFrame(launchState(0, 0), size, t).map(strip).join("\n");
     expect(frame).toContain("agent");
     expect(frame).toContain("launch");
     expect(frame).toContain("[enter]");
@@ -74,63 +101,75 @@ describe("buildLaunchView — the guided information architecture", () => {
   });
 
   test("80x24 keeps all manual agents visible instead of collapsing the launch path", () => {
-    const frame = buildFrame(launchState(0, 2), { cols: 80, rows: 24 }, t).map(strip).join("\n");
+    const frame = buildFrame(launchState(0, 0), { cols: 80, rows: 24 }, t).map(strip).join("\n");
     expect(frame).toContain("manual agents");
     expect(frame).toContain("claude");
     expect(frame).toContain("opencode");
     expect(frame).toContain("generic");
   });
+
+  test("has exact compact, normal, and wide geometry", () => {
+    for (const frameSize of [{ cols: 80, rows: 24 }, { cols: 100, rows: 30 }, { cols: 160, rows: 48 }]) {
+      const frame = buildFrame(launchState(), frameSize, t);
+      expect(frame).toHaveLength(frameSize.rows);
+      for (const row of frame) expect(displayWidth(row)).toBe(frameSize.cols);
+    }
+  });
 });
 
 describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
-  test("l opens the launch tab", () => {
-    expect(reduce(initialState(), parseKey("l")).state.tab).toBe("launch");
+  test("l opens the launch tab and refreshes only context-pack summaries", () => {
+    const result = reduce(initialState(), parseKey("l"));
+    expect(result.state.tab).toBe("launch");
+    expect(result.effect).toEqual({ type: "refreshLaunchContext" });
   });
 
   test("arrows move the selection only while the manual-agent box is focused", () => {
-    expect(reduce(launchState(0, 2), { name: "right" }).state.launch?.selected).toBe(1);
-    expect(reduce(launchState(0, 2), { name: "down" }).state.launch?.selected).toBe(2); // +LAUNCH_COLS
-    expect(reduce(launchState(0, 2), { name: "left" }).state.launch?.selected).toBe(0); // clamp low
-    expect(reduce(launchState(5, 2), { name: "right" }).state.launch?.selected).toBe(5); // clamp high
-    expect(reduce(launchState(0, 0), { name: "right" }).state.launch?.selected).toBe(0);
+    expect(reduce(launchState(0, 0), { name: "right" }).state.launch?.selected).toBe(1);
+    expect(reduce(launchState(0, 0), { name: "down" }).state.launch?.selected).toBe(2); // +LAUNCH_COLS
+    expect(reduce(launchState(0, 0), { name: "left" }).state.launch?.selected).toBe(0); // clamp low
+    expect(reduce(launchState(5, 0), { name: "right" }).state.launch?.selected).toBe(5); // clamp high
+    expect(reduce(launchState(0, 2), { name: "right" }).state.launch?.selected).toBe(0);
   });
 
-  test("grid navigation preserves the complete launch slice so refresh never crashes", () => {
-    const state = reduce(launchState(0, 2), { name: "right" }).state;
+  test("grid navigation preserves the complete launch slice and task reset is transient", () => {
+    const state = reduce(launchState(0, 0), { name: "right" }).state;
     expect(state.launch?.task).toBe("");
-    expect(state.launch?.profile).toBeNull();
+    expect(state.launch?.taskCapability).toBe("general");
     const refresh = reduce(state, parseKey("r"));
     expect(refresh.effect).toBeUndefined();
-    expect(refresh.state.launch?.error).toBe("Describe a task before refreshing task signals.");
+    expect(refresh.state.launch?.task).toBe("");
+    expect(refresh.state.launch?.taskCapability).toBe("general");
+    expect(refresh.state.launch?.error).toBeUndefined();
   });
 
   test("enter emits a launch effect only from the selected manual-agent box", () => {
-    expect(reduce(launchState(1, 2), { name: "enter" }).effect).toEqual({ type: "launch", agent: "codex", prompt: "" });
-    expect(reduce(launchState(1, 0), { name: "enter" }).state.overlay?.kind).toBe("launchTask");
+    expect(reduce(launchState(1, 0), { name: "enter" }).effect).toEqual({ type: "launch", agent: "codex", prompt: "" });
+    expect(reduce(launchState(1, 2), { name: "enter" }).state.overlay?.kind).toBe("taskSetup");
   });
 
-  test("t opens task composer and enter requests a Task Profile", () => {
+  test("Task Setup saves an explicit type and optional prompt without an automatic classifier", () => {
     const opened = reduce(launchState(), parseKey("t")).state;
-    expect(opened.overlay?.kind).toBe("launchTask");
-    const typed: AppState = { ...opened, overlay: { kind: "launchTask", line: lineFrom("Summarize batch transcripts") } };
+    expect(opened.overlay?.kind).toBe("taskSetup");
+    const typeChosen = reduce(reduce(opened, { name: "down" }).state, { name: "down" }).state;
+    expect(typeChosen.overlay).toMatchObject({ kind: "taskSetup", selected: 1 });
+    const prompt = reduce(typeChosen, { name: "enter" }).state;
+    expect(prompt.overlay?.kind).toBe("taskPrompt");
+    const typed: AppState = { ...prompt, overlay: { kind: "taskPrompt", selected: 1, line: lineFrom("Build an approval workflow") } };
     const submitted = reduce(typed, { name: "enter" });
-    expect(submitted.effect).toEqual({ type: "profileLaunchTask", task: "Summarize batch transcripts" });
+    expect(submitted.effect).toBeUndefined();
+    expect(submitted.state.launch).toMatchObject({ taskCapability: "agentic", task: "Build an approval workflow" });
   });
 
-  test("a Task Profile never changes the manually selected agent", () => {
+  test("Task Setup never changes the manually selected agent", () => {
     const st: AppState = {
-      ...launchState(0, 2),
+      ...launchState(0, 0),
       launch: {
         selected: 0,
         task: "Summarize batch transcripts",
         status: "ready",
-        profile: {
-          task: "Summarize batch transcripts",
-          selectedCapability: "long_context",
-          signals: [{ capability: "long_context", matched: ["summarize", "batch"] }],
-          compatibleTargets: ["manual-session", "openrouter-one-shot"],
-          disclaimer: "Signals only.",
-        },
+        taskCapability: "long_context",
+        wizard: null,
       },
     };
     const r = reduce(st, { name: "enter" });
@@ -140,7 +179,7 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
 
   test("wizard selects explicit target/profile, previews a plan, and confirms before launch", () => {
     const st: AppState = {
-      ...launchState(0, 2),
+      ...launchState(0, 0),
       launch: {
         ...launchState().launch!,
         wizard: {
@@ -174,7 +213,7 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     expect(reduce(modal, { name: "tab" }).state.launch?.wizard?.focus).toBe("profile");
   });
 
-  test("wizard exposes all fields and returns to it after editing the directory", () => {
+  test("wizard exposes all fields and returns to it after choosing a validated workspace", () => {
     const st: AppState = {
       ...launchState(),
       overlay: { kind: "launchWizard" },
@@ -190,11 +229,48 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     const capability = reduce(reduce(st, { name: "tab" }).state, { name: "tab" }).state;
     expect(capability.launch?.wizard?.focus).toBe("capability");
     expect(reduce(capability, { name: "right" }).state.launch?.wizard?.capability).toBe("review");
-    const cwd = reduce(reduce(capability, { name: "tab" }).state, { name: "enter" }).state;
-    expect(cwd.overlay?.kind).toBe("wizardCwd");
-    const saved = reduce({ ...cwd, overlay: { kind: "wizardCwd", line: lineFrom("/tmp/next"), returnToWizard: true } }, { name: "enter" });
+    const picker = reduce(reduce(capability, { name: "tab" }).state, { name: "enter" });
+    expect(picker.state.overlay?.kind).toBe("workspacePicker");
+    expect(picker.effect).toEqual({ type: "openWorkspacePicker", returnToWizard: true });
+    const current = { label: "Current directory", cwd: "/tmp/project", persistent: false, validated: true };
+    const saved = reduce({ ...picker.state, workspace: { data: { schemaVersion: 1, workspaces: [{ id: "next", label: "Next", cwd: "/tmp/next" }] }, current, active: current, status: "ready" }, overlay: { kind: "workspacePicker", selected: 1, query: "", search: null, returnToWizard: true } }, { name: "enter" });
     expect(saved.state.overlay?.kind).toBe("launchWizard");
     expect(saved.state.launch?.wizard?.cwd).toBe("/tmp/next");
+  });
+
+  test("g opens a registry-backed workspace picker and selection updates only future launches", () => {
+    const opened = reduce(launchState(), parseKey("g"));
+    expect(opened.state.overlay?.kind).toBe("workspacePicker");
+    expect(opened.effect).toEqual({ type: "openWorkspacePicker", returnToWizard: false });
+    const current = { label: "Current directory", cwd: "/tmp/current", persistent: false, validated: true };
+    const selected = reduce({ ...opened.state, workspace: { data: { schemaVersion: 1, workspaces: [{ id: "api", label: "API", cwd: "/tmp/api" }] }, current, active: current, status: "ready" }, overlay: { kind: "workspacePicker", selected: 1, query: "", search: null, returnToWizard: false } }, { name: "enter" });
+    expect(selected.state.workspace?.active).toMatchObject({ id: "api", label: "API", cwd: "/tmp/api", persistent: true, validated: true });
+    expect(selected.state.overlay).toBeNull();
+  });
+
+  test("workspace picker can filter and its add form emits structured CLI input only after both fields exist", () => {
+    const current = { label: "Current directory", cwd: "/tmp/current", persistent: false, validated: true };
+    const base: AppState = { ...launchState(), workspace: { data: { schemaVersion: 1, workspaces: [{ id: "web", label: "Web app", cwd: "/tmp/web-app" }] }, current, active: current, status: "ready" }, overlay: { kind: "workspacePicker", selected: 0, query: "", search: null, returnToWizard: false } };
+    const filtering = reduce(base, parseKey("s"));
+    expect(filtering.state.overlay).toMatchObject({ kind: "workspacePicker", search: { text: "" } });
+    const apply = reduce({ ...filtering.state, overlay: { kind: "workspacePicker", selected: 0, query: "", search: lineFrom("web"), returnToWizard: false } }, { name: "enter" });
+    expect(apply.state.overlay).toMatchObject({ kind: "workspacePicker", query: "web", search: null });
+    const form = reduce(base, parseKey("a"));
+    expect(form.state.overlay?.kind).toBe("workspaceAdd");
+    expect(reduce(form.state, { name: "enter" }).state.overlay).toMatchObject({ kind: "workspaceAdd", focus: "label" });
+    const complete: AppState = { ...form.state, overlay: { kind: "workspaceAdd", cwd: lineFrom("/tmp/new"), label: lineFrom("New"), focus: "label", returnToWizard: false } };
+    expect(reduce(complete, { name: "enter" }).effect).toEqual({ type: "addWorkspace", cwd: "/tmp/new", label: "New", returnToWizard: false, origin: "picker" });
+  });
+
+  test("workspace dialogs wrap safely at compact and wide viewport sizes", () => {
+    const long = "/tmp/a-very-long-workspace-directory-name-that-must-wrap-instead-of-being-silently-clipped/project";
+    const current = { label: "Current directory", cwd: "/tmp/current", persistent: false, validated: true };
+    const state: AppState = { ...launchState(), workspace: { data: { schemaVersion: 1, workspaces: [{ id: "long", label: "Long workspace", cwd: long }] }, current, active: current, status: "ready" }, overlay: { kind: "workspacePicker", selected: 1, query: "", search: null, returnToWizard: false } };
+    for (const frameSize of [{ cols: 80, rows: 24 }, { cols: 100, rows: 30 }, { cols: 160, rows: 48 }]) {
+      const frame = buildFrame(state, frameSize, t);
+      for (const row of frame) expect(displayWidth(row)).toBe(frameSize.cols);
+      expect(frame.map(strip).join("\n")).toContain("launch workspace");
+    }
   });
 
   test("wizard is a visible dialog with choices and never launches on open", () => {
@@ -214,7 +290,39 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     expect(frame).toContain("guided launch");
     expect(frame).toContain("opencode-openrouter");
     expect(frame).toContain("My stack");
+    expect(frame).toContain("locked");
     expect(reduce(st, { name: "enter" }).effect).toEqual({ type: "planLaunchWizard" });
+  });
+
+  test("wizard arrows are a no-op for singleton fields and cycle multi-choice fields", () => {
+    const singleton: AppState = {
+      ...launchState(), overlay: { kind: "launchWizard" }, launch: {
+        ...launchState().launch!, wizard: {
+          targets: [{ id: "one", agent: "opencode", provider: "openrouter", ramClass: "heavy" }],
+          profiles: { initialized: true, profiles: [{ id: "one", label: "One", provider: "openrouter", capabilities: ["coding"], models: 1, evidence: { source: "user", asOf: "d" } }] },
+          targetSelected: 0, profileSelected: 0, capability: "coding", cwd: "/tmp/project", focus: "target", plan: null,
+        },
+      },
+    };
+    expect(reduce(singleton, { name: "right" }).state.launch?.wizard?.targetSelected).toBe(0);
+
+    const many: AppState = { ...singleton, launch: { ...singleton.launch!, wizard: { ...singleton.launch!.wizard!, targets: [
+      { id: "one", agent: "opencode", provider: "openrouter", ramClass: "heavy" },
+      { id: "two", agent: "opencode", provider: "openrouter", ramClass: "heavy" },
+    ] } } };
+    expect(reduce(many, { name: "right" }).state.launch?.wizard?.targetSelected).toBe(1);
+  });
+
+  test("r clears category, prompt, workflow attribution, and a stale wizard preview", () => {
+    const base = launchState();
+    const state: AppState = { ...base, launch: { ...base.launch!, taskCapability: "web_design", task: "Build a dashboard", workflowId: "workflow-1", wizard: {
+      targets: [], profiles: { initialized: true, profiles: [] }, targetSelected: 0, profileSelected: 0, capability: "web_design", cwd: "/tmp", focus: "target", plan: null,
+    } } };
+    const reset = reduce(state, parseKey("r")).state.launch!;
+    expect(reset.task).toBe("");
+    expect(reset.taskCapability).toBe("general");
+    expect(reset.workflowId).toBeUndefined();
+    expect(reset.wizard?.plan).toBeNull();
   });
 
   test("first-use profile initialization is explicit: only y invokes the migration effect", () => {
@@ -296,7 +404,7 @@ describe("G56-F2 — the reviewed task is captured, threaded, previewed and wire
   });
 
   test("the manual grid launch also snapshots the reviewed task (no post-await re-read)", () => {
-    const base = launchState(1, 2);
+    const base = launchState(1, 0);
     const st: AppState = { ...base, launch: { ...base.launch!, task: "manual task body" } };
     expect(reduce(st, { name: "enter" }).effect).toEqual({ type: "launch", agent: "codex", prompt: "manual task body" });
   });

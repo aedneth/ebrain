@@ -26,11 +26,25 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Install pinned engine dependencies
+        run: bun install --cwd vendor/gbrain --frozen-lockfile --ignore-scripts
+
+      - name: Install documentation website dependencies
+        run: bun install --cwd website --frozen-lockfile
+
       - name: CLI test suite
         run: bun test ./cli/
+        env:
+          EBRAIN_HOME: ${{ github.workspace }}
 
       - name: TUI test suite
         run: bun test ./tui/test/
+
+      - name: Documentation website check
+        run: bun run --cwd website check
+
+      - name: Documentation website build
+        run: bun run website:build
 
       - name: Shell syntax check
         run: |

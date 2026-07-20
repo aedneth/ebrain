@@ -50,7 +50,7 @@ describe("action-reference app integration (reduce + buildFrame)", () => {
     const frame = buildFrame(opened.state, size, t).map(strip).join("\n");
     expect(frame).toContain("launch actions");
     expect(frame).toContain("guided launch");
-    expect(frame).toContain("non-binding task signals");
+    expect(frame).toContain("work category and optional prompt");
     expect(frame).not.toContain("best model");
   });
 

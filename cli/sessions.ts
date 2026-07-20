@@ -9,8 +9,8 @@
  * SEGURIDAD (hard requirements — no negociables, ver SPRINT-TUI 6.1.6):
  *   - `peek` SIEMPRE pasa el pane por scrubSecrets() antes de imprimirse/devolverse. Cero excepción.
  *   - `send`/`kill` (mutan) exigen --yes explícito. Sin --yes: se REHÚSA (no crashea) y dice qué haría.
- *   - `new --cwd <dir>`: si el cwd resuelve bajo un repo de cliente (brisas-del-golfo/dekko) → deny
- *     duro. Nunca se ofrece ni se acepta como target, en ningún subcomando.
+ *   - `new --cwd <dir>`: if the cwd resolves under a repository denied by the local deny policy
+ *     (cli/deny-policy.ts) → hard deny. Never offered or accepted as a target, in any subcommand.
  *
  * `new <agent> <slug>` lanza el comando del adapter (`launch:` en harness/adapters/<agent>/manifest.yaml)
  * con el env del harness inyectado (`env:` del manifest, p.ej. AGENT_NAME) vía `tmux new-session -e`.
@@ -26,23 +26,25 @@ import { existsSync, realpathSync } from "fs";
 import { join, resolve } from "path";
 import { homedir } from "os";
 import { EBRAIN_MCP_TOKEN_ENV, readTokenFile, tokenStorePaths } from "./mcp-token.ts";
+import { deniedRepos, isDeniedPath } from "./deny-policy.ts";
 
 const HOME = homedir();
-const EBRAIN_HOME = process.env.EBRAIN_HOME || join(HOME, "eBrain");
+// See the note in cli/fleet.ts: fall back to this checkout, never to "$HOME/eBrain".
+const EBRAIN_HOME = process.env.EBRAIN_HOME || join(import.meta.dir, "..");
 const ADAPTERS_DIR = process.env.EBRAIN_ADAPTERS_DIR || join(EBRAIN_HOME, "harness", "adapters");
 
 export const SESSION_PREFIX = "ebr-";
 export const DEFAULT_PEEK_LINES = 200;
 
-// Repos de cliente — NUNCA target de `sessions new --cwd`, en ningún subcomando ni panel futuro
-// (norma dura cross-agente, ver ~/.claude/CLAUDE.md "REPOS DE CLIENTE"). Chequeo por SEGMENTO de
-// path exacto (case-insensitive), no substring — evita over-blocking de dirs que solo contienen
-// el nombre como parte de otra palabra.
-export const CLIENT_DENYLIST = ["brisas-del-golfo", "dekko"];
+// Denied repositories are never a target of `sessions new --cwd`, in this or any future subcommand
+// or panel. Which repositories those are is operator configuration, not product content — see
+// cli/deny-policy.ts for resolution order and the fail-closed contract.
+export function clientDenylist(): string[] {
+  return deniedRepos();
+}
 
 export function isClientPath(p: string): boolean {
-  const segments = p.split(/[\\/]+/).map((s) => s.toLowerCase());
-  return CLIENT_DENYLIST.some((d) => segments.includes(d));
+  return isDeniedPath(p);
 }
 
 // ── naming ───────────────────────────────────────────────────────────────
@@ -173,8 +175,8 @@ export async function newSession(agent: string, slug: string, opts: NewSessionOp
   const name = sessionName(agent, slug);
   const cwd = resolve(opts.cwd ?? process.cwd());
 
-  // Deny repos de cliente ANTES de crear nada. `resolve()` colapsa `..` pero NO sigue symlinks —
-  // un symlink/bind-mount apuntando a brisas/dekko evadía el chequeo textual (gap del gate F6.4.8);
+  // Deny before creating anything. `resolve()` collapses `..` but does NOT follow symlinks — a
+  // symlink/bind-mount pointing at a denied repo used to evade the textual check (gate F6.4.8 gap);
   // `realpathSync` resuelve el destino real. Chequeamos AMBOS (literal + real) para no depender de
   // que el path exista (si no existe, realpath tira y cae al existsSync de abajo).
   let realCwd = cwd;
@@ -184,7 +186,9 @@ export async function newSession(agent: string, slug: string, opts: NewSessionOp
     /* no existe todavía → se caza abajo con existsSync */
   }
   if (isClientPath(cwd) || isClientPath(realCwd)) {
-    return { ok: false, error: { type: "deny-client", message: `cwd resuelve bajo un repo de cliente (${CLIENT_DENYLIST.join(" / ")}) — rechazado (aislamiento duro, ver CLAUDE.md)` } };
+    // Name the policy, never its entries: this message reaches any user who trips the guard, and
+    // the denied identifiers are the operator's private business relationships.
+    return { ok: false, error: { type: "deny-client", message: "cwd resolves under a repository denied by the local deny policy — refused" } };
   }
   if (!existsSync(cwd)) {
     return { ok: false, error: { type: "other", message: `cwd does not exist: ${cwd}` } };

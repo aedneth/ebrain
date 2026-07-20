@@ -1,0 +1,38 @@
+---
+import DocsLayout from "../../layouts/DocsLayout.astro";
+import { DOC_SECTIONS, docRoute } from "../../lib/navigation";
+---
+
+<DocsLayout title="Documentation" description="Install, launch, govern memory, route work, and operate eBrain locally.">
+  <p class="eyebrow">eBrain documentation</p>
+  <h1>Documentation for the local agent control plane.</h1>
+  <p class="article-lede">Install, launch, govern memory, and inspect the system from source-backed docs. Each page states what a surface does, its confirmation boundary, and what it intentionally does not automate.</p>
+  <section class="hub-paths" aria-labelledby="hub-paths-title">
+    <h2 id="hub-paths-title">Pick your path</h2>
+    <div>
+      {[
+        { title: "Install eBrain", description: "Run the source proof, boot one shared daemon, and onboard detected adapters.", href: docRoute("getting-started/quickstart") },
+        { title: "Launch a workspace", description: "Register a directory, choose a launch mode, and keep the process persistent.", href: docRoute("launch/manual-launch") },
+        { title: "Understand memory", description: "Separate learnings, context, episodes, procedures, and federated sources.", href: docRoute("concepts/memory") },
+        { title: "Control routing", description: "Use explainable signals and local profiles without a universal model claim.", href: docRoute("routing/task-signals") },
+      ].map((path) => (
+        <a class="hub-path" href={path.href}>
+          <h3>{path.title}</h3>
+          <p>{path.description}</p>
+          <span>Open guide <img src="/icons/arrow-right.svg" alt="" width="16" height="16" /></span>
+        </a>
+      ))}
+    </div>
+  </section>
+  <section class="hub-sections" aria-labelledby="hub-sections-title">
+    <h2 id="hub-sections-title">All documentation</h2>
+    {DOC_SECTIONS.map((section) => (
+      <section>
+        <h3>{section.title}</h3>
+        <ul>
+          {section.links.map((doc) => <li><a href={docRoute(doc.id)}>{doc.title}<span>{doc.description}</span></a></li>)}
+        </ul>
+      </section>
+    ))}
+  </section>
+</DocsLayout>

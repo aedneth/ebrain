@@ -1,0 +1,64 @@
+---
+import Base from "./Base.astro";
+import SiteHeader from "../components/SiteHeader.astro";
+import DocsNav from "../components/DocsNav.astro";
+import { ORDERED_DOCS, docRoute, type DocLink } from "../lib/navigation";
+
+interface Heading {
+  depth: number;
+  slug: string;
+  text: string;
+}
+
+interface Props {
+  activeId?: string;
+  title: string;
+  description: string;
+  headings?: readonly Heading[];
+}
+
+const { activeId, title, description, headings = [] } = Astro.props;
+const currentIndex = activeId ? ORDERED_DOCS.findIndex((doc) => doc.id === activeId) : -1;
+const previous: DocLink | undefined = currentIndex > 0 ? ORDERED_DOCS[currentIndex - 1] : undefined;
+const next: DocLink | undefined = currentIndex >= 0 && currentIndex < ORDERED_DOCS.length - 1 ? ORDERED_DOCS[currentIndex + 1] : undefined;
+const pageHeadings = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
+---
+
+<Base title={`${title} | eBrain documentation`} description={description}>
+  <SiteHeader />
+  <main id="main-content" class="docs-shell">
+    <aside class="docs-sidebar">
+      <a class="docs-overview-link" href="/docs/">Documentation overview</a>
+      <DocsNav activeId={activeId} />
+    </aside>
+    <div class="docs-mobile-nav">
+      <details>
+        <summary>Browse documentation</summary>
+        <DocsNav activeId={activeId} mobile />
+      </details>
+    </div>
+    <article class="doc-article">
+      <slot />
+      {activeId && (
+        <nav class="page-links" aria-label="Adjacent documentation">
+          {previous ? <a href={docRoute(previous.id)}><span>Previous</span>{previous.title}</a> : <span />}
+          {next ? <a class="page-links__next" href={docRoute(next.id)}><span>Next</span>{next.title}</a> : <span />}
+        </nav>
+      )}
+    </article>
+    <aside class="on-this-page" aria-label="On this page">
+      {pageHeadings.length > 0 && (
+        <>
+          <p>On this page</p>
+          <ol>
+            {pageHeadings.map((heading) => (
+              <li class:list={[heading.depth === 3 && "on-this-page__nested"]}>
+                <a href={`#${heading.slug}`}>{heading.text}</a>
+              </li>
+            ))}
+          </ol>
+        </>
+      )}
+    </aside>
+  </main>
+</Base>

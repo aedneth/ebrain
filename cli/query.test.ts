@@ -6,6 +6,9 @@
  * smoke is hermetic — it fails at arg parse, before any MCP call.
  */
 import { describe, expect, test } from "bun:test";
+
+// Deny policy is operator configuration; this suite declares its own neutral fixture policy.
+process.env.EBRAIN_DENIED_REPOS = "denied-alpha,denied-beta";
 import { join } from "path";
 import {
   mergeQueryResults,
@@ -35,10 +38,10 @@ describe("parseFederatedSources", () => {
     const payload = {
       sources: [
         { id: "clean", federated: true },
-        { id: "Brisas-Del-Golfo", federated: true },                                    // by id, case-insensitive
-        { id: "cust-1", name: "DEKKO client", federated: true },                        // by name
-        { id: "cust-2", local_path: "/home/e/repos/brisas-del-golfo", federated: true },// by local_path
-        { id: "cust-3", local_path: "/home/e/work/dekko/src", federated: true },        // by local_path subdir
+        { id: "Denied-Alpha", federated: true },                                    // by id, case-insensitive
+        { id: "cust-1", name: "DENIED-BETA client", federated: true },                        // by name
+        { id: "cust-2", local_path: "/home/e/repos/denied-alpha", federated: true },// by local_path
+        { id: "cust-3", local_path: "/home/e/work/denied-beta/src", federated: true },        // by local_path subdir
       ],
     };
     expect(parseFederatedSources(payload).map((s) => s.id)).toEqual(["clean"]);

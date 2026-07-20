@@ -4,6 +4,418 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-20 -- third audit pass: the published quickstart was broken again, one layer down
+
+The third independent pass (`docs/AUDIT-F7-F12-PASS3.md`, verdict `[AUDIT_FAIL]`) confirmed the F-R
+delta sound -- the policy-error state cannot be bypassed, the 24 new deny-policy tests are
+non-vacuous, memory-home symmetry holds, nothing leaked into the built site -- and then found two
+**blocking** defects, both in the delivery rather than the logic, and both only visible once the
+published documentation was audited as a public contract. Narrative:
+`docs/MAKER-REPORT-AUDIT-REMEDIATION.md` (round 3).
+
+- **F-P3 (BLOCKING) -- `scripts/install.sh` was tracked `100644`.** Every other entrypoint under
+  `scripts/` is `100755`. The docs say `./scripts/install.sh --from-source`, so a fresh clone
+  answered `Permission denied` on the very first command. This is F-A1's class surviving F-A1's fix:
+  the round-1 test wrote its own copy of the installer with a forced `chmod 755` and invoked it as
+  `sh ./scripts/install.sh` -- naming the interpreter bypasses the executable bit a reader depends
+  on, so the test could not fail. Mode corrected; two new tests take the tracked artifact instead of
+  a copy, and the list of scripts they check is derived from the documentation itself.
+- **F-P4 (BLOCKING) -- the installer cloned the pinned engine but never installed it.** `ebrain up`,
+  the first documented command, died with `Cannot find module '@modelcontextprotocol/sdk'` on any
+  machine that had not installed it by hand. Hidden three ways at once: every existing test set
+  `EBRAIN_SKIP_GBRAIN=1`, the maintainer's machine already had the modules, and CI passed **because
+  CI performs that install in a step of its own that the installer never performed**. The installer
+  now installs the engine lockfile with `--ignore-scripts`.
+- **F-P1/F-P2/F-P5 (MEDIUM) -- TS/shell grammar parity was claimed, not held.** Under a UTF-8 locale
+  glibc's `[a-z]` is collation-aware, so the shell validator accepted `café` while the TS half
+  rejected it (an availability split, never fail-open); separator sets diverged on vertical tab,
+  form feed and U+00A0. Fixed with `LC_ALL=C` on the shell greps and one explicit shared ASCII
+  separator set; the configuration reference now states the grammar instead of asserting parity.
+  Both new parity tests were vacuous as first written and were repaired to bite.
+- **F-P6 (HIGH) -- three documented `--help` commands did not exist.** `ebrain workflows --help`
+  printed nothing and exited 0. All three now answer on stdout; the new test derives them from the
+  docs and rejects usage strings naming subcommands that do not exist.
+- **F-P7/F-P8 (LOW) -- the i18n guard skipped shell `case` arms** (`*) echo "…"` read as a comment;
+  four live lines in `cli/ebrain` had zero protection) and carried one real English word in its
+  "not English at all" tier. Both closed.
+- **F-P9's class closed at its last two sites.** `cli/fleet.ts` and `cli/sessions.ts` still defaulted
+  `EBRAIN_HOME` to `$HOME/eBrain`, so a source user who cloned elsewhere got no adapters. The suite
+  now passes identically under a sandboxed `HOME` with an empty `XDG_CONFIG_HOME`.
+
+CLI 330/0 (with, without, and under a sandboxed `HOME`), TUI 442/0, Astro 0/0/0, 40 pages/38 routes.
+Every fix has a test proven to fail against the pre-fix code. **These fixes were verified by their
+own maker** -- see "What this verification does and does not establish" in the maker report.
+
+---
+
+## 2026-07-19 (later) -- re-audit: fail-open regression in the new deny policy, closed
+
+The second independent pass (`docs/AUDIT-F7-F12-REAUDIT.md`, verdict `[AUDIT_FAIL]`) confirmed every
+original finding genuinely closed and every isolation guarantee intact under its own adversarial
+fixtures -- and then found that the fix had introduced a regression in the shell half of the policy
+it created. Full narrative: `docs/MAKER-REPORT-AUDIT-REMEDIATION.md`.
+
+- **F-R1 (HIGH) -- `harness/core/trust.sh` failed OPEN.** The TS half validated entries; the shell
+  half spliced them straight into `grep -E`. Three reproduced modes: a CRLF-saved config matched
+  **nothing** on the shell path while the TS path denied correctly (same file, two policies, no
+  error anywhere); a single metacharacter or leading-dash entry made the combined pattern an invalid
+  ERE, so grep exited 2 and "no match" read as ALLOW -- disabling every valid entry with it; and `.`
+  behaved as a wildcard on one side and a literal on the other. Entries are now parsed **and
+  validated** with the same grammar as `SAFE_ENTRY`, CR is stripped, dots are escaped, and an
+  invalid entry sets the policy-error state (deny everything) reporting the line number, never the
+  token. The published claim that the policy fails closed is now true on both halves.
+- **F-R2 (MEDIUM) -- `doctor` could report isolation green under a policy it could not read.** It
+  never consulted the policy-error state. Both branches now check it first, and a new
+  `sources:deny-policy` check reports the policy state (entries loaded / none / unreadable).
+- **F-R3 (MEDIUM) -- `EBRAIN_MEMORY_HOME` was writer-only**, so setting it split memory in two:
+  `remember` wrote to the override while `ebrain memory recent` and `status` read the old tree.
+  Readers now honor it.
+- **F-R4 (LOW) -- the i18n guard still missed three Spanish lines** in `remember.sh`, a surface it
+  explicitly covers. Translated, and the detector was split into STRONG content words (one is
+  conclusive) and FUNCTION words (two per line). Two further guard defects surfaced while fixing it:
+  a shared global regex used with `.test()` alternated true/false via `lastIndex` -- it would have
+  missed every other Spanish line -- and the guard's stated "comments may stay Spanish" contract was
+  never implemented, so a commented `echo` in a usage block was scanned as output. Both closed; the
+  pinned regression now runs through the real detector rather than a helper.
+- **F-R5 (LOW)** -- deleted a dead `daemon-preflight.ts` branch that re-derived and interpolated
+  denied identifiers into daemon boot output after the count-only assertion had already thrown.
+- **New coverage:** `cli/deny-policy.test.ts` (24 tests). The config-FILE path had zero coverage and
+  the shell half had none; it now drives **both halves from the same fixture files and asserts they
+  agree**, because a divergence means one config file has two meanings.
+- **Verification:** CLI `314 / 0` with and without `EBRAIN_HOME`, TUI `442 / 0`, Astro `0/0/0`,
+  website 40 pages / 38 routes, shell syntax across 8 entrypoints, zero-hex and `git diff --check`
+  clean. Live check confirmed the operator's own policy still denies through path, subpath, case and
+  source-name forms on both halves, without over-blocking lookalikes.
+
+These fixes have **not** been independently checked. A third pass is required before merge.
+
+## 2026-07-19 -- F7-F12 independent audit: blocking findings closed
+
+Maker response to the first independent audit of the whole F7-F12 range (`docs/AUDIT-F7-F12-INDEPENDENT.md`,
+verdict `[AUDIT_FAIL]`). Findings were reproduced before being fixed; the license, README, and
+release branch were left intact by design.
+
+- **F-A1 (BLOCKER) -- the published quickstart failed at step 4.** `install.sh --from-source` only
+  accepted a checkout at `$HOME/eBrain`, while README and `docs/getting-started/install.md` tell the
+  reader to clone into a directory of their choosing (reproduced: exit 1). `--from-source` now
+  resolves the checkout from the installer's own location, with an explicit `EBRAIN_HOME` still
+  authoritative. A new test executes the four documented lines verbatim with no `EBRAIN_HOME` set;
+  verified non-vacuous by running it against the pre-fix installer (exit 1, exact error).
+- **F-A2 (HIGH) -- privacy/security copy promised configuration that did not exist.** Implemented it
+  instead of softening the claim: `cli/deny-policy.ts` is now the single source of truth for the
+  repository deny policy, resolved from `EBRAIN_DENIED_REPOS` or
+  `$XDG_CONFIG_HOME/ebrain/denied-repos`, and documented in the configuration reference. Fails
+  closed on an unreadable or malformed policy; an **empty** policy denies nothing (the shell path
+  previously would have matched every input through an empty regex). Rewired `sessions`,
+  `isolation`, `context`, `episodes`, `trust.sh`, and `doctor.sh` -- the last of which had drifted
+  into its own inlined copy of the list.
+- **F-B1 code half closed.** No client identifier remains in any shipped `.ts` or `.sh` file; tests
+  use neutral fixtures and declare their own policy. Operator identity still present in prose
+  (CHANGELOG, ADRs, handoffs) and in the *allow*-lists of `trust.sh` -- open for the visibility gate.
+- **F-D1 (found by the orchestrator, missed by both maker and checker).** `cli/sessions.ts` returned
+  a Spanish deny message that interpolated the denied repository names into user-visible output.
+  Translated, and the identifiers are no longer echoed anywhere -- `assertNoClientSources` and
+  `doctor` now report a count instead of a name. The i18n guard that should have caught it was
+  itself the defect: a curated word list with no entry matching that sentence. It now also flags any
+  output line carrying two or more Spanish function words, with a regression test pinned to the
+  exact string that escaped it.
+- **F-C3/F-C4/F-C5.** `remember.sh`, `cli/ebrain`, `ebrain-q`, and `ebrain-brain` derive paths from
+  `EBRAIN_HOME` (exported once by the dispatcher) instead of a `$HOME/eBrain` literal; memory root
+  is separately overridable via `EBRAIN_MEMORY_HOME`, separating user data from the code checkout.
+  The `assertNoClientSources` "PENDING" comment was stale -- it has been wired at daemon boot since
+  D.5.4. `CONTRIBUTING.md` no longer calls `ebrain` before it is installed.
+- **Verification:** CLI `290 pass / 0 fail` (with and without `EBRAIN_HOME`), TUI `442 / 0`, Astro
+  check `0/0/0`, website build 40 pages / 38 routes, shell syntax, zero-hex, `git diff --check`
+  clean. Live check confirmed the operator's own policy still denies its real entries through path,
+  subpath, case, and source-name forms without over-blocking lookalikes.
+
+F-A3 (public site linking to a private repository) remains an owner sequencing decision, and the
+audit's remaining findings are scoped to repository visibility rather than merge or deployment.
+
+## 2026-07-18 -- F12 Open-source publication surface
+
+- **Outcome-first README:** expanded the public landing document into a source-install proof,
+  capability and boundary map, shared-daemon architecture, compound-context lifecycle, CKIS
+  evolution, workspace/session workflow, user-owned routing, factual token telemetry, security
+  boundary, documentation map, and contribution guide. The repository-owned wordmark and
+  sanitized TUI frame remain the visual evidence; no personal paths, credentials, or raw terminal
+  output were added.
+- **Community and CI posture:** added structured bug/feature issue forms, a security/documentation
+  contact configuration, and a PR template. CI now installs and type-checks/builds the static docs
+  site in addition to the existing local CLI/TUI/security checks. Vercel link state is ignored.
+- **Release discipline:** added F12's explicit publication plan and updated README/site contracts
+  so they distinguish a static local build from an unverified public deployment. The remote F7
+  dialog line was merged into the release branch; conflicting implementation files preserved the
+  later F8 implementation and the complete TUI suite passed.
+- **CI source-root correction:** task-profile rule discovery now defaults to the bundled source
+  root when `EBRAIN_HOME` is not set, instead of assuming a checkout always resides in `~/eBrain`.
+  Installed launchers retain their explicit environment override; clean GitHub checkouts now load
+  the same versioned rules as local development.
+- **License metadata correction:** restored the canonical `GNU AGPL v3.0 only` README wording that
+  is enforced by the root distribution contract.
+- **Hermetic CI completion:** CI now installs the pinned engine's locked dependencies with package
+  scripts disabled and gives the CLI suite the checked-out `EBRAIN_HOME`. A fresh runner can now
+  resolve MCP bridge modules and the repository's adapter manifests without inheriting a developer
+  home-directory installation.
+- **Release-readiness continuity:** the F11 contract keeps its immutable historical review range,
+  while the live F12 handoff is now checked for its current independent-audit and no-merge/no-deploy
+  gates. It no longer treats a replaced candidate SHA as live provenance.
+- **Remote verification:** GitHub Actions run `29667750588` is green on the corrected draft head,
+  covering CLI, TUI, static docs type/build, shell syntax, zero-hex, and secret scanning. The two
+  preceding CI defects are recorded in the F12 maker report with their narrow fixes.
+- **Gate state:** the release branch remains draft. Opus and Fable audit attempts were blocked by
+  the local account's weekly limit before either could issue a verdict. No Vercel
+  project/deployment, repository-visibility change, or merge has occurred; an independent checker
+  remains mandatory before the draft becomes mergeable.
+
+## 2026-07-18 -- F11 Release gate preparation
+
+- **Independent-review candidate:** defined the exact F8-F10.3 range and supplied a separate Opus
+  review packet with reproducible suite, static-build, privacy, distribution, and visual checks.
+  Optional Fable/GPT evidence is explicitly not a replacement for the required maker/checker split.
+- **Machine-checkable release discipline:** added a readiness contract for static local docs, ignored
+  generated Astro state, no Vercel adapter/configuration, and a locally buildable rather than
+  deployed website claim. The F10.0 claim matrix now matches that verified local state.
+- **Gate state:** this is maker preparation only. Portable isolation policy, history/public-tree
+  remediation, independent review, and explicit owner approval for each external action remain
+  unresolved. No push, visibility change, release, deployment, or submission occurred.
+
+## 2026-07-18 -- F10.3 Complete static documentation website
+
+- **Public Markdown remains canonical:** added an isolated Astro static-site package that derives
+  38 allowlisted public documentation routes directly from the repository source tree. It adds a
+  docs-first home, four workflow paths, responsive navigation, adjacent reading, local static
+  search, and local social/control assets without a deploy adapter, runtime service, copied docs,
+  external font, analytics, or Vercel configuration.
+- **Operational reference expanded:** documented onboarding, launch modes, sessions, context,
+  episodes, procedures/workflows, signals, profiles/targets, TUI, diagnostics, memory,
+  workspace/session, and routing/cost commands with explicit action and confirmation boundaries.
+- **Static safety contract:** source/output tests now enforce public navigation parity, static-only
+  configuration, local assets, valid rendered links, Markdown-link rewrite, and private-pattern
+  exclusions. Generated Astro cache and build output are ignored. Mobile visual QA fixed an SVG
+  aspect-ratio regression at narrow widths.
+- **Verification status:** focused site/docs contracts `7/0`, static type check `0/0/0`, static
+  build 40 pages/38 docs, CLI `280/0`, TUI `442/0`, and local desktop/mobile browser QA passed.
+  Independent review and F10.0 public-release blockers remain required; no deploy or visibility
+  change occurred.
+
+## 2026-07-18 -- F10.2 Public documentation and native product assets
+
+- **Public surface, not historical disclosure:** rebuilt the README and added a structured English
+  documentation tree for installation, memory, workspaces, sessions, routing, costs, MCP, privacy,
+  CKIS, contribution, license, and release boundaries. Navigation is allowlisted and deliberately
+  excludes historical handoffs, audits, and detailed ADR artifacts pending F10.0 privacy gates.
+- **Repository-owned visual evidence:** added a deterministic generator, native pixel wordmark, and
+  a sanitised TUI SVG produced from the pure production renderer with a fixed fixture. Public assets
+  carry no local path, raw terminal capture, credential, prompt, customer identity, or live data.
+- **Regression contract:** a public-doc test resolves local links inside the allowlist and rejects
+  historical navigation, English-surface drift, private paths, dotenv/token-shaped examples, ANSI,
+  and asset regressions. The `docs:assets` script makes checked-in visual output reproducible.
+- **Verification status:** final suites passed CLI `277/0` and TUI `442/0`; shell syntax, zero-hex,
+  diff check, deterministic assets, visual inspection, and diff-secret scan passed. Independent
+  review and F10.0 public-release blockers remain required.
+
+## 2026-07-18 -- F10.1 AGPL-3.0-only distribution metadata
+
+- **Root licensing aligned:** replaced the root MIT text with the exact GNU AGPL v3 text and set
+  package, README, and contributor metadata to `AGPL-3.0-only`. A regression test fixes the exact
+  official license digest so the root declaration cannot silently drift.
+- **Upstream terms preserved:** added `THIRD_PARTY_NOTICES.md` and corrected the distribution
+  description: the installer/CI obtain the pinned gbrain engine separately in ignored local vendor
+  state, under its upstream MIT terms. Root AGPL terms do not relicense it or other dependencies.
+- **Verification status:** focused license/install/onboarding/English checks passed `23/0`; full
+  suites and static checks are recorded in the maker report. Independent licensing review remains
+  required before release.
+
+## 2026-07-18 -- F10.0 Public claim and privacy audit
+
+- **Evidence before public copy:** added a claim matrix that distinguishes verified local behavior,
+  user-configured dependencies, and planned work. It maps daemon onboarding, MCP boundaries,
+  governed memory, workspaces, routing/cost telemetry, source install, and future website/shell
+  claims to implementation and tests.
+- **Release blockers made explicit:** the audit records historical operator material and
+  operator-specific isolation identities as public-release blockers. It requires a neutral
+  configurable policy, a public-document allowlist, and an owner-approved history strategy before
+  any public visibility change. No private data was read, copied, or exposed by this audit.
+- **Verification status:** focused implementation evidence passed `138/0`; independent review is
+  still required before licensing or public-copy changes are treated as release-ready.
+
+## 2026-07-18 -- F9.3 Fixture-only migration recovery and audit closure
+
+- **No private-data migration:** F9.3 adds an internal synthetic-fixture proof only. It neither
+  reads nor imports `agent-memory` content, exposes a public import command, adds a TUI action, or
+  makes the private repository a dependency. The metadata-only audit boundary remains explicit in
+  ADR-008.
+- **Recoverable immutable records:** fixture migration now derives deterministic episode IDs, keeps
+  a private path-free/text-free migration ledger, and binds a safe fixture ID/hash privately to an
+  immutable `legacy-import` episode. Reruns and lost-ledger recovery skip/rebuild exact records;
+  changed input fails closed instead of creating a duplicate or overwriting history.
+- **Passive contract preserved:** public CLI/TUI episode summaries may label fixture provenance but
+  still reject bodies, paths, content hashes, and private migration metadata. Public `episodes
+  record` rejects the internal source.
+- **Verification status:** focused migration/episode/contract/TUI suites passed `143/0`; final full
+  suite and static verification are recorded in the maker report. Independent approval remains
+  required by design.
+
+## 2026-07-18 -- F9.2 Governed episodes and reviewed procedures
+
+- **Bounded local recall:** added immutable, scrubbed episode records with opaque identifiers,
+  safe provenance, private atomic storage, explicit bounded retrieval, and local lexical recall.
+  Passive list output is summary-only. A successful `ebrain remember` mirrors to an episode on a
+  best-effort basis, so a mirror failure cannot invalidate the original durable learning.
+- **Human-reviewed procedure lifecycle:** added path-free procedure summaries and a private
+  metadata sidecar for explicit use evidence and `active`/`stale`/`archived` review state. Existing
+  workflow records remain the content source of truth; procedure actions never execute commands,
+  infer success, choose providers, or create skills automatically.
+- **Memory cockpit consolidation:** Memory now presents episode-first Recall, metadata-only Context,
+  reviewed Procedures, and clearly-labelled legacy session logs. The TUI stores no episode/context
+  body, path, event history, command, model, or provider value; an episode detail shows provenance
+  only, while existing procedure materialization/attach behavior is preserved.
+- **Verification status:** focused CLI/TUI contracts and engines passed `154/0`; final full suites
+  passed CLI `264/0` and TUI `441/0`. Independent approval is still required by design.
+
+## 2026-07-18 -- F9.1 Governed operating context packs
+
+- **Human-governed context:** added private local operator and registered-workspace Markdown packs
+  with bounded explicit retrieval, strict metadata, atomic private writes, explicit versioned human
+  updates, and reviewable proposals. A proposal carries safe agent/session provenance and a base
+  version/hash; it never alters active context until `review accept --yes`, and a stale base fails
+  rather than overwriting a human update.
+- **Summary-only Launch:** Launch reads only context identity/version metadata and shows eligible
+  operator/workspace packs. Pack bodies are neither loaded into TUI state nor injected into prompts.
+- **Path-free public memory:** `memory recent --json` no longer returns local learning/session paths.
+  The CLI contract and TUI parser reject any future path field rather than silently accepting it.
+- **Verification status:** focused contracts passed `164/0`; an isolated dispatcher/TUI smoke passed
+  at `100x30` and `80x24`; final post-hardening suites passed CLI `242/0` and TUI `436/0`.
+  `docs/F9-CONTEXT-MAKER-REPORT.md` records the independent-checker reproduction focus.
+
+## 2026-07-18 -- F9.0 Governed agent-memory contract
+
+- **Four explicit layers:** ADR-008 separates human-governed operating context, immutable scrubbed
+  episodes, existing federated knowledge, and reviewed workflow/skill procedures. It preserves
+  clean-install local operation and makes CKIS federation optional.
+- **Boundaries before engine work:** proposals never activate context directly; terminal output is
+  not an episode; procedure lifecycle is review-only; no autonomous provider, dialectic pass,
+  skill creation, model selection, or preference mutation is introduced.
+- **Privacy correction planned:** the ADR identifies historical filesystem paths in `memory recent`
+  CLI JSON as a contract leak to remove in F9, while retaining only bounded local internal reads.
+  It also records a metadata-only audit of the private `agent-memory` repository without reading
+  or copying any content.
+
+## 2026-07-18 -- F8.3 Native shell discovery gate
+
+- **Proposed boundary:** ADR-007 specifies a tmux-owned login shell per generated workspace ID,
+  with a distinct `ebsh-` prefix, strict registry revalidation, idempotent create/reuse, and the
+  existing attach-versus-switch-client handoff.
+- **No embedded evaluator:** the proposed surface accepts neither paths, commands, nor environment
+  overrides. It captures no shell output, does not feed memory, and must not inject eBrain control
+  variables or token-store data into the shell.
+- **Independent gate required:** ADR-007 remains proposed and lists the contract, isolation,
+  lifecycle, environment, tmux, responsive-UI, and no-capture checks required before code is
+  authorized. No runtime behavior changed in F8.3.
+
+## 2026-07-18 -- F8.2 Workspace cockpit
+
+- **Multi-project control surface:** added `4:workspaces`, with registered directories and live
+  tmux-derived activity side by side at normal widths, plus full-width selected detail. The
+  compact `80x24` view stacks those panels without hiding the primary registration path.
+- **One strict registry:** add, rename, and remove use only structured `ebrain workspaces` calls;
+  mutations re-read the validated store, removal is y-only and affects neither directories nor
+  sessions. The current directory remains a clearly marked temporary launch candidate.
+- **Immutable session context:** existing sessions retain their canonical cwd. Their display gets
+  a workspace label only for an exact registered-cwd match; live activity contains no history and
+  shows active count plus latest live-session creation in selected detail.
+- **Verification:** `docs/F8-WORKSPACES-MAKER-REPORT.md` records focused contracts, a real tmux
+  `100x30`/`80x24` smoke, CLI `229/0`, TUI `433/0`, source/diff zero-hex, diff safety, and the
+  independent-checker focus. Maker review remains pending by design.
+
+## 2026-07-18 -- F8.1 Sessions multiline prompt editor
+
+- **Complete editor model:** Sessions `p` now opens a cursor-aware multiline editor instead of
+  showing only the last four lines. It preserves exact in-memory draft bytes, supports bracketed
+  paste and `Alt+Enter`, uses logical Home/End and visual-row arrows, grows until its safe terminal
+  cap, then follows the cursor through a truthful viewport.
+- **Safety unchanged:** plain Enter still opens exact-payload review; only `y` sends literally to
+  tmux. Drafts remain outside session logs, memory, telemetry, workspaces, cost records, and
+  history.
+- **Verification:** pure editor edge cases, compact/normal/wide frames, real tmux fake-agent smoke,
+  TUI suite `425/0`, and the F8.0 baseline are recorded in `docs/F8-COMPOSER-MAKER-REPORT.md`.
+  Independent checker review remains pending.
+
+## 2026-07-18 -- Workspace, memory, and OSS program planned
+
+- **Product program:** added `docs/ULTRAPLAN-WORKSPACES-MEMORY-OSS.md`, the implementation
+  contract for a complete Sessions composer, a dedicated Workspaces cockpit, a tmux-native shell
+  discovery gate, governed Hermes-informed agent-memory consolidation, and OSS documentation/site
+  readiness.
+- **Boundaries fixed before code:** tmux remains the terminal data plane; the TUI does not evaluate
+  arbitrary commands; private `agent-memory` is not an OSS dependency; CKIS federation is optional
+  on clean installs; context and skills remain human-governed; push, release, and Vercel deployment
+  require explicit authorization.
+
+## 2026-07-17 -- F7 review package prepared
+
+- **Independent-checker handoff:** added `docs/F7-REVIEW-PACKET.md` with the final F7 review
+  range, reproduction commands, security/UI invariants, visual matrix, fake-agent cwd evidence,
+  and the explicit remaining human acceptance. It intentionally contains no maker audit verdict.
+- **Maker QA evidence:** final CLI/TUI suites, harness contract, shell syntax, whitespace,
+  zero-hex, secret-safety, and bare-command visual smokes are recorded in the packet and handoff.
+
+---
+
+## 2026-07-17 -- Frictionless TUI entry point
+
+- **Bare command:** `ebrain` now opens the interactive cockpit when stdin and stdout are TTYs and
+  `TERM` is usable. `ebrain ui` remains a compatible explicit alias.
+- **Script safety:** no-argument non-interactive invocation continues to print ordinary help rather
+  than hanging or emitting an alternate-screen UI. Explicit `ebrain ui` in a pipe/CI context fails
+  before starting Bun with a clear terminal requirement.
+- **Verification:** dispatcher tests cover non-TTY help, non-TTY alias rejection, and a pseudo-TTY
+  fixture proving both invocation forms dispatch to the same TUI entrypoint; live bare-command
+  tmux smoke opened the Launch workspace picker successfully.
+
+---
+
+## 2026-07-17 -- Validated multi-workspace Launch
+
+- **Workspace registry:** added `ebrain workspaces list|validate|add|rename|remove`, a strict
+  local schema that persists only generated IDs, labels, and canonical directories. Each read and
+  write revalidates `realpath`, rejects duplicates, missing/non-directory paths, and literal or
+  symlinked client repositories; the directory and store file use private modes.
+- **Low-friction picker:** Launch now has `[g] workspace`. Its searchable picker exposes the
+  validated caller directory plus registered workspaces, can register a directory through an
+  explicit two-field dialog, and shows the active workspace in both Launch and the footer. It is
+  a structured control-plane surface, not an internal shell or command runner.
+- **Launch integrity:** direct sessions validate the active workspace immediately before the RAM
+  gate, and Guided Launch validates it before opening then reuses the same picker for its workspace
+  field. Existing sessions retain their original cwd; selecting another workspace only affects a
+  later launch. The previous free-form wizard directory path is removed.
+- **Verification:** registry contracts cover strict schema, canonicalization, duplicate rejection,
+  private atomic persistence, and literal/symlink client denial. A real tmux fake-agent E2E starts
+  two sessions from separate registered directories and verifies each recorded cwd; responsive
+  picker/add-dialog render tests cover 80x24, 100x30, and 160x48.
+
+---
+
+## 2026-07-17 -- Manual-first Launch and deterministic Task Setup
+
+- **Visual hierarchy:** Launch is now tab `2` and Sessions tab `3`. Manual Agents is the primary
+  large left panel at normal widths and the first complete panel at 80x24; Guided Launch and Task
+  Setup are secondary, focusable decisions. Both direct and guided launches retain the automatic
+  transition to Sessions.
+- **Deterministic onboarding:** Task Setup replaces visible automatic signals with six explained,
+  user-selected capability presets and an optional exact task prompt. It neither creates nor
+  mutates an execution profile, selects a provider/model, or starts a session. `r` clears only
+  transient task/category/workflow/preview state.
+- **Truthful wizard:** Guided Launch now presents active target/profile/capability/directory values
+  in the responsive dialog. Singleton fields show `locked` and do not advertise working arrows;
+  multi-choice fields continue to cycle. Directory and task editors wrap complete values with a
+  visible viewport rather than clipping them.
+- **Verification:** TUI `414 pass / 0 fail`; CLI `218 pass / 0 fail`; compact real-tmux captures
+  inspected for Launch, category guide, and singleton wizard; zero-hex and diff checks clean.
+
+---
+
 ## 2026-07-17 -- Responsive dialog foundation for compact terminals
 
 - **No clipped explanatory dialogs:** added `ResponsiveDialog`, a semantic dialog renderer that wraps plain prose before styling it, preserves preformatted prompt payloads, exposes an honest scroll position, and keeps every resulting row at the terminal width.

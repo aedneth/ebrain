@@ -22,16 +22,20 @@ import { homedir } from "os";
 
 const HOME = homedir();
 const EBRAIN_HOME = process.env.EBRAIN_HOME || join(HOME, "eBrain");
-const LEARNINGS_DIR = join(EBRAIN_HOME, "memory", "learnings");
+// Memory is USER DATA and may live outside the code checkout. Readers must agree with the writer
+// (harness/core/remember.sh) or a set override produces a silent split brain: writes land in one
+// tree while `ebrain memory recent` reports an empty other one.
+const MEMORY_HOME = process.env.EBRAIN_MEMORY_HOME || join(EBRAIN_HOME, "memory");
+const LEARNINGS_DIR = join(MEMORY_HOME, "learnings");
 const DEV_BRAIN = process.env.DEV_BRAIN_VAULT || join(HOME, "Documents", "Dev Brain");
 const SESSIONS_INDEX = join(DEV_BRAIN, "sessions", "index.md");
 const DEFAULT_LIMIT = 10;
 
 export interface LearningEntry {
-  project: string; agent: string; date: string; tags: string[]; text: string; path: string;
+  project: string; agent: string; date: string; tags: string[]; text: string;
 }
 export interface SessionEntry {
-  ts: string; project: string; agent: string; commit: string; summary: string; path: string;
+  ts: string; project: string; agent: string; commit: string; summary: string;
 }
 
 // Frontmatter YAML entre '---'. Reusa Bun.YAML (misma primitiva que manifest-get.ts) — nada de
@@ -86,7 +90,6 @@ export async function recentLearnings(dir = LEARNINGS_DIR, limit = DEFAULT_LIMIT
       date: typeof meta.date === "string" ? meta.date : "",
       tags: Array.isArray(meta.tags) ? meta.tags.map(String) : [],
       text: bodyText(body),
-      path,
       sortKey,
     });
   }
@@ -100,12 +103,11 @@ export function parseSessionLine(line: string): SessionEntry | null {
   if (parts.length < 6) return null;
   const [ts, project, field3, commit, ...rest] = parts;
   if (rest.length < 2) return null;
-  const path = rest[rest.length - 1];
   let summary = rest.slice(0, -1).join(" | ");
   let agent = field3;
   const bracket = summary.match(/^\[([^\]]+)\]\s*(.*)$/);
   if (bracket) { agent = bracket[1]; summary = bracket[2]; }
-  return { ts, project, agent, commit, summary, path };
+  return { ts, project, agent, commit, summary };
 }
 
 // El índice es append-only en orden cronológico → las últimas N líneas del archivo SON las más

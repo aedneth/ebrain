@@ -14,6 +14,9 @@ node_modules/
 # log de gasto (puede contener metadata sensible; GUARDRAILS §1/§4)
 spend.jsonl
 memory/
+# Public documentation is source, not runtime memory.
+!docs/memory/
+!docs/memory/*.md
 
 # harness — backups locales del render de normas (no versionar)
 harness/.backups/
@@ -24,3 +27,8 @@ harness/.backups/
 .brain/
 .claude/
 graphify-out/
+
+# F10.3 static documentation build output
+website/dist/
+website/.astro/
+.vercel/

@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+
+// Deny policy is operator configuration; this suite declares its own neutral fixture policy.
+process.env.EBRAIN_DENIED_REPOS = "denied-alpha,denied-beta";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -195,7 +198,7 @@ describe("workflow contract", () => {
     const base = tmp();
     const store = tmp();
     try {
-      const client = join(base, "brisas-del-golfo");
+      const client = join(base, "denied-alpha");
       mkdirSync(client);
       writeFileSync(join(client, "client-sop.md"), sampleMarkdown("Client SOP"));
       const link = join(base, "innocent-name");
@@ -215,7 +218,7 @@ describe("workflow contract", () => {
     try {
       mkdirSync(safe);
       writeFileSync(join(safe, "ok.md"), sampleMarkdown("Safe Workflow"));
-      const client = join(base, "dekko");
+      const client = join(base, "denied-beta");
       mkdirSync(client);
       writeFileSync(join(client, "client.md"), sampleMarkdown("Client Workflow"));
       symlinkSync(join(client, "client.md"), join(safe, "sneaky.md"));
@@ -254,7 +257,7 @@ describe("workflow contract", () => {
     const store = tmp();
     const skills = tmp();
     try {
-      const client = join(base, "brisas-del-golfo");
+      const client = join(base, "denied-alpha");
       mkdirSync(client);
       const clientFile = join(client, "sop.md");
       writeFileSync(clientFile, sampleMarkdown("Client SOP"));

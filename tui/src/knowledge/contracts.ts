@@ -356,6 +356,79 @@ export function parseTaskProfile(j: unknown): TaskProfileData | null {
   };
 }
 
+export interface WorkspaceData { id: string; label: string; cwd: string }
+export interface WorkspacesData { schemaVersion: 1; workspaces: WorkspaceData[] }
+
+function parseWorkspaceData(value: unknown): WorkspaceData | null {
+  if (!isObj(value)) return null;
+  const id = asStr(value.id);
+  const label = scrubSecrets(asStr(value.label));
+  const cwd = scrubSecrets(asStr(value.cwd));
+  return id && label && cwd.startsWith("/") ? { id, label, cwd } : null;
+}
+
+/** TUI consumes the registry only through the CLI contract. Scrub labels and paths at the
+ * subprocess boundary just like search results, even though the registry itself rejects secrets. */
+export function parseWorkspaces(j: unknown): WorkspacesData | null {
+  if (!isObj(j) || j.schema_version !== 1 || !Array.isArray(j.workspaces)) return null;
+  const workspaces = j.workspaces.map(parseWorkspaceData).filter((workspace): workspace is WorkspaceData => workspace !== null);
+  if (workspaces.length !== j.workspaces.length) return null;
+  return { schemaVersion: 1, workspaces };
+}
+
+/** `workspaces validate` returns only the canonical, validated directory. */
+export function parseWorkspaceValidation(j: unknown): { cwd: string } | null {
+  if (!isObj(j) || j.ok !== true) return null;
+  const cwd = scrubSecrets(asStr(j.cwd));
+  return cwd.startsWith("/") ? { cwd } : null;
+}
+
+/** `workspaces add` returns the stored record after the CLI has canonicalized it. */
+export function parseWorkspaceMutation(j: unknown): WorkspaceData | null {
+  if (!isObj(j) || j.ok !== true) return null;
+  return parseWorkspaceData(j.workspace);
+}
+
+/** `workspaces remove` deliberately returns only the removed generated id. */
+export function parseWorkspaceRemoval(j: unknown): { removed: string } | null {
+  if (!isObj(j) || j.ok !== true) return null;
+  const removed = asStr(j.removed);
+  return /^[a-z][a-z0-9-]{0,63}$/.test(removed) ? { removed } : null;
+}
+
+// ---------------------------------------------------------------------------
+// Context packs (ADR-008 / F9.1) -- summaries only. Pack bodies remain behind an
+// explicit bounded CLI retrieval and are never stored in the TUI state.
+// ---------------------------------------------------------------------------
+
+export interface ContextPackData {
+  id: string;
+  scope: "operator" | "workspace";
+  workspaceId?: string;
+  version: number;
+  updatedAt: string;
+  chars: number;
+}
+export interface ContextPacksData { packs: ContextPackData[] }
+
+export function parseContextPacks(j: unknown): ContextPacksData | null {
+  if (!isObj(j) || !Object.keys(j).every((key) => key === "packs") || !Array.isArray(j.packs)) return null;
+  const packs: ContextPackData[] = [];
+  for (const value of j.packs) {
+    if (!isObj(value) || !Object.keys(value).every((key) => ["id", "scope", "workspace_id", "version", "updated_at", "chars"].includes(key))) return null;
+    const id = asStr(value.id);
+    const scope = value.scope;
+    const workspaceId = typeof value.workspace_id === "string" ? value.workspace_id : undefined;
+    const version = asNum(value.version);
+    const updatedAt = asStr(value.updated_at);
+    const chars = asNum(value.chars, -1);
+    if (!/^(?:operator|workspace-[a-z][a-z0-9-]{0,63})$/.test(id) || (scope !== "operator" && scope !== "workspace") || !Number.isInteger(version) || version < 1 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(updatedAt) || !Number.isInteger(chars) || chars < 0) return null;
+    if ((scope === "operator" && (id !== "operator" || workspaceId !== undefined)) || (scope === "workspace" && (!workspaceId || id !== `workspace-${workspaceId}` || !/^[a-z][a-z0-9-]{0,63}$/.test(workspaceId)))) return null;
+    packs.push({ id, scope, ...(workspaceId ? { workspaceId } : {}), version, updatedAt, chars });
+  }
+  return { packs };
+}
+
 export interface ProfileSummaryData {
   id: string;
   label: string;
@@ -449,26 +522,61 @@ export interface MemoryData {
 }
 
 export function parseMemory(j: unknown): MemoryData | null {
-  if (!isObj(j)) return null;
-  const learnings: MemoryLearning[] = asArr(j.learnings)
-    .filter(isObj)
-    .map((l) => ({
-      project: asStr(l.project, "?"),
-      agent: asStr(l.agent, "unknown"),
-      date: asStr(l.date),
-      tags: asArr(l.tags).map((t) => asStr(t)).filter(Boolean),
-      text: asStr(l.text),
-    }));
-  const sessions: MemorySession[] = asArr(j.sessions)
-    .filter(isObj)
-    .map((s) => ({
-      ts: asStr(s.ts),
-      project: asStr(s.project, "?"),
-      agent: asStr(s.agent, "unknown"),
-      commit: asStr(s.commit),
-      summary: asStr(s.summary),
-    }));
+  if (!isObj(j) || !Object.keys(j).every((key) => ["learnings", "sessions"].includes(key))) return null;
+  if ((j.learnings !== undefined && !Array.isArray(j.learnings)) || (j.sessions !== undefined && !Array.isArray(j.sessions))) return null;
+  const learnings: MemoryLearning[] = [];
+  for (const value of asArr(j.learnings)) {
+    if (!isObj(value) || !Object.keys(value).every((key) => ["project", "agent", "date", "tags", "text"].includes(key))) return null;
+    if (typeof value.project !== "string" || typeof value.agent !== "string" || typeof value.date !== "string" || !Array.isArray(value.tags) || !value.tags.every((tag) => typeof tag === "string") || typeof value.text !== "string") return null;
+    learnings.push({ project: value.project, agent: value.agent, date: value.date, tags: value.tags, text: value.text });
+  }
+  const sessions: MemorySession[] = [];
+  for (const value of asArr(j.sessions)) {
+    if (!isObj(value) || !Object.keys(value).every((key) => ["ts", "project", "agent", "commit", "summary"].includes(key))) return null;
+    if (typeof value.ts !== "string" || typeof value.project !== "string" || typeof value.agent !== "string" || typeof value.commit !== "string" || typeof value.summary !== "string") return null;
+    sessions.push({ ts: value.ts, project: value.project, agent: value.agent, commit: value.commit, summary: value.summary });
+  }
   return { learnings, sessions };
+}
+
+// ---------------------------------------------------------------------------
+// Episodes (episodes list --json) -- summary-only local recall records (F9.2)
+// ---------------------------------------------------------------------------
+
+export interface EpisodeSummaryData {
+  id: string;
+  kind: "learning" | "session-summary";
+  source: "remember" | "explicit" | "harness-summary" | "legacy-import";
+  createdAt: string;
+  project: string;
+  agent: string;
+  session?: string;
+  workspaceId?: string;
+  chars: number;
+}
+
+export interface EpisodesData { episodes: EpisodeSummaryData[] }
+
+/** Passive episode reads must never carry an episode body, content hash, or filesystem path. */
+export function parseEpisodes(j: unknown): EpisodesData | null {
+  if (!isObj(j) || !Object.keys(j).every((key) => key === "episodes") || !Array.isArray(j.episodes)) return null;
+  const episodes: EpisodeSummaryData[] = [];
+  for (const value of j.episodes) {
+    const allowed = ["id", "kind", "source", "created_at", "project", "agent", "session", "workspace_id", "chars"];
+    if (!isObj(value) || !Object.keys(value).every((key) => allowed.includes(key))) return null;
+    const id = asStr(value.id);
+    const kind = value.kind;
+    const source = value.source;
+    const createdAt = asStr(value.created_at);
+    const project = asStr(value.project);
+    const agent = asStr(value.agent);
+    const session = typeof value.session === "string" ? value.session : undefined;
+    const workspaceId = typeof value.workspace_id === "string" ? value.workspace_id : undefined;
+    const chars = asNum(value.chars, -1);
+    if (!/^episode-[a-f0-9-]{36}$/.test(id) || (kind !== "learning" && kind !== "session-summary") || (source !== "remember" && source !== "explicit" && source !== "harness-summary" && source !== "legacy-import") || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(createdAt) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/.test(project) || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/.test(agent) || (session !== undefined && !/^[a-z][a-z0-9-]{0,63}$/.test(session)) || (workspaceId !== undefined && !/^[a-z][a-z0-9-]{0,63}$/.test(workspaceId)) || !Number.isInteger(chars) || chars < 0) return null;
+    episodes.push({ id, kind, source, createdAt, project, agent, ...(session ? { session } : {}), ...(workspaceId ? { workspaceId } : {}), chars });
+  }
+  return { episodes };
 }
 
 // ---------------------------------------------------------------------------
@@ -523,6 +631,46 @@ export function parseWorkflows(j: unknown): WorkflowsData | null {
   return {
     workflows: asArr(j.workflows).map(parseWorkflowSummary).filter((w): w is WorkflowSummaryData => w !== null),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Procedures (procedures list --json) -- workflow summaries plus reviewed state
+// ---------------------------------------------------------------------------
+
+export interface ProcedureSummaryData extends WorkflowSummaryData {
+  state: "active" | "stale" | "archived";
+  useCount: number;
+  lastUsedAt?: string;
+  reviewedAt?: string;
+  skillified: boolean;
+}
+
+export interface ProceduresData { procedures: ProcedureSummaryData[] }
+
+/** Passive procedure rows intentionally exclude events, source paths, prompts, commands, and models. */
+export function parseProcedures(j: unknown): ProceduresData | null {
+  if (!isObj(j) || !Object.keys(j).every((key) => key === "procedures") || !Array.isArray(j.procedures)) return null;
+  const procedures: ProcedureSummaryData[] = [];
+  for (const value of j.procedures) {
+    const allowed = ["id", "title", "source", "version", "trigger", "summary", "tags", "steps", "gates", "state", "use_count", "last_used_at", "reviewed_at", "skillified"];
+    if (!isObj(value) || !Object.keys(value).every((key) => allowed.includes(key)) || !Array.isArray(value.tags)) return null;
+    const id = asStr(value.id);
+    const title = scrubSecrets(asStr(value.title));
+    const source = scrubSecrets(asStr(value.source));
+    const version = asNum(value.version, -1);
+    const trigger = scrubSecrets(asStr(value.trigger));
+    const summary = scrubSecrets(asStr(value.summary));
+    const tags = value.tags.map((tag) => scrubSecrets(asStr(tag)));
+    const steps = asNum(value.steps, -1);
+    const gates = asNum(value.gates, -1);
+    const state = value.state;
+    const useCount = asNum(value.use_count, -1);
+    const lastUsedAt = typeof value.last_used_at === "string" ? value.last_used_at : undefined;
+    const reviewedAt = typeof value.reviewed_at === "string" ? value.reviewed_at : undefined;
+    if (!/^[a-z][a-z0-9-]{0,127}$/.test(id) || !title || !source || !Number.isInteger(version) || version < 1 || tags.some((tag) => !tag) || !Number.isInteger(steps) || steps < 0 || !Number.isInteger(gates) || gates < 0 || (state !== "active" && state !== "stale" && state !== "archived") || !Number.isInteger(useCount) || useCount < 0 || typeof value.skillified !== "boolean" || (lastUsedAt !== undefined && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(lastUsedAt)) || (reviewedAt !== undefined && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(reviewedAt))) return null;
+    procedures.push({ id, title, source, version, trigger, summary, tags, steps, gates, state, useCount, ...(lastUsedAt ? { lastUsedAt } : {}), ...(reviewedAt ? { reviewedAt } : {}), skillified: value.skillified });
+  }
+  return { procedures };
 }
 
 /** Parse `ebrain workflows run <id> --json`; run only materializes a prompt, never executes it. */

@@ -19,10 +19,17 @@ import {
   parseTaskProfile,
   parseRouteRun,
   parseMemory,
+  parseEpisodes,
   parseWorkflows,
+  parseProcedures,
   parseWorkflowRun,
   parseCost,
   parseSearch,
+  parseWorkspaces,
+  parseWorkspaceValidation,
+  parseWorkspaceMutation,
+  parseWorkspaceRemoval,
+  parseContextPacks,
 } from "../../src/knowledge/contracts.ts";
 
 describe("parseStatus (status --json)", () => {
@@ -194,6 +201,41 @@ describe("parseTaskProfile / parseRouteRun", () => {
   });
 });
 
+describe("workspace registry contracts", () => {
+  test("accepts a complete schema-v1 registry and rejects malformed rows", () => {
+    expect(parseWorkspaces({ schema_version: 1, workspaces: [{ id: "my-project", label: "My Project", cwd: "/tmp/project" }] }))
+      .toEqual({ schemaVersion: 1, workspaces: [{ id: "my-project", label: "My Project", cwd: "/tmp/project" }] });
+    expect(parseWorkspaces({ schema_version: 1, workspaces: [{ id: "bad", label: "Bad", cwd: "relative" }] })).toBeNull();
+    expect(parseWorkspaces({ schema_version: 2, workspaces: [] })).toBeNull();
+  });
+
+  test("accepts only canonical validation and mutation output shapes", () => {
+    expect(parseWorkspaceValidation({ ok: true, cwd: "/tmp/project" })).toEqual({ cwd: "/tmp/project" });
+    expect(parseWorkspaceValidation({ ok: true, cwd: "relative" })).toBeNull();
+    expect(parseWorkspaceMutation({ ok: true, workspace: { id: "project", label: "Project", cwd: "/tmp/project" } }))
+      .toEqual({ id: "project", label: "Project", cwd: "/tmp/project" });
+    expect(parseWorkspaceMutation({ ok: true, workspace: { label: "missing" } })).toBeNull();
+    expect(parseWorkspaceRemoval({ ok: true, removed: "project" })).toEqual({ removed: "project" });
+    expect(parseWorkspaceRemoval({ ok: true, removed: "../../bad" })).toBeNull();
+  });
+});
+
+describe("context pack summaries", () => {
+  test("accepts only summary metadata and never a context body", () => {
+    expect(parseContextPacks({ packs: [
+      { id: "operator", scope: "operator", version: 2, updated_at: "2026-07-18T00:01:00.000Z", chars: 81 },
+      { id: "workspace-api", scope: "workspace", workspace_id: "api", version: 1, updated_at: "2026-07-18T00:00:00.000Z", chars: 42 },
+    ] })).toEqual({ packs: [
+      { id: "operator", scope: "operator", version: 2, updatedAt: "2026-07-18T00:01:00.000Z", chars: 81 },
+      { id: "workspace-api", scope: "workspace", workspaceId: "api", version: 1, updatedAt: "2026-07-18T00:00:00.000Z", chars: 42 },
+    ] });
+    expect(parseContextPacks({ packs: [{ id: "operator", scope: "operator", version: 1, updated_at: "2026-07-18T00:00:00.000Z", chars: 1, content: "must not enter TUI state" }] })).toBeNull();
+    expect(parseContextPacks({ packs: [{ id: "workspace-api", scope: "workspace", version: 1, updated_at: "2026-07-18T00:00:00.000Z", chars: 1 }] })).toBeNull();
+    expect(parseContextPacks({ packs: [{ id: "operator", scope: "workspace", workspace_id: "api", version: 1, updated_at: "2026-07-18T00:00:00.000Z", chars: 1 }] })).toBeNull();
+    expect(parseContextPacks({ packs: [], content: "must not enter TUI state" })).toBeNull();
+  });
+});
+
 describe("parseSearch (q --json)", () => {
   test("normalizes cross-source result rows", () => {
     expect(parseSearch({ query: "daemon lock", results: [{ score: 0.91, source: "agent-memory", slug: "learning-1", snippet: "Use the daemon" }] })).toEqual({ query: "daemon lock", results: [{ score: 0.91, source: "agent-memory", slug: "learning-1", snippet: "Use the daemon" }] });
@@ -257,6 +299,53 @@ describe("parseMemory (memory recent --json)", () => {
     const p = parseMemory({})!;
     expect(p.learnings).toEqual([]);
     expect(p.sessions).toEqual([]);
+  });
+  test("rejects a leaked filesystem path instead of silently dropping it", () => {
+    expect(parseMemory({
+      ...fx,
+      sessions: [{ ...fx.sessions[0], path: "/private/session-log.md" }],
+    })).toBeNull();
+  });
+});
+
+describe("F9.2 passive episode and procedure summaries", () => {
+  const episode = {
+    id: "episode-11111111-1111-4111-8111-111111111111",
+    kind: "learning",
+    source: "remember",
+    created_at: "2026-07-18T00:00:00.000Z",
+    project: "ebrain",
+    agent: "codex",
+    workspace_id: "ebrain",
+    chars: 42,
+  };
+  const procedure = {
+    id: "local-dev-sop", title: "Dev SOP", source: "local", version: 1,
+    trigger: "Build safely", summary: "Plan then verify", tags: ["sop"], steps: 2, gates: 1,
+    state: "active", use_count: 3, last_used_at: "2026-07-18T00:00:00.000Z", skillified: true,
+  };
+
+  test("accepts strict summary-only rows", () => {
+    expect(parseEpisodes({ episodes: [episode] })?.episodes[0]).toEqual({
+      id: episode.id, kind: "learning", source: "remember", createdAt: episode.created_at,
+      project: "ebrain", agent: "codex", workspaceId: "ebrain", chars: 42,
+    });
+    expect(parseProcedures({ procedures: [procedure] })?.procedures[0]).toMatchObject({
+      id: "local-dev-sop", state: "active", useCount: 3, skillified: true,
+    });
+  });
+
+  test("accepts fixture-only legacy provenance without relaxing passive fields", () => {
+    expect(parseEpisodes({ episodes: [{ ...episode, source: "legacy-import" }] })?.episodes[0]?.source).toBe("legacy-import");
+    expect(parseEpisodes({ episodes: [{ ...episode, source: "legacy-import", text: "private body" }] })).toBeNull();
+  });
+
+  test("rejects passive bodies, paths, events, commands, and model/provider fields", () => {
+    expect(parseEpisodes({ episodes: [{ ...episode, text: "must not enter TUI state" }] })).toBeNull();
+    expect(parseEpisodes({ episodes: [{ ...episode, path: "/private/episode.json" }] })).toBeNull();
+    expect(parseProcedures({ procedures: [{ ...procedure, events: [] }] })).toBeNull();
+    expect(parseProcedures({ procedures: [{ ...procedure, command: "run" }] })).toBeNull();
+    expect(parseProcedures({ procedures: [{ ...procedure, model: "not a UI concern" }] })).toBeNull();
   });
 });
 

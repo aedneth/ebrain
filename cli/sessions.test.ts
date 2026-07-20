@@ -8,6 +8,9 @@
  * `bun test cli/sessions.test.ts`.
  */
 import { test, expect, describe } from "bun:test";
+
+// Deny policy is operator configuration; this suite declares its own neutral fixture policy.
+process.env.EBRAIN_DENIED_REPOS = "denied-alpha,denied-beta";
 import { execSync } from "child_process";
 import { mkdirSync, rmSync, writeFileSync, chmodSync, mkdtempSync, symlinkSync } from "fs";
 import { tmpdir } from "os";
@@ -53,15 +56,15 @@ test("shellCommandFromArgv serializa argv estructurado sin permitir control char
 
 // ── deny-list de cliente (aislamiento duro, CLAUDE.md) ──────────────────────
 describe("isClientPath", () => {
-  test("rechaza paths que resuelven bajo brisas-del-golfo o dekko (segmento exacto)", () => {
-    expect(isClientPath("/home/eduardo/repos/brisas-del-golfo")).toBe(true);
-    expect(isClientPath("/home/eduardo/repos/brisas-del-golfo/sub/dir")).toBe(true);
-    expect(isClientPath("/home/eduardo/work/dekko")).toBe(true);
-    expect(isClientPath("/home/eduardo/work/DEKKO/src")).toBe(true); // case-insensitive
+  test("rechaza paths que resuelven bajo denied-alpha o denied-beta (segmento exacto)", () => {
+    expect(isClientPath("/home/eduardo/repos/denied-alpha")).toBe(true);
+    expect(isClientPath("/home/eduardo/repos/denied-alpha/sub/dir")).toBe(true);
+    expect(isClientPath("/home/eduardo/work/denied-beta")).toBe(true);
+    expect(isClientPath("/home/eduardo/work/DENIED-BETA/src")).toBe(true); // case-insensitive
   });
   test("permite paths propios, incl. los que solo CONTIENEN el nombre como substring de otra palabra", () => {
     expect(isClientPath("/home/eduardo/eBrain")).toBe(false);
-    expect(isClientPath("/home/eduardo/repos/brisas-del-golfo-notes")).toBe(false); // no es un segmento exacto
+    expect(isClientPath("/home/eduardo/repos/denied-alpha-notes")).toBe(false); // no es un segmento exacto
     expect(isClientPath("/home/eduardo/second-brain")).toBe(false);
   });
 });
@@ -131,7 +134,7 @@ describe("send/kill exigen --yes explícito (sin excepción)", () => {
 
 // ── deny-list también en newSession (integración con isClientPath) ─────────
 test("newSession: cwd bajo repo de cliente → deny-client, nunca llega a crear la sesión tmux", async () => {
-  const r = await newSession("test", "cliente-test", { cwd: "/home/eduardo/repos/brisas-del-golfo/sub" });
+  const r = await newSession("test", "cliente-test", { cwd: "/home/eduardo/repos/denied-alpha/sub" });
   expect(r.ok).toBe(false);
   if (!r.ok) expect(r.error.type).toBe("deny-client");
 });
@@ -139,7 +142,7 @@ test("newSession: cwd bajo repo de cliente → deny-client, nunca llega a crear 
 test("gate F6.4.8: symlink a repo de cliente → deny-client (realpath, no solo segmento textual)", async () => {
   const tmp = mkdtempSync(join(tmpdir(), "ebr-symlink-"));
   try {
-    const fakeClient = join(tmp, "brisas-del-golfo");
+    const fakeClient = join(tmp, "denied-alpha");
     mkdirSync(fakeClient);
     const link = join(tmp, "atajo-bdg"); // el nombre del link NO delata al cliente
     symlinkSync(fakeClient, link);

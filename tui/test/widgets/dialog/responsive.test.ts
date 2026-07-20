@@ -59,4 +59,18 @@ describe("ResponsiveDialog", () => {
     expect(visible.replace(/[│┌┐└┘─]/g, "").replace(/\s+/g, " ")).toContain(label);
     for (const row of dialog.rows) expect(displayWidth(row)).toBe(36);
   });
+
+  test("renders a complete editable value through the dialog viewport", () => {
+    const value = "A task prompt that remains visible even when it is much longer than one compact terminal row.";
+    const dialog = responsiveDialog({
+      title: "task prompt",
+      width: 42,
+      maxHeight: 4,
+      blocks: [{ kind: "input", value, cursor: 12, placeholder: "optional task" }],
+    }, theme);
+    const plain = strip(dialog.rows.join("\n"));
+    expect(plain).toContain("▏");
+    expect(dialog.maxScroll).toBeGreaterThan(0);
+    for (const row of dialog.rows) expect(displayWidth(row)).toBe(42);
+  });
 });

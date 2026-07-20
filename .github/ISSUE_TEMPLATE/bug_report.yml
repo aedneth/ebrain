@@ -1,0 +1,48 @@
+name: Bug report
+description: Report a reproducible eBrain behavior problem.
+title: "bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem. Do not include credentials, tokens, private prompts,
+        terminal captures containing customer data, or absolute local paths.
+  - type: input
+    id: version
+    attributes:
+      label: eBrain version or commit
+      placeholder: "0.1.0 or a short commit SHA"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      options:
+        - Daemon or MCP onboarding
+        - Launch or sessions
+        - Workspaces
+        - Memory, context, episodes, or procedures
+        - Routing or token telemetry
+        - TUI layout or keyboard interaction
+        - Documentation or installer
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Use synthetic names and a safe temporary directory. Include expected and actual behavior.
+      placeholder: |
+        1. Run ...
+        2. Choose ...
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Optional. Remove secrets, local paths, prompts, and any private source names first.

@@ -82,9 +82,10 @@ function chmodGeminiSettings(): void {
 async function main(): Promise<void> {
   const quiet = process.argv.includes("--quiet");
   const sources = await listLocalSources();
+  // assertCleanSources already throws (count-only) on the same condition. The duplicate check that
+  // used to follow re-derived the same list and interpolated the denied identifiers into daemon
+  // boot output — the exact pattern the isolation messages were cleaned of.
   assertCleanSources(sources);
-  const leaked = sourceIsolationGuards(sources).filter(isClientSource);
-  if (leaked.length > 0) throw new Error(`client sources detected: ${leaked.join(", ")}`);
   const remote = await ensureRemoteCliConfig({
     configDir: CFG,
     ebrainHome: EBRAIN_HOME,

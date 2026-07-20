@@ -59,7 +59,7 @@ if [ "$JSON" = 1 ]; then
     )"
   fi
 
-  j_mem="$EBRAIN_HOME/memory"
+  j_mem="${EBRAIN_MEMORY_HOME:-$EBRAIN_HOME/memory}"
   j_learn=0; j_sess=0
   if [ -d "$j_mem" ]; then
     j_learn="$(find "$j_mem/learnings" -name '*.md' 2>/dev/null | wc -l)"
@@ -107,7 +107,7 @@ na="$(printf '%s' "$agents" | wc -w)"
 printf '  flota    %s adapters: %s\n' "$na" "$agents"
 
 # memoria agéntica
-mem="$EBRAIN_HOME/memory"
+mem="${EBRAIN_MEMORY_HOME:-$EBRAIN_HOME/memory}"
 if [ -d "$mem" ]; then
   learn="$(find "$mem/learnings" -name '*.md' 2>/dev/null | wc -l)"
   sess="$(find "$mem/sessions" -name '*.md' 2>/dev/null | wc -l)"

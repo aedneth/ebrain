@@ -13,10 +13,14 @@
 # se NIEGA a escribir (exit ≠ 0). Robusto en lo demás. NO es un hook: lo invoca el agente/CLI a mano.
 set -uo pipefail
 
-MEM="$HOME/eBrain/memory"
+# Resolve the eBrain root ONCE, here, and derive everything else from it. The checkout path is the
+# operator's choice: `cli/ebrain` exports EBRAIN_HOME from its own location, so an install at any
+# path reaches this script correctly. The $HOME default only applies to a direct, uninstalled call.
+EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
+MEM="${EBRAIN_MEMORY_HOME:-$EBRAIN_HOME/memory}"
 LEARN="$MEM/learnings"
-# Política de confianza compartida (deny de cliente + redact unificado) — fuente única del harness.
-. "$HOME/eBrain/harness/core/trust.sh"
+# Shared trust policy (deny policy + unified redaction) — single source of truth for the harness.
+. "$EBRAIN_HOME/harness/core/trust.sh"
 
 PROJECT_OVERRIDE=""; TAGS=""; PTYPE="agent-learning"; SYNC=1
 ARGS=()
@@ -34,7 +38,7 @@ done
 CONTENT="${ARGS[*]:-}"
 if [ -z "${CONTENT// }" ] && [ ! -t 0 ]; then CONTENT="$(cat 2>/dev/null || true)"; fi
 if [ -z "${CONTENT// }" ]; then
-  echo "remember: nada que recordar (pasá el texto como argumento o por stdin)." >&2
+  echo "remember: nothing to remember (pass the text as an argument or on stdin)." >&2
   exit 1
 fi
 
@@ -56,25 +60,25 @@ fi
 # --- Seguridad FAIL-CLOSED ---
 # 1) trust-policy: repo de cliente por slug O por remote → negar (hard-deny; no default-deny, para no
 #    bloquear learnings legítimos en repos OSS/ajenos — el sweep sí es default-deny, remember es intencional).
-if printf '%s' "$SLUG" | grep -Eiq "$TRUST_DENY"; then
-  echo "remember: DENEGADO — '$SLUG' es repo de cliente (deny-policy). Su contexto no entra a ebrain." >&2
+if trust_denied "$SLUG"; then
+  echo "remember: REFUSED — this repository is denied by the local deny policy; its context does not enter eBrain." >&2
   exit 3
 fi
 if [ -n "$REPO" ]; then
   RURL="$(git -C "$REPO" remote get-url origin 2>/dev/null || true)"
-  if printf '%s' "$RURL" | grep -Eiq "$TRUST_DENY"; then
-    echo "remember: DENEGADO — el remote de este repo es de cliente (deny-policy)." >&2
+  if trust_denied "$RURL"; then
+    echo "remember: REFUSED — this repository's remote is denied by the local deny policy." >&2
     exit 3
   fi
 fi
 # 2) redact-scan: si el texto trae un secreto obvio → negar (nunca embeber un secreto).
 if trust_redact_hit_text "$CONTENT"; then
-  echo "remember: DENEGADO — el texto parece contener un secreto (key/token/DSN/clave privada). No lo guardo." >&2
+  echo "remember: REFUSED — the text appears to contain a secret (key/token/DSN/private key); nothing was written." >&2
   exit 4
 fi
 
 # --- Escritura ---
-DEST="$LEARN/$SLUG"; mkdir -p "$DEST" 2>/dev/null || { echo "remember: no pude crear $DEST" >&2; exit 1; }
+DEST="$LEARN/$SLUG"; mkdir -p "$DEST" 2>/dev/null || { echo "remember: could not create $DEST" >&2; exit 1; }
 NOW_UTC="$(date -u +%FT%TZ)"; DATE_TAG="$(date +%Y-%m-%d-%H%M)"; DAY="$(date +%Y-%m-%d)"
 HASH="$(printf '%s%s' "$NOW_UTC" "$CONTENT" | (sha1sum 2>/dev/null || shasum 2>/dev/null) | cut -c1-8)"
 [ -z "$HASH" ] && HASH="$RANDOM"
@@ -103,7 +107,7 @@ fi
   echo "# $TITLE"
   echo
   printf '%s\n' "$CONTENT"
-} > "$OUT" 2>/dev/null || { echo "remember: no pude escribir $OUT" >&2; exit 1; }
+} > "$OUT" 2>/dev/null || { echo "remember: could not write $OUT" >&2; exit 1; }
 
 echo "remember ✓ ($AGENT/$SLUG) → $OUT"
 
@@ -113,16 +117,34 @@ if [ -d "$MEM/.git" ]; then
   git -C "$MEM" commit -q -m "remember: $AGENT/$SLUG $DATE_TAG" >/dev/null 2>&1 || true
 fi
 
-# Write-through por MCP al daemon para que sea buscable sin pelear el lock PGLite.
-EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
+# MCP write-through to the daemon, so the learning is searchable without fighting the PGLite lock.
+# EBRAIN_HOME is already resolved at the top of this script.
 REMOTE="$EBRAIN_HOME/cli/remote-tools.ts"
-BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN_BIN=bun
+if [ -z "${BUN_BIN:-}" ]; then
+  BUN_BIN="$HOME/.bun/bin/bun"
+  command -v bun >/dev/null 2>&1 && BUN_BIN=bun
+fi
+EPISODES="$EBRAIN_HOME/cli/episodes.ts"
+
+# An explicit remember is also a high-signal local episode. Mirroring is deliberately best-effort:
+# the durable learning above is already committed, and a secondary recall-store failure must never
+# turn that successful write into a user-visible failure or block the agent's workflow.
+if [ -f "$EPISODES" ]; then
+  EP_ARGS=(record --kind learning --source remember --project "$SLUG" --agent "$AGENT" --text "$CONTENT" --yes)
+  [ -n "$SESSION_ID" ] && EP_ARGS+=(--session "$SESSION_ID")
+  if "$BUN_BIN" run "$EPISODES" "${EP_ARGS[@]}" >/dev/null 2>&1; then
+    echo "  episode mirror ✓ (local bounded recall)"
+  else
+    echo "  WARN: episode mirror failed; durable learning remains available"
+  fi
+fi
+
 SLUG_PATH="learnings/$SLUG/${DATE_TAG}-${AGENT}-${HASH}"
 if [ "$SYNC" = "1" ] && [ -f "$REMOTE" ]; then
   if "$BUN_BIN" run "$REMOTE" put-page --source agent-memory --slug "$SLUG_PATH" --file "$OUT" >/dev/null 2>&1; then
-    echo "  MCP put_page agent-memory ✓ (buscable en ebrain)"
+    echo "  MCP put_page agent-memory ✓ (searchable in ebrain)"
   else
-    echo "  WARN: write-through MCP falló; learning quedó en disco pero aún no es buscable con el daemon arriba"
+    echo "  WARN: MCP write-through failed; the learning is on disk but is not searchable via the daemon yet"
   fi
 fi
 exit 0

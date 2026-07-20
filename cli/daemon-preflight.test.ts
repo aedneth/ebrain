@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+
+// Deny policy is operator configuration; this suite declares its own neutral fixture policy.
+process.env.EBRAIN_DENIED_REPOS = "denied-alpha,denied-beta";
 import { assertCleanSources, parseSourcesJson, sourceIsolationGuards } from "./daemon-preflight.ts";
 
 describe("daemon preflight source isolation", () => {
@@ -22,10 +25,10 @@ describe("daemon preflight source isolation", () => {
   test("fails boot preflight when a client source is present", () => {
     expect(() => assertCleanSources([
       { id: "second-brain", federated: true },
-      { id: "code-graph/brisas-del-golfo", federated: true },
-    ])).toThrow("aislamiento roto");
+      { id: "code-graph/denied-alpha", federated: true },
+    ])).toThrow("isolation broken");
     expect(() => assertCleanSources([
-      { id: "safe-name", name: "Dekko export", federated: true },
-    ])).toThrow("aislamiento roto");
+      { id: "safe-name", name: "Denied-Beta export", federated: true },
+    ])).toThrow("isolation broken");
   });
 });

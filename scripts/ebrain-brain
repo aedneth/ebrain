@@ -6,6 +6,8 @@
 # Mismo patrón de env que ebrain-mcp/ebrain-run (cwd neutral + sourcea la key).
 # NO lleva MCP_STDIO=1 (eso es el modo stdio); esto es HTTP en loopback.
 set -euo pipefail
+# Resolve the checkout BEFORE the cd below — a relative $BASH_SOURCE would not survive it.
+EBRAIN_HOME="${EBRAIN_HOME:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$HOME/.config/ebrain/wd"          # cwd neutral: bun no auto-carga un .env ajeno
 ENV_FILE="$HOME/.config/ebrain/.env"
 if [ -f "$ENV_FILE" ]; then set -a; . "$ENV_FILE"; set +a; fi
@@ -17,7 +19,8 @@ export GBRAIN_CHAT_MODEL="${GBRAIN_CHAT_MODEL:-openrouter:minimax/minimax-m3}"
 PORT="${EBRAIN_BRAIN_PORT:-8541}"
 BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"
 command -v bun >/dev/null 2>&1 && BUN_BIN=bun
-"$BUN_BIN" run "$HOME/eBrain/cli/up.ts" ensure-token --boot --quiet
+"$BUN_BIN" run "$EBRAIN_HOME/cli/up.ts" ensure-token --boot --quiet
 if [ -f "$TOKEN_FILE" ]; then set -a; . "$TOKEN_FILE"; set +a; fi
-"$BUN_BIN" run "$HOME/eBrain/cli/daemon-preflight.ts" --quiet
-exec "$BUN_BIN" run "$HOME/eBrain/vendor/gbrain/src/cli.ts" serve --http --port "$PORT" --bind 127.0.0.1
+# Isolation gate: refuse to bind HTTP if any denied source reached the federated set.
+"$BUN_BIN" run "$EBRAIN_HOME/cli/daemon-preflight.ts" --quiet
+exec "$BUN_BIN" run "$EBRAIN_HOME/vendor/gbrain/src/cli.ts" serve --http --port "$PORT" --bind 127.0.0.1
