@@ -29,7 +29,8 @@ import { EBRAIN_MCP_TOKEN_ENV, readTokenFile, tokenStorePaths } from "./mcp-toke
 import { deniedRepos, isDeniedPath } from "./deny-policy.ts";
 
 const HOME = homedir();
-const EBRAIN_HOME = process.env.EBRAIN_HOME || join(HOME, "eBrain");
+// See the note in cli/fleet.ts: fall back to this checkout, never to "$HOME/eBrain".
+const EBRAIN_HOME = process.env.EBRAIN_HOME || join(import.meta.dir, "..");
 const ADAPTERS_DIR = process.env.EBRAIN_ADAPTERS_DIR || join(EBRAIN_HOME, "harness", "adapters");
 
 export const SESSION_PREFIX = "ebr-";

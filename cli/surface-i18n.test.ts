@@ -45,7 +45,10 @@ const SPANISH_WORDS = new RegExp(
 // pattern used with `.test()` alternates between true and false on identical input — which would
 // make this guard miss every other Spanish line.
 const SPANISH_STRONG =
-  /\b(?:pude|pudo|crear|escribir|buscable|leer|borrar|guardar|encontrar|resuelve|rechaza|rechazado|denegado|aislamiento|archivo|nombre|texto|contener|parece|guardo|duro|cliente|falta|vacio|creada|matada|enviado)\b/i;
+  // `leer` was here and is a real (if uncommon) English verb — it broke the "not English at all"
+  // invariant this tier depends on, and a guard that can fire on valid English gets switched off.
+  // Real Spanish uses of it still trip the diacritic or function-word signals. (Pass-3 F-P8.)
+  /\b(?:pude|pudo|crear|escribir|buscable|borrar|guardar|encontrar|resuelve|rechaza|rechazado|denegado|aislamiento|archivo|nombre|texto|contener|parece|guardo|duro|cliente|falta|vacio|creada|matada|enviado)\b/i;
 // FUNCTION: grammatical glue. Individually weak (some are English words in other contexts), but two
 // on one output line is not English prose.
 const SPANISH_FUNCTION_WORDS =
@@ -69,12 +72,22 @@ function looksSpanish(line: string): boolean {
 // must fail a test, not pass because the helper it no longer calls is still correct.
 // A comment can quote a sink (`# echo "..."` in a usage block) without emitting anything. The
 // contract has always been "comments may stay Spanish"; this is what actually enforces it.
-const COMMENT_LINE = /^\s*(?:#|\/\/|\*|\/\*)/;
+const COMMENT_LINE = /^\s*(?:#|\/\/|\/\*)/;
+// A leading `*` continues a `/* */` block — but ONLY in TypeScript. Pass-3 finding F-P7: in shell a
+// leading `*` is a `case` glob arm, and `cli/ebrain` (a declared surface) has four live
+// `*) echo "..." >&2` lines. Treating those as comments meant the guard offered zero protection for
+// the most natural place in that file to add a new user-facing message.
+const TS_BLOCK_CONTINUATION = /^\s*\*/;
+
+function isCommentLine(line: string, label: string): boolean {
+  if (COMMENT_LINE.test(line)) return true;
+  return /\.tsx?$/.test(label) && TS_BLOCK_CONTINUATION.test(line);
+}
 
 function scanText(text: string, label: string): string[] {
   const hits: string[] = [];
   text.split("\n").forEach((line, i) => {
-    if (COMMENT_LINE.test(line)) return;
+    if (isCommentLine(line, label)) return;
     if (!SINK.test(line)) return;
     if (looksSpanish(line)) hits.push(`${label}:${i + 1}: ${line.trim()}`);
   });
@@ -127,6 +140,12 @@ describe("G56-F6 — the visible surface is English-only", () => {
     ]) {
       expect(scanText(line, "fixture")).toHaveLength(1);
     }
+
+    // Pass-3 F-P7: a shell `case` default arm is code, not a comment. This is the exact shape of
+    // four live lines in cli/ebrain, which the guard was silently skipping.
+    expect(scanText('  *) echo "ebrain: subcomando desconocido, usá --help" >&2; exit 2 ;;', "cli/ebrain")).toHaveLength(1);
+    // …while a genuine TS block-comment continuation is still exempt, in a .ts file only.
+    expect(scanText(' * echo "no se pudo crear el archivo" — nota interna', "cli/example.ts")).toEqual([]);
 
     // …and English sink lines of comparable shape must stay clean.
     for (const line of [

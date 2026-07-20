@@ -322,8 +322,17 @@ function die(message: string, code = 1): never {
   process.exit(code);
 }
 
+// See the note in cli/context.ts — `ebrain procedures --help` is documented and must answer on
+// stdout with exit 0, not through the unrecognized-subcommand error path.
+const USAGE = "usage: ebrain procedures <list|show|use|review> [--json]";
+
 async function main(): Promise<void> {
-  const args = parseProcedureArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv.includes("--help") || argv.includes("-h")) {
+    console.log(USAGE);
+    return;
+  }
+  const args = parseProcedureArgs(argv);
   if (args.sub === "list") {
     onlyValues(args, ["--limit"]);
     if (args.positionals.length || args.yes) die("usage: ebrain procedures list [--limit N] [--json]", 2);
@@ -346,7 +355,7 @@ async function main(): Promise<void> {
     if (!isState(state)) die("procedure review requires a valid lifecycle state", 2);
     return print({ procedure: await reviewProcedure(args.positionals[0]!, state) });
   }
-  die("usage: ebrain procedures <list|show|use|review> [--json]", 2);
+  die(USAGE, 2);
 }
 
 if (import.meta.main) main().catch((error) => die(error instanceof Error ? error.message : String(error)));

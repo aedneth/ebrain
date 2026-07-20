@@ -583,8 +583,19 @@ function printJsonOrText(json: boolean, payload: unknown, text: () => void): voi
   else text();
 }
 
+// Pass-3 F-P6, worst of the three: `parseArgs` treats any flag-shaped first argument as an absent
+// subcommand and falls back to "list", so the documented `ebrain workflows --help` printed NOTHING
+// and exited 0 — a reader cannot tell that from a command that ran and found no workflows.
+const USAGE =
+  "usage: ebrain workflows <list|capture|ingest|show|search|run|skillify> [--json] [--limit N] [--min-count N]";
+
 async function main(): Promise<void> {
-  const a = parseArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv.includes("--help") || argv.includes("-h")) {
+    console.log(USAGE);
+    return;
+  }
+  const a = parseArgs(argv);
 
   if (a.sub === "ingest") {
     const payload = await ingestWorkflows();

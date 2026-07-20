@@ -5,7 +5,7 @@ from: Opus (audit remediation maker)
 to: Codex-maker, and the next independent checker
 created: 2026-07-18
 updated: 2026-07-19
-status: two independent audits done (both FAIL); all blocking findings remediated; third pass required
+status: three independent audits done (all FAIL); all blocking findings remediated and maker-verified; owner decision F-A3 still open
 branch: release/open-source-publication
 pull-request: https://github.com/aedneth/ebrain/pull/1
 head: verify with git rev-parse HEAD before any work
@@ -15,21 +15,24 @@ external-actions-pending: third audit pass, squash merge, Vercel deployment, any
 
 # eBrain Handoff Back -- F12 Publication Candidate
 
-> ## ⚠ STATE AS OF 2026-07-19 -- read this before anything below
+> ## ⚠ STATE AS OF 2026-07-20 -- read this before anything below
 >
-> The F7-F12 range finally received its independent audit. It ran **twice**, and both passes
-> returned `[AUDIT_FAIL]`. All blocking findings from both passes have been remediated by a maker
-> other than Codex. **The remediation itself has not been independently checked.**
+> The F7-F12 range finally received its independent audit. It ran **three times**, and every pass
+> returned `[AUDIT_FAIL]`. All blocking findings from all three passes have been remediated by a
+> maker other than Codex, and every round-3 fix has a test proven to fail against the pre-fix code.
 >
 > | Artifact | What it is |
 > | --- | --- |
 > | `docs/AUDIT-F7-F12-INDEPENDENT.md` | Pass 1, full range. Found the published quickstart broken and privacy/security copy promising configuration that did not exist. |
 > | `docs/AUDIT-F7-F12-REAUDIT.md` | Pass 2, remediation delta. Confirmed pass-1 findings closed; found a fail-open regression inside the new deny policy. |
+> | `docs/AUDIT-F7-F12-PASS3.md` | Pass 3, F-R delta **plus the published docs as a public contract**. Confirmed the delta sound; found the quickstart broken again one layer down (file mode, and an engine that was cloned but never installed). |
 > | `docs/MAKER-REPORT-AUDIT-REMEDIATION.md` | **Start here.** What was found, what was fixed, what is deliberately still open, and what must not be changed. |
 >
-> **Next required action:** a third independent pass over the F-R remediation delta. Do not merge,
-> deploy, tag, or change repository visibility before it. The sections below describe the F12
-> candidate as it stood *before* the audits and remain accurate for that scope only.
+> **Next required action:** the owner decision **F-A3** (the site is public while the repository is
+> private, so every GitHub link on it 404s). Do not deploy before resolving it. Merge, tag and
+> visibility remain owner calls; the maker report's "What this verification does and does not
+> establish" section is the honest account of what the green suite proves. The sections below
+> describe the F12 candidate as it stood *before* the audits and remain accurate for that scope only.
 >
 > **Two things a new maker gets wrong here:** (1) the deny policy is now user-owned local
 > configuration with an **empty** shipped default -- never re-introduce a compiled-in list, and never

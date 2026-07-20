@@ -2,7 +2,7 @@
 type: maker-report
 project: ebrain
 phase: independent-audit remediation (F7-F12 range)
-status: maker-complete -- second re-audit pending
+status: maker-complete after three audit passes -- see "What this verification does and does not establish"
 created: 2026-07-19
 maker: Opus (orchestrator acting as maker)
 checker: independent read-only checker, two passes
@@ -144,6 +144,96 @@ The pinned regression now runs through `scanText()` — the real detector — no
 interpolated denied identifiers into daemon boot output. Unreachable, but exactly the pattern F-D1
 removed. **Fix:** deleted. `deny-policy.ts` invalid-entry errors also reduced to the line number.
 
+## Round 3 — the code was right and the delivery was broken
+
+Pass 3 (`docs/AUDIT-F7-F12-PASS3.md`) confirmed the F-R delta sound: `TRUST_POLICY_ERROR` cannot be
+bypassed because the check lives inside `trust_denied()` itself, the 24 new tests are non-vacuous
+(7 fail when replayed against the pre-fix `trust.sh`), `EBRAIN_MEMORY_HOME` symmetry holds, and no
+identifier leaked into the tree or the built site. Both **blocking** findings came from a scope
+extension — auditing the published documentation as a public contract — and neither was in the code
+the previous passes had been staring at.
+
+### F-P3 (BLOCKING) — the quickstart was broken again, one layer down
+
+`scripts/install.sh` was tracked at mode `100644`. Every other entrypoint under `scripts/` is
+`100755`. The docs say `./scripts/install.sh --from-source`, so a fresh clone answered
+`Permission denied` on the first command a reader runs.
+
+This is F-A1's class, surviving F-A1's fix, because the round-1 test verified the installer's
+*logic* against a copy of its *contents*: the fixture wrote its own `install.sh` with a forced
+`chmod 755`, and invoked it as `sh ["./scripts/install.sh"]` — naming the interpreter bypasses the
+executable bit the reader depends on. The test could not have failed.
+
+**Fix:** `git update-index --chmod=+x`, plus two tests that take the artifact instead of a copy —
+one asserting that every `./…sh` command appearing in published docs is tracked `100755` (the list
+is *derived from the docs*, so documenting a new one brings it under the guarantee automatically),
+and one materializing the tracked tree with `git checkout-index` and executing it with no `chmod`
+and no interpreter named. Deliberately the index rather than `HEAD`, so a mode fix is verifiable
+before it is committed.
+
+### F-P4 (BLOCKING) — cloning the engine is not installing it
+
+`install.sh` ran `bun install` only in `$EBRAIN_HOME`. The pinned engine at `vendor/gbrain` is a
+separate package with its own lockfile, and the CLI's MCP bridge imports its modules directly, so
+`ebrain up` — the first documented command — died with `Cannot find module
+'@modelcontextprotocol/sdk'`. Confirmed engine-local: that module is not in the root `node_modules`
+at all.
+
+It was invisible from three directions at once. Every existing test set `EBRAIN_SKIP_GBRAIN=1`, so
+the engine branch had no coverage. The maintainer's machine had the modules from an earlier manual
+install. And **CI passed because CI performs the install in a step of its own that the installer
+never performed** — green CI was reproducing a sequence no user runs.
+
+**Fix:** the installer installs the engine's lockfile, with `--ignore-scripts` (a pinned commit is
+only a supply-chain guarantee if postinstall hooks never run). New test drives the real installer
+against a local stand-in engine repo with a fake `bun` that records the directory each install ran
+in, and asserts both directories appear.
+
+### F-P1/F-P2/F-P5 — parity made true instead of reworded
+
+Two grammar gaps, both failing toward *more* restriction, never fail-open — but both contradicting
+what the configuration reference promises users:
+
+- Under a UTF-8 locale glibc's `[a-z]` is collation-aware, so the shell validator accepted `café`
+  while the TS half rejected it. Confirmed with real `grep`: `LC_ALL=en_US.UTF-8` accepts,
+  `C` and `C.UTF-8` reject. Effect was an availability split — shell commands enforced, every TS
+  command aborted, on the same file.
+- Separators diverged: JS `\s` counts vertical tab, form feed and U+00A0; `tr ', \t'` did not.
+
+**Fix:** `LC_ALL=C` around the shell validation and matching greps, an explicit shared ASCII
+separator set on both sides, and `String.trim()` replaced by that same set (it is Unicode-aware and
+was silently trimming U+00A0 on one half only). The documentation now states the grammar instead of
+claiming parity in the abstract.
+
+Both parity cases were **vacuous when first written** and had to be repaired before they meant
+anything: the shell harness passed no locale, so the child ran under C where the divergence cannot
+occur; and `trust_denied` answers DENIED both for "this entry matched" and for "the policy failed
+to parse, so everything is denied" — so the separator cases agreed by accident. The suite now pins a
+UTF-8 locale and asserts the *loaded entry count* against the TS list, not just the verdict.
+
+### F-P6/F-P7/F-P8
+
+Three documented `--help` invocations did not exist; `ebrain workflows --help` printed **nothing**
+and exited 0, indistinguishable from success, because its parser treats a flag-shaped first argument
+as an absent subcommand and falls back to `list`. All three now answer on stdout with exit 0. New
+`cli/documented-help.test.ts` extracts the commands *from the documentation* and also asserts the
+usage string names only subcommands that exist — which immediately caught three invented names in
+the first `workflows` usage line I wrote.
+
+The i18n guard's `COMMENT_LINE` treated a leading `*` as a comment in every language, but in shell
+that is a `case` glob arm: `cli/ebrain` has four live `*) echo "…" >&2` lines the guard was skipping
+entirely. Leading `*` now counts as a comment only in `.ts`/`.tsx`. And `leer` left the "not English
+at all" tier — it is a real English verb, and a guard that can fire on valid English gets disabled.
+
+### F-P9's class, closed at the two remaining sites
+
+Running the suite under a sandboxed `HOME` with an empty `XDG_CONFIG_HOME` surfaced two failures
+that had nothing to do with the deny policy: `cli/fleet.ts` and `cli/sessions.ts` still defaulted
+`EBRAIN_HOME` to `$HOME/eBrain`, so a source user who cloned anywhere else got no adapters at all.
+`cli/task-profile.ts` had already been fixed this way during F12; these were the last two sites.
+Both now fall back to their own checkout via `import.meta.dir`. The suite is machine-independent:
+identical results with a real `HOME`, with a sandboxed one, and with or without `EBRAIN_HOME`.
+
 ## New coverage
 
 `cli/deny-policy.test.ts` (new, 24 tests) — the config-FILE path had **zero** coverage before, and
@@ -158,13 +248,36 @@ shell path.
 
 | Check | Result |
 | --- | --- |
-| `bun test ./cli/` (no `EBRAIN_HOME` — as CONTRIBUTING documents) | **314 pass / 0 fail** |
-| `EBRAIN_HOME="$PWD" bun test ./cli/` | **314 pass / 0 fail** |
+| `bun test ./cli/` (no `EBRAIN_HOME` — as CONTRIBUTING documents) | **330 pass / 0 fail** |
+| `EBRAIN_HOME="$PWD" bun test ./cli/` | **330 pass / 0 fail** |
+| `bun test ./cli/` under a sandboxed `HOME` + empty `XDG_CONFIG_HOME` | **330 pass / 0 fail** (machine-independent) |
 | `bun test ./tui/test/` | **442 pass / 0 fail** |
 | `bun run --cwd website check` | 0 errors / 0 warnings / 0 hints |
 | `bun run website:build` | 40 pages, 38 documentation routes verified |
 | shell syntax (8 entrypoints), zero-hex, `git diff --check` | clean |
 | live policy check (operator's own config, names never printed) | denies by path, subpath, case, source name; no over-block; shell and TS agree |
+
+## What this verification does and does not establish
+
+Every round-3 fix was checked by the maker directly, and every one of them has a test that was
+**proven to fail against the pre-fix code** before being accepted — the executable bit, the engine
+install, the locale and separator parity, the three `--help` commands, the shell `case`-arm blind
+spot. Two of those proofs are not opinions about the code but the user's own experience executed:
+the tracked tree is materialized and the documented command is run against it with nothing forced.
+For that class of defect this is the strongest available evidence, and a further reviewer would be
+re-running the same commands.
+
+What it cannot establish is the absence of a defect nobody thought to look for. That is worth
+stating plainly, because it is the pattern of this whole engagement: pass 1 found broken delivery in
+code that passed its tests, pass 2 found a fail-open inside pass 1's fix, pass 3 found broken
+delivery inside pass 2's verified-green tree, and writing the round-3 fixes surfaced two more
+vacuous tests plus three invented subcommand names — all in work its own author believed was
+finished. Every pass found something in the previous maker's blind spot, and the maker was never the
+one who found it.
+
+So: these fixes are verified. Whether the *release* is ready is a different question, and answering
+it yes on the maker's own word would be the one move this project's history most clearly argues
+against.
 
 ## Open — NOT closed by this work
 

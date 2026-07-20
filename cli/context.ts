@@ -537,7 +537,7 @@ async function main(): Promise<void> {
     if (action !== "accept" && action !== "reject") die("context review action must be accept or reject", 2);
     return print(await reviewContextProposal(args.positionals[0]!, action));
   }
-  die("usage: ebrain context <list|proposals|init|get|update|propose|review> [--json]", 2);
+  die(USAGE, 2);
 }
 
 if (import.meta.main) main().catch((error) => die(error instanceof Error ? error.message : String(error)));

@@ -4,6 +4,50 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-20 -- third audit pass: the published quickstart was broken again, one layer down
+
+The third independent pass (`docs/AUDIT-F7-F12-PASS3.md`, verdict `[AUDIT_FAIL]`) confirmed the F-R
+delta sound -- the policy-error state cannot be bypassed, the 24 new deny-policy tests are
+non-vacuous, memory-home symmetry holds, nothing leaked into the built site -- and then found two
+**blocking** defects, both in the delivery rather than the logic, and both only visible once the
+published documentation was audited as a public contract. Narrative:
+`docs/MAKER-REPORT-AUDIT-REMEDIATION.md` (round 3).
+
+- **F-P3 (BLOCKING) -- `scripts/install.sh` was tracked `100644`.** Every other entrypoint under
+  `scripts/` is `100755`. The docs say `./scripts/install.sh --from-source`, so a fresh clone
+  answered `Permission denied` on the very first command. This is F-A1's class surviving F-A1's fix:
+  the round-1 test wrote its own copy of the installer with a forced `chmod 755` and invoked it as
+  `sh ./scripts/install.sh` -- naming the interpreter bypasses the executable bit a reader depends
+  on, so the test could not fail. Mode corrected; two new tests take the tracked artifact instead of
+  a copy, and the list of scripts they check is derived from the documentation itself.
+- **F-P4 (BLOCKING) -- the installer cloned the pinned engine but never installed it.** `ebrain up`,
+  the first documented command, died with `Cannot find module '@modelcontextprotocol/sdk'` on any
+  machine that had not installed it by hand. Hidden three ways at once: every existing test set
+  `EBRAIN_SKIP_GBRAIN=1`, the maintainer's machine already had the modules, and CI passed **because
+  CI performs that install in a step of its own that the installer never performed**. The installer
+  now installs the engine lockfile with `--ignore-scripts`.
+- **F-P1/F-P2/F-P5 (MEDIUM) -- TS/shell grammar parity was claimed, not held.** Under a UTF-8 locale
+  glibc's `[a-z]` is collation-aware, so the shell validator accepted `café` while the TS half
+  rejected it (an availability split, never fail-open); separator sets diverged on vertical tab,
+  form feed and U+00A0. Fixed with `LC_ALL=C` on the shell greps and one explicit shared ASCII
+  separator set; the configuration reference now states the grammar instead of asserting parity.
+  Both new parity tests were vacuous as first written and were repaired to bite.
+- **F-P6 (HIGH) -- three documented `--help` commands did not exist.** `ebrain workflows --help`
+  printed nothing and exited 0. All three now answer on stdout; the new test derives them from the
+  docs and rejects usage strings naming subcommands that do not exist.
+- **F-P7/F-P8 (LOW) -- the i18n guard skipped shell `case` arms** (`*) echo "…"` read as a comment;
+  four live lines in `cli/ebrain` had zero protection) and carried one real English word in its
+  "not English at all" tier. Both closed.
+- **F-P9's class closed at its last two sites.** `cli/fleet.ts` and `cli/sessions.ts` still defaulted
+  `EBRAIN_HOME` to `$HOME/eBrain`, so a source user who cloned elsewhere got no adapters. The suite
+  now passes identically under a sandboxed `HOME` with an empty `XDG_CONFIG_HOME`.
+
+CLI 330/0 (with, without, and under a sandboxed `HOME`), TUI 442/0, Astro 0/0/0, 40 pages/38 routes.
+Every fix has a test proven to fail against the pre-fix code. **These fixes were verified by their
+own maker** -- see "What this verification does and does not establish" in the maker report.
+
+---
+
 ## 2026-07-19 (later) -- re-audit: fail-open regression in the new deny policy, closed
 
 The second independent pass (`docs/AUDIT-F7-F12-REAUDIT.md`, verdict `[AUDIT_FAIL]`) confirmed every

@@ -16,7 +16,11 @@ import { join } from "path";
 import { homedir } from "os";
 
 const HOME = homedir();
-const EBRAIN_HOME = process.env.EBRAIN_HOME || join(HOME, "eBrain");
+// An installed instance exports EBRAIN_HOME; running from source falls back to this file's own
+// checkout, NOT to "$HOME/eBrain". Defaulting to a developer home checkout is the defect that broke
+// task-profile rules in CI and the published quickstart in the F7-F12 audit — a source user who
+// cloned anywhere else silently got no adapters at all. Same pattern as cli/task-profile.ts.
+const EBRAIN_HOME = process.env.EBRAIN_HOME || join(import.meta.dir, "..");
 const ADAPTERS_DIR = join(EBRAIN_HOME, "harness", "adapters");
 const INSTALL_SH = join(EBRAIN_HOME, "harness", "core", "install.sh");
 

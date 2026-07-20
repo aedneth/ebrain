@@ -45,8 +45,15 @@ Segment matching is deliberate for paths: a directory named `acme-client-notes` 
 The policy fails closed, identically in the CLI and in the shell harness. A policy file that exists
 but cannot be read, or an entry that is not a bare name, aborts the operation instead of continuing
 with a silently smaller policy — the shell half reports the offending line number and denies every
-repository until the file is fixed. Entries match literally (a `.` is a dot, not a wildcard) and
-CRLF line endings are tolerated, so the same file always means the same thing on both paths.
+repository until the file is fixed.
+
+Both halves read the file under one grammar, so a policy means the same thing whichever one reads
+it. An entry is ASCII: letters, digits, `.`, `_` and `-`, starting and ending with a letter or
+digit. Case is ignored and a `.` is a literal dot, never a wildcard. Entries are separated by
+newlines, commas, spaces, or tabs, and CRLF line endings are tolerated. Anything else — an accented
+or non-Latin character, a non-breaking space, a slash, a glob — is refused as malformed rather than
+interpreted, on both paths. If a repository you need to deny cannot be written this way, deny it by
+a substring of its name that can be.
 
 An **empty** policy denies nothing by name — federation is already default-deny, so a source must be
 registered before it can be read at all; this list is the second gate for directories you want
