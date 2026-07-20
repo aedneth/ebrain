@@ -233,13 +233,13 @@ The canonical public documentation is Markdown in this repository and powers a s
 | [First memory](docs/getting-started/first-memory.md) | [Daemon and federation](docs/architecture/daemon-federation.md) | [Configuration](docs/reference/configuration.md) |
 | [Workspace and session](docs/getting-started/workspace-session.md) | [CKIS relationship](docs/architecture/ckis.md) | [Troubleshooting](docs/guides/troubleshooting.md) |
 
-Build the static site locally:
+The same documentation is published at **https://ebrain.vercel.app**. Build it locally with:
 
 ```bash
 bun run website:build
 ```
 
-This build reads only the allowlisted public Markdown tree. It has no server adapter, analytics, provider calls, or runtime credential requirement.
+The build reads only the allowlisted public Markdown tree, and the site is static output with no server adapter, no provider calls, and no runtime credential requirement. The hosted copy adds first-party page-traffic and Core Web Vitals measurement, served same-origin under a `default-src 'self'` content security policy; a local build has neither.
 
 ## Contributing
 
