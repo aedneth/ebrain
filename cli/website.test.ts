@@ -37,7 +37,21 @@ describe("F10.3 static documentation website contract", () => {
     expect(content).not.toContain("AUDIT-");
     expect(packageJson).toContain('"private": true');
     expect(packageJson).not.toContain("@astrojs/vercel");
-    expect(existsSync(join(ROOT, "vercel.json"))).toBe(false);
+
+    // The site was deployed on 2026-07-20, so "no vercel.json exists" is no longer the contract.
+    // What this test has always been protecting is the *static* guarantee, and that survives the
+    // deployment: hosting config may exist, but it must not turn the site into a server-rendered
+    // app. Assert the guarantee rather than the absence of the file.
+    const hosting = read("vercel.json");
+    expect(hosting).toContain('"framework": "astro"');
+    expect(hosting).toContain('"outputDirectory": "website/dist"');
+    expect(hosting).not.toContain("@astrojs/vercel");
+    expect(hosting).not.toContain('"functions"');
+    expect(hosting).not.toContain('"rewrites"');
+    // The hosted site must keep the same-origin content security policy it shipped with: every
+    // asset first-party, and no page embeddable in a frame elsewhere.
+    expect(hosting).toContain("default-src 'self'");
+    expect(hosting).toContain("frame-ancestors 'none'");
   });
 
   test("uses repository-owned social destinations and locally synchronised visual assets", () => {

@@ -44,7 +44,9 @@ describe("F11 release readiness preparation", () => {
     expect(astroConfig).toContain('output: "static"');
     expect(astroConfig).not.toContain("@astrojs/vercel");
     expect(packageJson).toContain('"website:build"');
-    expect(existsSync(join(ROOT, "vercel.json"))).toBe(false);
+    // Hosting config exists as of the 2026-07-20 deployment; what must stay true is that generated
+    // website state is never committed and the build stays static. See cli/website.test.ts.
+    expect(read("vercel.json")).toContain('"outputDirectory": "website/dist"');
     expect(trackedGenerated).toBe("");
   });
 
@@ -52,10 +54,14 @@ describe("F11 release readiness preparation", () => {
     const audit = read("docs/F10.0-PUBLIC-CLAIM-AUDIT.md");
     const readme = read("README.md");
 
+    // The site is live as of 2026-07-20, so the README may — and must — name it. The claim that
+    // matters now is the opposite of the original one: the build is static and credential-free,
+    // AND the hosted copy's measurement is disclosed rather than described as absent. A README
+    // that still said "no analytics" would be the F-A2 defect again, in the other direction.
     expect(audit).toContain("can be built locally");
-    expect(audit).toContain("Do not link a live site");
-    expect(readme).toContain("Build the static site locally");
-    expect(readme).toContain("no server adapter, analytics, provider calls, or runtime credential requirement");
-    expect(readme).not.toContain("https://ebrain.vercel.app");
+    expect(audit).toContain("https://ebrain.vercel.app");
+    expect(readme).toContain("https://ebrain.vercel.app");
+    expect(readme).toContain("no server adapter, no provider calls, and no runtime credential requirement");
+    expect(readme).toContain("Core Web Vitals");
   });
 });
