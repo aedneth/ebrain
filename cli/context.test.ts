@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+
+// Deny policy is operator configuration; this suite declares its own neutral fixture policy.
+process.env.EBRAIN_DENIED_REPOS = "denied-alpha,denied-beta";
 import { chmodSync, mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -100,7 +103,7 @@ describe("governed context packs", () => {
       packId: "operator", agent: "codex", session: "ebr-codex-context", evidence: "Evidence is safe.", content: "OPENROUTER_API_KEY=example-placeholder",
     }, opts)).rejects.toThrow("secret-shaped");
     await expect(createContextProposal({
-      packId: "operator", agent: "codex", session: "ebr-codex-context", evidence: "Evidence is safe.", content: "Do work in brisas-del-golfo.",
+      packId: "operator", agent: "codex", session: "ebr-codex-context", evidence: "Evidence is safe.", content: "Do work in denied-alpha.",
     }, opts)).rejects.toThrow("denied client");
     expect(() => validateContextText("x".repeat(8_001), 8_000, "context content")).toThrow("bounded limit");
   });

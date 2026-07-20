@@ -10,7 +10,7 @@ cd ebrain
 bun install
 bun test ./cli/        # CLI suite
 bun test ./tui/test/   # TUI suite
-ebrain doctor          # environment + daemon health
+bun cli/ebrain doctor  # environment + daemon health (no install needed)
 ```
 
 **Prerequisites:** [Bun](https://bun.sh), git, and [tmux](https://github.com/tmux/tmux) for session tests.

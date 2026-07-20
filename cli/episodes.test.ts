@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+
+// Deny policy is operator configuration; this suite declares its own neutral fixture policy.
+process.env.EBRAIN_DENIED_REPOS = "denied-alpha,denied-beta";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -24,17 +27,22 @@ function root(): string {
 const REPO_ROOT = join(import.meta.dir, "..");
 const REMEMBER_SCRIPT = join(REPO_ROOT, "harness", "core", "remember.sh");
 
-function writeTrustStub(home: string): void {
-  const trust = join(home, "eBrain", "harness", "core", "trust.sh");
-  mkdirSync(join(home, "eBrain", "harness", "core"), { recursive: true });
-  writeFileSync(trust, 'TRUST_DENY="^$"\ntrust_redact_hit_text() { return 1; }\n', { mode: 0o600 });
-}
-
 async function runRemember(home: string, bunBin: string): Promise<{ code: number; stdout: string; stderr: string }> {
-  writeTrustStub(home);
+  // EBRAIN_HOME locates the CODE (trust policy, episode mirror) and must stay the real checkout;
+  // EBRAIN_MEMORY_HOME locates USER DATA and is what the sandbox redirects. Keeping them separate
+  // is why a non-default checkout no longer drags the memory store along with it. The real trust
+  // policy runs here — the suite's neutral fixture policy (top of file) is what it loads.
   const proc = Bun.spawn(["bash", REMEMBER_SCRIPT, "--no-sync", "--project", "fixture", "A durable explicit learning."], {
     cwd: REPO_ROOT,
-    env: { ...process.env, HOME: home, EBRAIN_HOME: REPO_ROOT, EBRAIN_CONFIG_DIR: join(home, "config"), BUN_BIN: bunBin, AGENT_NAME: "codex" },
+    env: {
+      ...process.env,
+      HOME: home,
+      EBRAIN_HOME: REPO_ROOT,
+      EBRAIN_MEMORY_HOME: join(home, "eBrain", "memory"),
+      EBRAIN_CONFIG_DIR: join(home, "config"),
+      BUN_BIN: bunBin,
+      AGENT_NAME: "codex",
+    },
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -101,7 +109,7 @@ describe("immutable local episodes", () => {
       kind: "learning", source: "explicit", project: "ebrain", agent: "codex", text: "OPENROUTER_API_KEY=example-placeholder",
     }, opts)).rejects.toThrow("secret-shaped");
     await expect(recordEpisode({
-      kind: "learning", source: "explicit", project: "ebrain", agent: "codex", text: "Work in brisas-del-golfo.",
+      kind: "learning", source: "explicit", project: "ebrain", agent: "codex", text: "Work in denied-alpha.",
     }, opts)).rejects.toThrow("denied client");
     await expect(recordEpisode({
       kind: "learning", source: "harness-summary", project: "ebrain", agent: "codex", text: "A bounded learning.",

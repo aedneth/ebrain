@@ -368,7 +368,7 @@ function searchTerms(query: string): string[] {
   const clean = query.trim();
   if (!clean) throw new Error("episode recall query must not be empty");
   if (clean.length > MAX_QUERY_CHARS) throw new Error("episode recall query exceeds the bounded limit");
-  if (scrubSecrets(clean) !== clean || /(?:brisas-del-golfo|dekko)/i.test(clean)) throw new Error("episode recall query is not allowed");
+  if (scrubSecrets(clean) !== clean || referencesDeniedRepo(clean)) throw new Error("episode recall query is not allowed");
   const terms = [...new Set(clean.toLowerCase().split(/[^a-z0-9]+/).filter((term) => term.length >= 2))].slice(0, 12);
   if (terms.length === 0) throw new Error("episode recall query needs searchable text");
   return terms;

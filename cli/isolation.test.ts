@@ -2,7 +2,7 @@
  * cli/isolation.test.ts — FASE D.5, el GATE DE AISLAMIENTO (ADR-004 criterio 4).
  *
  * Verifica que la migración al canal compartido HTTP-MCP PRESERVA:
- *   (a) el aislamiento de repos de cliente (brisas/dekko) — plano-sesión + plano-source,
+ *   (a) el aislamiento de repos de cliente (denied repositories) — plano-sesión + plano-source,
  *   (b) el default-deny de federación (ADR-001) — un source entra solo si es federado y
  *       explícito; jamás un repo de cliente.
  * Todo PURO / offline (sin host, sin tmux, sin engine) — corre en la suite CI.
@@ -12,7 +12,7 @@ import { mkdtempSync, mkdirSync, symlinkSync, rmSync, realpathSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  CLIENT_DENYLIST,
+  clientDenylist,
   isClientPath,
   isClientSource,
   isClientSourceRecord,
@@ -20,30 +20,57 @@ import {
   assertNoClientSources,
 } from "./isolation.ts";
 
-describe("D.5 gate — denylist integrity (SoT en el que confía el canal compartido)", () => {
-  test("CLIENT_DENYLIST no está vacío y contiene los dos repos de cliente", () => {
-    expect(CLIENT_DENYLIST.length).toBeGreaterThan(0);
-    expect(CLIENT_DENYLIST).toContain("brisas-del-golfo");
-    expect(CLIENT_DENYLIST).toContain("dekko");
+// The deny policy is operator configuration, so this suite declares its own neutral fixture policy
+// instead of depending on whatever the machine running CI happens to have configured.
+process.env.EBRAIN_DENIED_REPOS = "denied-alpha,denied-beta";
+
+describe("D.5 gate — deny policy integrity (the SoT the shared channel trusts)", () => {
+  test("the configured policy is loaded and contains the fixture entries", () => {
+    expect(clientDenylist().length).toBeGreaterThan(0);
+    expect(clientDenylist()).toContain("denied-alpha");
+    expect(clientDenylist()).toContain("denied-beta");
+  });
+
+  test("an empty policy denies NOTHING — it must never degrade into denying everything", () => {
+    const saved = process.env.EBRAIN_DENIED_REPOS;
+    process.env.EBRAIN_DENIED_REPOS = "";
+    try {
+      expect(clientDenylist()).toEqual([]);
+      expect(isClientPath("/home/e/repos/anything")).toBe(false);
+      expect(isClientSource("anything")).toBe(false);
+      expect(() => assertNoClientSources(["anything", "second-brain"])).not.toThrow();
+    } finally {
+      process.env.EBRAIN_DENIED_REPOS = saved;
+    }
+  });
+
+  test("a malformed policy entry fails closed instead of silently shrinking the policy", () => {
+    const saved = process.env.EBRAIN_DENIED_REPOS;
+    process.env.EBRAIN_DENIED_REPOS = "denied-alpha,../escape";
+    try {
+      expect(() => clientDenylist()).toThrow(/invalid deny entry/);
+    } finally {
+      process.env.EBRAIN_DENIED_REPOS = saved;
+    }
   });
 });
 
 describe("D.5 gate — plano-sesión: ninguna sesión puede lanzar en un repo de cliente", () => {
   test("isClientPath bloquea las formas literal / subpath / case, y NO nombres parciales", () => {
-    expect(isClientPath("/home/e/repos/brisas-del-golfo")).toBe(true);
-    expect(isClientPath("/home/e/repos/brisas-del-golfo/src/api")).toBe(true);
-    expect(isClientPath("/home/e/work/dekko")).toBe(true);
-    expect(isClientPath("/home/e/work/DEKKO/x")).toBe(true); // case-insensitive
+    expect(isClientPath("/home/e/repos/denied-alpha")).toBe(true);
+    expect(isClientPath("/home/e/repos/denied-alpha/src/api")).toBe(true);
+    expect(isClientPath("/home/e/work/denied-beta")).toBe(true);
+    expect(isClientPath("/home/e/work/DENIED-BETA/x")).toBe(true); // case-insensitive
     // no-cliente:
     expect(isClientPath("/home/e/eBrain")).toBe(false);
-    expect(isClientPath("/home/e/repos/brisas-del-golfo-notes")).toBe(false); // segmento no exacto
+    expect(isClientPath("/home/e/repos/denied-alpha-notes")).toBe(false); // segmento no exacto
     expect(isClientPath("/home/e/second-brain")).toBe(false);
   });
 
   test("CIERRA el gap F6.4.8: un symlink de nombre inocente que RESUELVE a un repo de cliente se deniega", () => {
     const base = mkdtempSync(join(tmpdir(), "ebr-iso-"));
     try {
-      const clientDir = join(base, "brisas-del-golfo");
+      const clientDir = join(base, "denied-alpha");
       mkdirSync(clientDir);
       const link = join(base, "innocent-name");
       symlinkSync(clientDir, link);
@@ -59,9 +86,9 @@ describe("D.5 gate — plano-sesión: ninguna sesión puede lanzar en un repo de
 
 describe("D.5 gate — plano-source: ningún repo de cliente es un source federado del host", () => {
   test("isClientSource deniega nombres de source de cliente (substring, case-insensitive)", () => {
-    expect(isClientSource("brisas-del-golfo")).toBe(true);
-    expect(isClientSource("code-graph/brisas-del-golfo")).toBe(true); // el vector del Dev Brain (ADR-001 §Frontera)
-    expect(isClientSource("DEKKO")).toBe(true);
+    expect(isClientSource("denied-alpha")).toBe(true);
+    expect(isClientSource("code-graph/denied-alpha")).toBe(true); // el vector del Dev Brain (ADR-001 §Frontera)
+    expect(isClientSource("DENIED-BETA")).toBe(true);
     // sources legítimos del knowledge layer:
     expect(isClientSource("second-brain")).toBe(false);
     expect(isClientSource("company-brain")).toBe(false);
@@ -75,29 +102,31 @@ describe("D.5 gate — plano-source: ningún repo de cliente es un source federa
       "company-brain   federated   567 pages",
       "default         federated   0 pages",         // 'default' se excluye
       "agent-memory    federated   89 pages",
-      "brisas-del-golfo federated  999 pages",        // un cliente colado → DEBE excluirse
+      "denied-alpha federated  999 pages",        // un cliente colado → DEBE excluirse
       "some-local      local       12 pages",         // no-federado → excluido
     ].join("\n");
     const got = federatedSources(raw);
     expect(got).toEqual(["second-brain", "company-brain", "agent-memory"]);
     expect(got).not.toContain("default");
-    expect(got).not.toContain("brisas-del-golfo");
+    expect(got).not.toContain("denied-alpha");
   });
 
   test("isClientSourceRecord deniega por CUALQUIER campo de identidad (id, name o local_path)", () => {
     // G56-F5: un source con id inocente puede delatarse por su display name o su local_path.
     expect(isClientSourceRecord({ id: "clean" })).toBe(false);
-    expect(isClientSourceRecord({ id: "brisas-del-golfo" })).toBe(true);            // por id
-    expect(isClientSourceRecord({ id: "cust-1", name: "DEKKO client" })).toBe(true); // por name
-    expect(isClientSourceRecord({ id: "cust-2", path: "/home/e/repos/brisas-del-golfo" })).toBe(true); // por path
-    expect(isClientSourceRecord({ id: "cust-3", path: "/home/e/work/dekko/src" })).toBe(true); // subpath
+    expect(isClientSourceRecord({ id: "denied-alpha" })).toBe(true);            // por id
+    expect(isClientSourceRecord({ id: "cust-1", name: "DENIED-BETA client" })).toBe(true); // por name
+    expect(isClientSourceRecord({ id: "cust-2", path: "/home/e/repos/denied-alpha" })).toBe(true); // por path
+    expect(isClientSourceRecord({ id: "cust-3", path: "/home/e/work/denied-beta/src" })).toBe(true); // subpath
     // campos no-string se ignoran sin romper:
     expect(isClientSourceRecord({ id: 123, name: null, path: undefined })).toBe(false);
   });
 
   test("assertNoClientSources: verde con sources limpios, TIRA si un cliente se cuela", () => {
     expect(() => assertNoClientSources(["second-brain", "company-brain", "agent-memory"])).not.toThrow();
-    expect(() => assertNoClientSources(["second-brain", "brisas-del-golfo"])).toThrow(/aislamiento roto/);
-    expect(() => assertNoClientSources(["dev-brain", "code-graph/dekko"])).toThrow(/dekko/);
+    expect(() => assertNoClientSources(["second-brain", "denied-alpha"])).toThrow(/isolation broken/);
+    // The message must report a COUNT and never echo the denied identifier back to the operator.
+    expect(() => assertNoClientSources(["dev-brain", "code-graph/denied-beta"])).toThrow(/1 denied source/);
+    expect(() => assertNoClientSources(["dev-brain", "code-graph/denied-beta"])).not.toThrow(/denied-beta/);
   });
 });

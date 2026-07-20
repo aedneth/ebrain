@@ -78,7 +78,7 @@ export function deniedRepos(): string[] {
 
 /**
  * A path is denied when any of its segments is a denied entry. Segment equality, not substring:
- * a directory named `dekko-notes` is not `dekko`, and over-blocking teaches operators to disable
+ * a directory named `acme-notes` is not `acme`, and over-blocking teaches operators to disable
  * the guard. Callers that accept user input must resolve symlinks BEFORE calling this.
  */
 export function isDeniedPath(p: string, denied: readonly string[] = deniedRepos()): boolean {
@@ -90,7 +90,7 @@ export function isDeniedPath(p: string, denied: readonly string[] = deniedRepos(
 /**
  * A source identity is denied when it *contains* a denied entry. Substring here is deliberate and
  * asymmetric with `isDeniedPath`: a source name is free-form text chosen by whoever registered it
- * ("dekko export", "code-graph/dekko"), so the safe reading is the broad one.
+ * ("acme export", "code-graph/acme"), so the safe reading is the broad one.
  */
 export function isDeniedSourceName(name: string, denied: readonly string[] = deniedRepos()): boolean {
   if (denied.length === 0) return false;

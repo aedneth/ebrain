@@ -31,12 +31,26 @@ const SPANISH_WORDS = new RegExp(
   "i",
 );
 
+// Structural signal. A curated word list is inherently leaky: the F7-F12 audit follow-up found a
+// Spanish deny-client message whose every word was outside the list above and which carried no
+// diacritic, so it passed this guard for two phases. Function words are the robust tell — each
+// entry below is a non-word in English, so an English sink line cannot accumulate two of them,
+// while Spanish prose reaches two almost immediately.
+const SPANISH_FUNCTION_WORDS =
+  /\b(?:el|la|los|las|un|una|unos|unas|de|del|que|para|por|sin|bajo|sobre|entre|hacia|desde|hasta|como|pero|cuando|donde|porque|este|esta|ese|esa|eso|su|sus|se|ya|muy|cada|toda|nunca|siempre|debe|puede|tiene|fue|ser|otro|otra|antes|aunque|nada|texto|archivo|nombre|falta|cliente|resuelve|rechazado|aislamiento|duro|guardo|parece|contener)\b/gi;
+
+function spanishFunctionWords(line: string): number {
+  return (line.match(SPANISH_FUNCTION_WORDS) ?? []).length;
+}
+
 function scan(rel: string): string[] {
   const text = readFileSync(join(ROOT, rel), "utf8");
   const hits: string[] = [];
   text.split("\n").forEach((line, i) => {
     if (!SINK.test(line)) return;
-    if (SPANISH_DIACRITIC.test(line) || SPANISH_WORDS.test(line)) hits.push(`${rel}:${i + 1}: ${line.trim()}`);
+    if (SPANISH_DIACRITIC.test(line) || SPANISH_WORDS.test(line) || spanishFunctionWords(line) >= 2) {
+      hits.push(`${rel}:${i + 1}: ${line.trim()}`);
+    }
   });
   return hits;
 }
@@ -51,8 +65,11 @@ const SURFACES = [
   "cli/procedures.ts",
   "cli/targets.ts",
   "cli/workflows.ts",
+  "cli/isolation.ts",
   "tui/src/knowledge/run.ts",
   "cli/ebrain",
+  // `ebrain remember` is step 3 of the published quickstart — its output is public surface.
+  "harness/core/remember.sh",
 ];
 
 describe("G56-F6 — the visible surface is English-only", () => {
@@ -61,6 +78,20 @@ describe("G56-F6 — the visible surface is English-only", () => {
       expect(scan(rel)).toEqual([]);
     });
   }
+
+  test("the detector catches the message that escaped it (regression on the guard itself)", () => {
+    // The exact string that shipped in cli/sessions.ts for two phases: no diacritic, and not one
+    // word from the curated list. If a future refactor weakens the detector, this fails first.
+    const escaped =
+      'message: `cwd resuelve bajo un repo de cliente (${CLIENT_DENYLIST.join(" / ")}) - rechazado (aislamiento duro, ver CLAUDE.md)`';
+    expect(SPANISH_DIACRITIC.test(escaped)).toBe(false);
+    expect(SPANISH_WORDS.test(escaped)).toBe(false);
+    expect(spanishFunctionWords(escaped)).toBeGreaterThanOrEqual(2);
+
+    // …and an English sink line of comparable length must stay clean.
+    const english = 'message: "cwd resolves under a repository denied by the local deny policy — refused"';
+    expect(spanishFunctionWords(english)).toBeLessThan(2);
+  });
 
   test("task-profile disclaimer is English (the live probe returned false)", () => {
     const rules: TaskProfileRules = { capabilities: { coding: { keywords: ["code"] }, general: { keywords: [] } } };

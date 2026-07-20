@@ -9,8 +9,8 @@
  * SEGURIDAD (hard requirements — no negociables, ver SPRINT-TUI 6.1.6):
  *   - `peek` SIEMPRE pasa el pane por scrubSecrets() antes de imprimirse/devolverse. Cero excepción.
  *   - `send`/`kill` (mutan) exigen --yes explícito. Sin --yes: se REHÚSA (no crashea) y dice qué haría.
- *   - `new --cwd <dir>`: si el cwd resuelve bajo un repo de cliente (brisas-del-golfo/dekko) → deny
- *     duro. Nunca se ofrece ni se acepta como target, en ningún subcomando.
+ *   - `new --cwd <dir>`: if the cwd resolves under a repository denied by the local deny policy
+ *     (cli/deny-policy.ts) → hard deny. Never offered or accepted as a target, in any subcommand.
  *
  * `new <agent> <slug>` lanza el comando del adapter (`launch:` en harness/adapters/<agent>/manifest.yaml)
  * con el env del harness inyectado (`env:` del manifest, p.ej. AGENT_NAME) vía `tmux new-session -e`.
@@ -174,8 +174,8 @@ export async function newSession(agent: string, slug: string, opts: NewSessionOp
   const name = sessionName(agent, slug);
   const cwd = resolve(opts.cwd ?? process.cwd());
 
-  // Deny repos de cliente ANTES de crear nada. `resolve()` colapsa `..` pero NO sigue symlinks —
-  // un symlink/bind-mount apuntando a brisas/dekko evadía el chequeo textual (gap del gate F6.4.8);
+  // Deny before creating anything. `resolve()` collapses `..` but does NOT follow symlinks — a
+  // symlink/bind-mount pointing at a denied repo used to evade the textual check (gate F6.4.8 gap);
   // `realpathSync` resuelve el destino real. Chequeamos AMBOS (literal + real) para no depender de
   // que el path exista (si no existe, realpath tira y cae al existsSync de abajo).
   let realCwd = cwd;

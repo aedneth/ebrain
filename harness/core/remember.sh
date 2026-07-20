@@ -13,11 +13,10 @@
 # se NIEGA a escribir (exit ≠ 0). Robusto en lo demás. NO es un hook: lo invoca el agente/CLI a mano.
 set -uo pipefail
 
-# Resolve the eBrain root ONCE: explicit override, else this script's own location
-# ($EBRAIN_HOME/harness/core/remember.sh, so up two levels). Never a "$HOME/eBrain" literal — the
-# checkout path is the operator's choice and the installer explicitly supports overriding it.
-SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-EBRAIN_HOME="${EBRAIN_HOME:-$(dirname -- "$(dirname -- "$SCRIPT_DIR")")}"
+# Resolve the eBrain root ONCE, here, and derive everything else from it. The checkout path is the
+# operator's choice: `cli/ebrain` exports EBRAIN_HOME from its own location, so an install at any
+# path reaches this script correctly. The $HOME default only applies to a direct, uninstalled call.
+EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
 MEM="${EBRAIN_MEMORY_HOME:-$EBRAIN_HOME/memory}"
 LEARN="$MEM/learnings"
 # Shared trust policy (deny policy + unified redaction) — single source of truth for the harness.
@@ -39,7 +38,7 @@ done
 CONTENT="${ARGS[*]:-}"
 if [ -z "${CONTENT// }" ] && [ ! -t 0 ]; then CONTENT="$(cat 2>/dev/null || true)"; fi
 if [ -z "${CONTENT// }" ]; then
-  echo "remember: nada que recordar (pasá el texto como argumento o por stdin)." >&2
+  echo "remember: nothing to remember (pass the text as an argument or on stdin)." >&2
   exit 1
 fi
 
@@ -74,7 +73,7 @@ if [ -n "$REPO" ]; then
 fi
 # 2) redact-scan: si el texto trae un secreto obvio → negar (nunca embeber un secreto).
 if trust_redact_hit_text "$CONTENT"; then
-  echo "remember: DENEGADO — el texto parece contener un secreto (key/token/DSN/clave privada). No lo guardo." >&2
+  echo "remember: REFUSED — the text appears to contain a secret (key/token/DSN/private key); nothing was written." >&2
   exit 4
 fi
 
@@ -145,7 +144,7 @@ if [ "$SYNC" = "1" ] && [ -f "$REMOTE" ]; then
   if "$BUN_BIN" run "$REMOTE" put-page --source agent-memory --slug "$SLUG_PATH" --file "$OUT" >/dev/null 2>&1; then
     echo "  MCP put_page agent-memory ✓ (buscable en ebrain)"
   else
-    echo "  WARN: write-through MCP falló; learning quedó en disco pero aún no es buscable con el daemon arriba"
+    echo "  WARN: MCP write-through failed; the learning is on disk but is not searchable via the daemon yet"
   fi
 fi
 exit 0

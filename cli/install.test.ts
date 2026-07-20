@@ -129,3 +129,58 @@ describe("installer (scripts/install.sh)", () => {
     }
   }, 30_000);
 });
+
+// ── the PUBLISHED quickstart, executed verbatim ───────────────────────────────────────────────
+// The F7-F12 audit found the README / docs install sequence failing at step 4 (exit 1): it clones
+// into a directory of the user's choosing, but --from-source only accepted a checkout at
+// $HOME/eBrain. The suite missed it because every other case sets EBRAIN_HOME explicitly, which is
+// exactly what a real reader does not do. This test therefore sets no EBRAIN_HOME at all.
+describe("published quickstart sequence", () => {
+  test("clone into an arbitrary directory + --from-source succeeds with no EBRAIN_HOME set", () => {
+    const base = mkdtempSync(join(tmpdir(), "ebr-quickstart-"));
+    try {
+      const home = join(base, "home");
+      const src = join(base, "src");
+      const workdir = join(home, "projects"); // the user is standing anywhere, not in $HOME
+      const binDir = join(home, ".local", "bin");
+      mkdirSync(workdir, { recursive: true });
+      mkdirSync(binDir, { recursive: true });
+
+      // A source repo that carries the REAL installer, so this exercises shipped behavior.
+      makeSourceRepo(src);
+      mkdirSync(join(src, "scripts"), { recursive: true });
+      writeFileSync(join(src, "scripts", "install.sh"), readFileSync(INSTALL_SH, "utf8"), { mode: 0o755 });
+      chmodSync(join(src, "scripts", "install.sh"), 0o755);
+      const git = (...a: string[]) => sh("git", ["-C", src, "-c", "user.email=t@t.dev", "-c", "user.name=t", ...a]);
+      expect(git("add", "-A").code).toBe(0);
+      expect(git("commit", "-q", "-m", "add installer").code).toBe(0);
+
+      const bin = fakeBun(base);
+      const env: Record<string, string> = {
+        ...(process.env as Record<string, string>),
+        HOME: home,
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        EBRAIN_BIN_DIR: binDir,
+        EBRAIN_SKIP_GBRAIN: "1",
+        EBRAIN_SKIP_UP: "1",
+      };
+      delete env.EBRAIN_HOME; // the published sequence never sets it — that is the whole point
+
+      // Documented line 1: git clone <repo> ebrain
+      expect(sh("git", ["clone", "--quiet", src, "ebrain"], { cwd: workdir, env }).code).toBe(0);
+      const checkout = join(workdir, "ebrain");
+
+      // Documented line 4: ./scripts/install.sh --from-source (run from inside the checkout)
+      const res = sh("sh", ["./scripts/install.sh", "--from-source"], { cwd: checkout, env });
+      expect(res.stderr).not.toContain("expects an existing checkout");
+      expect(res.code).toBe(0);
+
+      // The launcher must point at the checkout the user actually made, not at $HOME/eBrain.
+      const launcher = readFileSync(join(binDir, "ebrain"), "utf8");
+      expect(launcher).toContain(checkout);
+      expect(launcher).not.toContain(join(home, "eBrain"));
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  }, 30_000);
+});

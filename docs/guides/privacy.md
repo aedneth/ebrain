@@ -10,7 +10,9 @@ and deny-first isolation checks.
   source documents intended for indexing.
 - Register only sources that agents are allowed to search.
 - Configure local exclusions for repositories and directories that must never enter federation,
-  workflows, workspaces, or memory.
+  workflows, workspaces, or memory — see the
+  [repository deny policy](../reference/configuration.md#repository-deny-policy). A clean install
+  ships no entries; the list is yours and stays in your local configuration.
 - Treat session panes as transient; eBrain does not automatically turn them into durable memory.
 - Review context proposals and procedure lifecycle changes explicitly.
 

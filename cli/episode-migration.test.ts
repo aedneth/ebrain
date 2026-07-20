@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+
+// Deny policy is operator configuration; this suite declares its own neutral fixture policy.
+process.env.EBRAIN_DENIED_REPOS = "denied-alpha,denied-beta";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -116,7 +119,7 @@ describe("F9.3 fixture-only episode migration", () => {
       [learning("duplicate"), learning("duplicate")],
       [{ ...learning("unknown"), extra: "not accepted" }],
       [{ ...learning("secret"), text: "OPENROUTER_API_KEY=example-placeholder" }],
-      [{ ...learning("client"), text: "A denied client repository is not migration input: dekko." }],
+      [{ ...learning("client"), text: "A denied client repository is not migration input: denied-beta." }],
     ];
     for (const fixtures of invalidSets) {
       await expect(migrateLegacyEpisodeFixtures(fixtures, { episodeStoreDir: join(base, `episodes-${fixtures.length}-${String((fixtures[0] as { fixture_id?: string }).fixture_id)}`), migrationDir: join(base, `migrations-${String((fixtures[0] as { fixture_id?: string }).fixture_id)}`) })).rejects.toThrow();

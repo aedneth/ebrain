@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
+
+// Deny policy is operator configuration; this suite declares its own neutral fixture policy.
+process.env.EBRAIN_DENIED_REPOS = "denied-alpha,denied-beta";
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
@@ -49,7 +52,7 @@ describe("workspace path isolation", () => {
 
   test("rejects literal and symlinked client directories before they enter the registry", async () => {
     const dir = root();
-    const client = join(dir, "brisas-del-golfo");
+    const client = join(dir, "denied-alpha");
     const link = join(dir, "innocent-link");
     mkdirSync(client);
     symlinkSync(client, link);

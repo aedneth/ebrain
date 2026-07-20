@@ -20,9 +20,11 @@ real secrets, tokens, or client data in a report.
   log, prompt, or commit.
 - **Secret scrubbing at the boundary.** Dotenv/credential shapes are redacted before any snippet
   is stored or rendered.
-- **Client-repository isolation.** A configurable deny-list keeps designated repositories out of
+- **Repository isolation.** A deny-list you configure locally keeps designated repositories out of
   memory and federation entirely, resolved through symlinks so an innocent-looking path cannot
-  smuggle denied content in.
+  smuggle denied content in. It fails closed on an unreadable or malformed policy, and the daemon
+  refuses to bind if a denied source reached the federated set. See
+  [configuration reference](docs/reference/configuration.md#repository-deny-policy).
 
 ## Scope
 
