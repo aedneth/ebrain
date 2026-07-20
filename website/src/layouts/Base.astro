@@ -1,6 +1,12 @@
 ---
 import "../styles/site.css";
 import { SOCIAL_LINKS } from "../lib/navigation";
+// Both are first-party and same-origin: the scripts are served from /_vercel/insights/ and
+// /_vercel/speed-insights/ on this deployment, which is why the CSP needs no third-party host
+// (only connect-src for the vitals endpoint). They collect page-level traffic and Core Web Vitals
+// — no cookies, no cross-site identifier, nothing tied to a person.
+import Analytics from "@vercel/analytics/astro";
+import SpeedInsights from "@vercel/speed-insights/astro";
 
 interface Props {
   title: string;
@@ -18,6 +24,8 @@ const { title, description } = Astro.props;
     <meta name="description" content={description} />
     <meta name="theme-color" content="#101317" />
     <title>{title}</title>
+    <Analytics />
+    <SpeedInsights />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
