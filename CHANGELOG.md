@@ -4,6 +4,47 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-19 (later) -- re-audit: fail-open regression in the new deny policy, closed
+
+The second independent pass (`docs/AUDIT-F7-F12-REAUDIT.md`, verdict `[AUDIT_FAIL]`) confirmed every
+original finding genuinely closed and every isolation guarantee intact under its own adversarial
+fixtures -- and then found that the fix had introduced a regression in the shell half of the policy
+it created. Full narrative: `docs/MAKER-REPORT-AUDIT-REMEDIATION.md`.
+
+- **F-R1 (HIGH) -- `harness/core/trust.sh` failed OPEN.** The TS half validated entries; the shell
+  half spliced them straight into `grep -E`. Three reproduced modes: a CRLF-saved config matched
+  **nothing** on the shell path while the TS path denied correctly (same file, two policies, no
+  error anywhere); a single metacharacter or leading-dash entry made the combined pattern an invalid
+  ERE, so grep exited 2 and "no match" read as ALLOW -- disabling every valid entry with it; and `.`
+  behaved as a wildcard on one side and a literal on the other. Entries are now parsed **and
+  validated** with the same grammar as `SAFE_ENTRY`, CR is stripped, dots are escaped, and an
+  invalid entry sets the policy-error state (deny everything) reporting the line number, never the
+  token. The published claim that the policy fails closed is now true on both halves.
+- **F-R2 (MEDIUM) -- `doctor` could report isolation green under a policy it could not read.** It
+  never consulted the policy-error state. Both branches now check it first, and a new
+  `sources:deny-policy` check reports the policy state (entries loaded / none / unreadable).
+- **F-R3 (MEDIUM) -- `EBRAIN_MEMORY_HOME` was writer-only**, so setting it split memory in two:
+  `remember` wrote to the override while `ebrain memory recent` and `status` read the old tree.
+  Readers now honor it.
+- **F-R4 (LOW) -- the i18n guard still missed three Spanish lines** in `remember.sh`, a surface it
+  explicitly covers. Translated, and the detector was split into STRONG content words (one is
+  conclusive) and FUNCTION words (two per line). Two further guard defects surfaced while fixing it:
+  a shared global regex used with `.test()` alternated true/false via `lastIndex` -- it would have
+  missed every other Spanish line -- and the guard's stated "comments may stay Spanish" contract was
+  never implemented, so a commented `echo` in a usage block was scanned as output. Both closed; the
+  pinned regression now runs through the real detector rather than a helper.
+- **F-R5 (LOW)** -- deleted a dead `daemon-preflight.ts` branch that re-derived and interpolated
+  denied identifiers into daemon boot output after the count-only assertion had already thrown.
+- **New coverage:** `cli/deny-policy.test.ts` (24 tests). The config-FILE path had zero coverage and
+  the shell half had none; it now drives **both halves from the same fixture files and asserts they
+  agree**, because a divergence means one config file has two meanings.
+- **Verification:** CLI `314 / 0` with and without `EBRAIN_HOME`, TUI `442 / 0`, Astro `0/0/0`,
+  website 40 pages / 38 routes, shell syntax across 8 entrypoints, zero-hex and `git diff --check`
+  clean. Live check confirmed the operator's own policy still denies through path, subpath, case and
+  source-name forms on both halves, without over-blocking lookalikes.
+
+These fixes have **not** been independently checked. A third pass is required before merge.
+
 ## 2026-07-19 -- F7-F12 independent audit: blocking findings closed
 
 Maker response to the first independent audit of the whole F7-F12 range (`docs/AUDIT-F7-F12-INDEPENDENT.md`,

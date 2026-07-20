@@ -67,9 +67,14 @@ function looksSpanish(line: string): boolean {
 // Split from `scan` so the regression test below can pin the whole detector — SINK selection plus
 // all three signals — instead of only the density helper. A refactor that drops a signal from here
 // must fail a test, not pass because the helper it no longer calls is still correct.
+// A comment can quote a sink (`# echo "..."` in a usage block) without emitting anything. The
+// contract has always been "comments may stay Spanish"; this is what actually enforces it.
+const COMMENT_LINE = /^\s*(?:#|\/\/|\*|\/\*)/;
+
 function scanText(text: string, label: string): string[] {
   const hits: string[] = [];
   text.split("\n").forEach((line, i) => {
+    if (COMMENT_LINE.test(line)) return;
     if (!SINK.test(line)) return;
     if (looksSpanish(line)) hits.push(`${label}:${i + 1}: ${line.trim()}`);
   });

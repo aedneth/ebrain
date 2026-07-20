@@ -1,18 +1,42 @@
 ---
 type: handoff-back
 project: ebrain
-from: Codex-maker
-to: Opus or Fable independent checker
+from: Opus (audit remediation maker)
+to: Codex-maker, and the next independent checker
 created: 2026-07-18
-status: draft PR CI-green; independent audit blocked by checker account limit
+updated: 2026-07-19
+status: two independent audits done (both FAIL); all blocking findings remediated; third pass required
 branch: release/open-source-publication
 pull-request: https://github.com/aedneth/ebrain/pull/1
-head: current-branch-head; verify with git rev-parse HEAD before audit
+head: verify with git rev-parse HEAD before any work
 external-actions-completed: branch push and draft PR only
-external-actions-pending: independent audit, squash merge, Vercel deployment, any visibility decision
+external-actions-pending: third audit pass, squash merge, Vercel deployment, any visibility decision
 ---
 
 # eBrain Handoff Back -- F12 Publication Candidate
+
+> ## ⚠ STATE AS OF 2026-07-19 -- read this before anything below
+>
+> The F7-F12 range finally received its independent audit. It ran **twice**, and both passes
+> returned `[AUDIT_FAIL]`. All blocking findings from both passes have been remediated by a maker
+> other than Codex. **The remediation itself has not been independently checked.**
+>
+> | Artifact | What it is |
+> | --- | --- |
+> | `docs/AUDIT-F7-F12-INDEPENDENT.md` | Pass 1, full range. Found the published quickstart broken and privacy/security copy promising configuration that did not exist. |
+> | `docs/AUDIT-F7-F12-REAUDIT.md` | Pass 2, remediation delta. Confirmed pass-1 findings closed; found a fail-open regression inside the new deny policy. |
+> | `docs/MAKER-REPORT-AUDIT-REMEDIATION.md` | **Start here.** What was found, what was fixed, what is deliberately still open, and what must not be changed. |
+>
+> **Next required action:** a third independent pass over the F-R remediation delta. Do not merge,
+> deploy, tag, or change repository visibility before it. The sections below describe the F12
+> candidate as it stood *before* the audits and remain accurate for that scope only.
+>
+> **Two things a new maker gets wrong here:** (1) the deny policy is now user-owned local
+> configuration with an **empty** shipped default -- never re-introduce a compiled-in list, and never
+> make an isolation guard more permissive without its own audit; (2) the `ckis-backup` bot
+> auto-commits *and pushes* every ~15 minutes, so several commits on this branch are checkpoints of
+> work-in-progress -- judge the tree, not the commit boundaries, and never force-push to tidy them
+> while PR #1 is open.
 
 ## Current state
 
