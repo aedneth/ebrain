@@ -4,6 +4,49 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-19 -- F7-F12 independent audit: blocking findings closed
+
+Maker response to the first independent audit of the whole F7-F12 range (`docs/AUDIT-F7-F12-INDEPENDENT.md`,
+verdict `[AUDIT_FAIL]`). Findings were reproduced before being fixed; the license, README, and
+release branch were left intact by design.
+
+- **F-A1 (BLOCKER) -- the published quickstart failed at step 4.** `install.sh --from-source` only
+  accepted a checkout at `$HOME/eBrain`, while README and `docs/getting-started/install.md` tell the
+  reader to clone into a directory of their choosing (reproduced: exit 1). `--from-source` now
+  resolves the checkout from the installer's own location, with an explicit `EBRAIN_HOME` still
+  authoritative. A new test executes the four documented lines verbatim with no `EBRAIN_HOME` set;
+  verified non-vacuous by running it against the pre-fix installer (exit 1, exact error).
+- **F-A2 (HIGH) -- privacy/security copy promised configuration that did not exist.** Implemented it
+  instead of softening the claim: `cli/deny-policy.ts` is now the single source of truth for the
+  repository deny policy, resolved from `EBRAIN_DENIED_REPOS` or
+  `$XDG_CONFIG_HOME/ebrain/denied-repos`, and documented in the configuration reference. Fails
+  closed on an unreadable or malformed policy; an **empty** policy denies nothing (the shell path
+  previously would have matched every input through an empty regex). Rewired `sessions`,
+  `isolation`, `context`, `episodes`, `trust.sh`, and `doctor.sh` -- the last of which had drifted
+  into its own inlined copy of the list.
+- **F-B1 code half closed.** No client identifier remains in any shipped `.ts` or `.sh` file; tests
+  use neutral fixtures and declare their own policy. Operator identity still present in prose
+  (CHANGELOG, ADRs, handoffs) and in the *allow*-lists of `trust.sh` -- open for the visibility gate.
+- **F-D1 (found by the orchestrator, missed by both maker and checker).** `cli/sessions.ts` returned
+  a Spanish deny message that interpolated the denied repository names into user-visible output.
+  Translated, and the identifiers are no longer echoed anywhere -- `assertNoClientSources` and
+  `doctor` now report a count instead of a name. The i18n guard that should have caught it was
+  itself the defect: a curated word list with no entry matching that sentence. It now also flags any
+  output line carrying two or more Spanish function words, with a regression test pinned to the
+  exact string that escaped it.
+- **F-C3/F-C4/F-C5.** `remember.sh`, `cli/ebrain`, `ebrain-q`, and `ebrain-brain` derive paths from
+  `EBRAIN_HOME` (exported once by the dispatcher) instead of a `$HOME/eBrain` literal; memory root
+  is separately overridable via `EBRAIN_MEMORY_HOME`, separating user data from the code checkout.
+  The `assertNoClientSources` "PENDING" comment was stale -- it has been wired at daemon boot since
+  D.5.4. `CONTRIBUTING.md` no longer calls `ebrain` before it is installed.
+- **Verification:** CLI `290 pass / 0 fail` (with and without `EBRAIN_HOME`), TUI `442 / 0`, Astro
+  check `0/0/0`, website build 40 pages / 38 routes, shell syntax, zero-hex, `git diff --check`
+  clean. Live check confirmed the operator's own policy still denies its real entries through path,
+  subpath, case, and source-name forms without over-blocking lookalikes.
+
+F-A3 (public site linking to a private repository) remains an owner sequencing decision, and the
+audit's remaining findings are scoped to repository visibility rather than merge or deployment.
+
 ## 2026-07-18 -- F12 Open-source publication surface
 
 - **Outcome-first README:** expanded the public landing document into a source-install proof,

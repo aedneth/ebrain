@@ -103,16 +103,19 @@ for a in $(all_agents); do
   rm -f "$a_tmp"
 done
 
-# ── sources: aislamiento de cliente (security-critical) ──────────────────────
-c_sec "sources (aislamiento de cliente)"
+# ── sources: repository isolation (security-critical) ────────────────────────
+# Read the deny policy from its single source of truth instead of restating it here: an inlined
+# copy is exactly how this check silently drifted out of sync with the harness before.
+c_sec "sources (repository isolation)"
+. "$CORE/trust.sh"
 serve_pid="$(pgrep -f 'cli\.ts serve' 2>/dev/null | head -1 || true)"
 REMOTE_TOOLS="$EBRAIN_HOME/cli/remote-tools.ts"
 BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN_BIN=bun
 if [ -n "$serve_pid" ] && [ -f "$REMOTE_TOOLS" ]; then
   src_json="$(mktemp)"; src_err="$(mktemp)"
   if "$BUN_BIN" run "$REMOTE_TOOLS" sources-list --json >"$src_json" 2>"$src_err"; then
-    if jq -e '.sources[] | select(((.id // "") + " " + (.name // "") + " " + (.local_path // "")) | test("brisas|dekko"; "i"))' "$src_json" >/dev/null 2>&1; then
-      c_fail "sources:isolation" "SOURCE DE CLIENTE detectado vía daemon MCP"
+    if [ -n "$TRUST_DENY" ] && jq -e --arg deny "$TRUST_DENY" '.sources[] | select(((.id // "") + " " + (.name // "") + " " + (.local_path // "")) | test($deny; "i"))' "$src_json" >/dev/null 2>&1; then
+      c_fail "sources:isolation" "denied source detected via the MCP daemon"
     elif jq -e '.sources[] | select(.id == "second-brain" or .id == "company-brain" or .id == "agent-memory")' "$src_json" >/dev/null 2>&1; then
       c_ok "sources:isolation" "sources vía daemon MCP = propios/federados; cero cliente"
     else
@@ -124,8 +127,10 @@ if [ -n "$serve_pid" ] && [ -f "$REMOTE_TOOLS" ]; then
   rm -f "$src_json" "$src_err"
 else
   src_out="$(cd /tmp && timeout 60 "$RUN" sources list --timeout=45000 2>&1 || true)"
-  if printf '%s' "$src_out" | grep -qiE 'brisas|dekko'; then
-    c_fail "sources:isolation" "SOURCE DE CLIENTE detectado en el brain: $(printf '%s' "$src_out" | grep -iE 'brisas|dekko' | head -1)"
+  if trust_denied "$src_out"; then
+    # Report that a denied source is present, never which one — doctor output gets pasted into
+    # issues and chats.
+    c_fail "sources:isolation" "a denied source is registered in the brain (check 'sources list' locally)"
   elif printf '%s' "$src_out" | grep -qiE 'second-brain|company-brain|agent-memory'; then
     c_ok "sources:isolation" "sources = solo propios (second-brain / company-brain / agent-memory); cero cliente"
   else
