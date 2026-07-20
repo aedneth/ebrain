@@ -4,6 +4,35 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-20 (later) -- merged to main, and the documentation website is live
+
+The F7-F12 candidate shipped. PR #1 was squash-merged into `main` as `600b045` after CI passed on
+`e337b86`; the release branch is retired. A fourth independent pass over the round-3 fixes was
+commissioned in parallel -- see `docs/AUDIT-F7-F12-PASS4.md` if present.
+
+- **Website live at https://ebrain.vercel.app** -- Astro static, built on Vercel from the repository
+  root (not from `website/`: `website/scripts/sync-assets.ts` copies from the repo-root `assets/`,
+  so a `website/`-rooted build cannot resolve them). 40 pages, 38 documentation routes.
+- **Security headers** in `vercel.json`: a same-origin CSP (`default-src 'self'`, no third-party
+  host, `frame-ancestors 'none'`), HSTS with preload, `nosniff`, `X-Frame-Options: DENY`,
+  a restrictive `Permissions-Policy`, and both Cross-Origin-Opener/Resource policies. `script-src`
+  still needs `'unsafe-inline'` because Astro inlines small module scripts -- stated plainly rather
+  than papered over. Immutable caching for `/_astro/` and static assets; `search-index.json` always
+  revalidates.
+- **Speed Insights is live and serving.** Web Analytics is wired in the layout but its script 404s
+  until the toggle is enabled on the project -- a dashboard action, not a code change.
+- **`.vercelignore` paths are anchored.** An unanchored `memory` entry also matched `docs/memory/`
+  and silently dropped three documentation pages; the build failed loudly only because
+  `website/scripts/verify-build.ts` asserts every expected route exists. That guard earned its keep.
+- **F-A3 closed as an owner decision:** the repository stays private while the site is public.
+  GitHub links on the site 404 for visitors, accepted deliberately.
+- **`docs/SPEC-DEMO-AND-DEVPOST.md` added** -- the next body of work for the Codex maker: a
+  sixty-second narrated demo and the Devpost/hackathon submission. Records the v1 boundary (what
+  works today) against v2 (routing and many more providers), so the launch surface cannot promise
+  behavior that does not exist yet.
+
+---
+
 ## 2026-07-20 -- third audit pass: the published quickstart was broken again, one layer down
 
 The third independent pass (`docs/AUDIT-F7-F12-PASS3.md`, verdict `[AUDIT_FAIL]`) confirmed the F-R

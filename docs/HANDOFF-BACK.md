@@ -5,7 +5,7 @@ from: Opus (audit remediation maker)
 to: Codex-maker, and the next independent checker
 created: 2026-07-18
 updated: 2026-07-19
-status: three independent audits done (all FAIL); all blocking findings remediated and maker-verified; owner decision F-A3 still open
+status: merged to main (600b045) and deployed to https://ebrain.vercel.app; next work is docs/SPEC-DEMO-AND-DEVPOST.md
 branch: release/open-source-publication
 pull-request: https://github.com/aedneth/ebrain/pull/1
 head: verify with git rev-parse HEAD before any work
@@ -28,11 +28,29 @@ external-actions-pending: third audit pass, squash merge, Vercel deployment, any
 > | `docs/AUDIT-F7-F12-PASS3.md` | Pass 3, F-R delta **plus the published docs as a public contract**. Confirmed the delta sound; found the quickstart broken again one layer down (file mode, and an engine that was cloned but never installed). |
 > | `docs/MAKER-REPORT-AUDIT-REMEDIATION.md` | **Start here.** What was found, what was fixed, what is deliberately still open, and what must not be changed. |
 >
-> **Next required action:** the owner decision **F-A3** (the site is public while the repository is
-> private, so every GitHub link on it 404s). Do not deploy before resolving it. Merge, tag and
-> visibility remain owner calls; the maker report's "What this verification does and does not
-> establish" section is the honest account of what the green suite proves. The sections below
-> describe the F12 candidate as it stood *before* the audits and remain accurate for that scope only.
+> ### Shipped 2026-07-20
+>
+> The candidate is **merged and deployed**. PR #1 was squash-merged into `main` as `600b045`, and the
+> documentation website is live at **https://ebrain.vercel.app** (40 pages, 38 documentation routes,
+> strict CSP, HSTS, Speed Insights). A fourth independent pass over the round-3 fixes was commissioned
+> in parallel; read `docs/AUDIT-F7-F12-PASS4.md` if it is present before assuming this tree is final.
+>
+> **F-A3 is resolved as an owner decision, not a defect:** the repository stays **private** for now
+> while the site is public. GitHub links on the site therefore 404 for visitors, and that is accepted
+> — do not "fix" it by changing visibility, removing the links, or inventing a mirror. Visibility is
+> the owner's call alone.
+>
+> **Your next work is `docs/SPEC-DEMO-AND-DEVPOST.md`** — the one-minute narrated demo and the Devpost
+> submission. Start there, not here. The sections below describe the F12 candidate as it stood
+> *before* the audits and remain accurate for that scope only.
+>
+> **What is deliberately still open**, and is not yours to close without the owner: operator identity
+> in prose and in the `trust.sh` *allow*-lists, and ~26 tracked operator documents (both gated on the
+> visibility decision), plus the two CI hardening items F-C1/F-C2.
+>
+> **What is next after the launch surface:** a substantially improved routing layer and many more
+> providers, including launching a chosen provider directly from manual launch instead of routing to
+> it. Scoped but not specified — do not start it from this document.
 >
 > **Two things a new maker gets wrong here:** (1) the deny policy is now user-owned local
 > configuration with an **empty** shipped default -- never re-introduce a compiled-in list, and never
