@@ -4,6 +4,61 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-21 (later) -- fifth audit pass: it has to work on a machine that is not mine
+
+The fifth independent pass (`docs/AUDIT-F7-F12-PASS5.md`, verdict `[AUDIT_FAIL]`) found the previous
+entry's fix applied to the wrong layer, plus a second fabricated citation. Remediated against a
+written acceptance contract this time: `docs/SPEC-PORTABILITY-HARDENING.md`, with every fix's
+pre-fix failure output recorded in `docs/MAKER-REPORT-PORTABILITY.md`.
+
+**The pattern, stated plainly.** Five passes, five `[AUDIT_FAIL]`, one shape: every check had been
+run in the one environment where eBrain already works -- this laptop, checkout at `$HOME/eBrain`,
+`EBRAIN_HOME` already exported by an ancestor process, engine modules already installed, and an
+`en_US.UTF-8` locale. A developer who installs this gets none of those. The spec now makes "not the
+author's machine" the acceptance environment.
+
+- **F-S1 (BLOCKING) -- the location was resolved and then never handed across the process boundary.**
+  Eleven launchers found the right checkout, assigned it to a plain shell variable, and `exec`ed into
+  `bun` -- where a plain assignment is not inherited. `cli/up.ts` read `undefined`, fell back to
+  `$HOME/eBrain`, and wrote that guess into the MCP command string registered with **every agent**.
+  The shell layer knew; the process that acts on the answer did not. Now two independent mechanisms:
+  `ebrain_export_home` exports from shell, and `cli/ebrain-home.ts` resolves from `import.meta.dir`,
+  so TypeScript never needs to be told. `cli/launcher-env.test.ts` spawns the shipped launchers and
+  asserts what the grandchild process actually inherits.
+- **F-S2 -- systemd units hardcoded `%h/eBrain`,** a spelling the F-Q1 guard could not see. They are
+  templates now, installed by `scripts/install-dream-timer.sh`, which aborts if substitution fails.
+- **F-S3 -- a launcher symlinked onto PATH died before the resolver ran.** Launchers resolve their
+  own symlink first, degrading gracefully where `readlink -f` is absent.
+- **F-S4 -- `--help` ate a real operation.** `context update <id> --content --help` printed usage and
+  exited 0 instead of setting the content to the literal string. Help is now only help in a flag
+  position (`cli/help-flag.ts`, which carries the full three-pass history of getting this wrong).
+- **F-S5/F-S6 -- two guards that were narrower than they claimed.** The hardcoded-path guard now
+  covers shell, systemd and TypeScript spellings; dispatch detection matches statement shape rather
+  than text.
+- **F-S7 -- the overlay hook copies had drifted from the resolver.** They validate the recorded path
+  and tolerate CRLF now. The Codex secret guard still fails open, but no longer *silently*: it warns,
+  and `EBRAIN_GUARD_STRICT=1` makes it deny.
+
+**Found by running the suite the way the spec demands, reported by no audit.** Under `LC_ALL=C` --
+the default in containers and in systemd units with no locale -- tmux substitutes `_` for the TAB in
+`-F` format output, so `listSessions` parsed every row as a single field: mangled name, empty cwd,
+creation date of 1970. Everything that resolves a session by name was silently wrong on every machine
+without a configured locale. Fixed with a printable separator; `cli/locale-portability.test.ts` runs
+the real CLI against real tmux in a real `C`-locale process.
+
+**Integrity.** The previous entry cited `docs/AUDIT-F7-F12-PASS4.md`. That file has never existed --
+a second false claim of the same class as "the last two sites", written in the commit that corrected
+the first. Corrected in place above, and `cli/citations.test.ts` now fails the build on any citation
+that does not resolve. It found twenty broken references on its first run; fourteen pre-existing ones
+are a frozen baseline that can only shrink.
+
+Verification: CLI **370/0** identically under the normal locale and under `LC_ALL=C` with no
+`EBRAIN_HOME` set, TUI **442/0**, Astro check 0/0/0 and 40 pages built, CI green from a clean
+checkout. 29 new tests, each run against the pre-fix code first. **Not merged: no independent
+verdict yet.**
+
+---
+
 ## 2026-07-21 -- fourth audit pass: one place decides where eBrain lives
 
 The fourth independent pass (verdict `[AUDIT_FAIL]`) found that the previous entry's claim was
