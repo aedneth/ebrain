@@ -9,6 +9,7 @@
 import { existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { resolveEbrainHome } from "./ebrain-home.ts";
 import { Client } from "../vendor/gbrain/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js";
 import { StreamableHTTPClientTransport } from "../vendor/gbrain/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js";
 import { Server } from "../vendor/gbrain/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js";
@@ -34,7 +35,7 @@ export interface BridgeCommandConfig {
   args: string[];
 }
 
-export function bridgeCommandPath(ebrainHome = process.env.EBRAIN_HOME || join(HOME, "eBrain")): string {
+export function bridgeCommandPath(ebrainHome = resolveEbrainHome()): string {
   return join(ebrainHome, "scripts", "ebrain-mcp-bridge");
 }
 

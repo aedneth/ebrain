@@ -73,3 +73,18 @@ ebrain_resolve_home() {
 
 	printf '%s/eBrain' "$HOME"
 }
+
+# ebrain_export_home <caller-path> — resolve AND export, which is what every launcher actually wants.
+#
+# Pass 5 (F-S1): every launcher wrote `EBRAIN_HOME="$(ebrain_resolve_home ...)"` — a plain assignment.
+# The resolved path was substituted into the `exec` argument, so the right file ran, but a plain
+# assignment is not part of a child process's environment. `cli/up.ts` read `process.env.EBRAIN_HOME`
+# back as undefined and guessed `$HOME/eBrain`, then wrote that guess into the MCP command string
+# registered with every agent. The launcher knew the answer and did not pass it on.
+#
+# Callers use this, not the bare resolver, wherever the value crosses into a child process. The
+# resolver stays pure for tests and for the rare caller that only wants to inspect.
+ebrain_export_home() {
+	EBRAIN_HOME=$(ebrain_resolve_home "${1:-$0}")
+	export EBRAIN_HOME
+}

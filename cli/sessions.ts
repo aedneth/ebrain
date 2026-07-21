@@ -105,8 +105,30 @@ function classifyTmuxError(stderr: string): TmuxErrorType {
 export interface SessionRow { name: string; agent: string; slug: string; cwd: string; created: string; attached: boolean }
 export type Result<T> = { ok: true } & T | { ok: false; error: TmuxError };
 
+/**
+ * Field separator for tmux `-F` output. NOT a tab.
+ *
+ * tmux sanitizes non-printable characters in format output according to the locale, and under the
+ * `C`/`POSIX` locale it considers TAB non-printable and substitutes `_`:
+ *
+ *   LC_ALL=C            → ebr-test-probe-1784664292738_1784664292_0_/tmp
+ *   LC_ALL=en_US.UTF-8  → ebr-test-probe-1784664292738<TAB>1784664292<TAB>0<TAB>/tmp
+ *
+ * With the tab gone, every row parsed as one field: a mangled name, an empty cwd, and a creation
+ * date of 1970. `list`, and anything that looks a session up by name, silently returned garbage —
+ * on every machine with no locale configured, which is the default in containers, in systemd units
+ * without an explicit locale, and on minimal servers. It worked on the author's desktop because
+ * that desktop is en_US.UTF-8.
+ *
+ * A printable separator is not subject to that substitution. `|` cannot occur in the first three
+ * fields (session names are restricted to [A-Za-z0-9_-], the other two are numeric), and the path —
+ * the only field that could contain one — is last and is parsed as the remainder.
+ */
+const TMUX_FIELD_SEP = "|";
+
 export async function listSessions(): Promise<Result<{ sessions: SessionRow[] }>> {
-  const r = await tmuxRaw(["list-sessions", "-F", "#{session_name}\t#{session_created}\t#{session_attached}\t#{session_path}"]);
+  const format = ["#{session_name}", "#{session_created}", "#{session_attached}", "#{session_path}"].join(TMUX_FIELD_SEP);
+  const r = await tmuxRaw(["list-sessions", "-F", format]);
   if ("spawnError" in r) return { ok: false, error: { type: "tmux-not-installed", message: `tmux not available: ${r.spawnError}` } };
   if (r.code !== 0) {
     const type = classifyTmuxError(r.stderr);
@@ -116,7 +138,10 @@ export async function listSessions(): Promise<Result<{ sessions: SessionRow[] }>
   const sessions: SessionRow[] = [];
   for (const line of r.stdout.split("\n")) {
     if (!line.trim()) continue;
-    const [name, createdEpoch, attachedFlag, cwd] = line.split("\t");
+    // The path is last and may itself contain the separator, so take it as the remainder.
+    const parts = line.split(TMUX_FIELD_SEP);
+    const [name, createdEpoch, attachedFlag] = parts;
+    const cwd = parts.slice(3).join(TMUX_FIELD_SEP);
     if (!name || !name.startsWith(SESSION_PREFIX)) continue;
     const parsed = parseSessionName(name);
     if (!parsed) continue;

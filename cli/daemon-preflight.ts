@@ -10,12 +10,13 @@
 import { chmodSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { resolveEbrainHome } from "./ebrain-home.ts";
 import { assertNoClientSources, isClientSource } from "./isolation.ts";
 import { ensureRemoteCliConfig, type SourceLike } from "./mcp-remote.ts";
 import { DEFAULT_PORT, redactSecrets, runProcess } from "./mcp-token.ts";
 
 const HOME = homedir();
-const EBRAIN_HOME = process.env.EBRAIN_HOME || join(HOME, "eBrain");
+const EBRAIN_HOME = resolveEbrainHome();
 const CFG = join(HOME, ".config", "ebrain");
 
 interface GbrainSourceJson {

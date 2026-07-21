@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, renameSync, rmSync } from "fs";
 import { dirname, join } from "path";
 import { homedir } from "os";
+import { resolveEbrainHome } from "./ebrain-home.ts";
 
 export const EBRAIN_MCP_TOKEN_ENV = "EBRAIN_MCP_TOKEN";
 export const TOKEN_STORE_BASENAME = "mcp-token.env";
@@ -252,7 +253,7 @@ export async function ensureToken(opts: {
 
   if (opts.mode === "boot" || opts.allowAuthCreate) {
     const token = await mintWithAuthCreate({
-      ebrainHome: opts.ebrainHome ?? process.env.EBRAIN_HOME ?? join(homedir(), "eBrain"),
+      ebrainHome: opts.ebrainHome ?? resolveEbrainHome(),
       cwd: join(paths.configDir, "wd"),
       timeoutMs: opts.timeoutMs,
     });

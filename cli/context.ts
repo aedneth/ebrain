@@ -12,6 +12,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { isHelpRequest } from "./help-flag.ts";
 import { scrubSecrets } from "./sessions.ts";
 import { referencesDeniedRepo } from "./deny-policy.ts";
 import { readWorkspaceStore } from "./workspaces.ts";
@@ -485,11 +486,9 @@ const USAGE = "usage: ebrain context <list|proposals|init|get|update|propose|rev
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  // Pass-4 F-Q3: `-h` is only help in the FLAG position. Scanning the whole argv made
-  // `ebrain context get -h` print usage and exit 0 instead of rejecting an invalid pack id — a
-  // silent no-op where the user asked for a real operation. The long form is unambiguous (no
-  // subcommand takes `--help` as a value) so it still counts anywhere.
-  if (argv[0] === "--help" || argv[0] === "-h" || argv.includes("--help")) {
+  // Help is help only in a flag position — see cli/help-flag.ts for why this took three passes.
+  // `--content --help` sets the content to "--help"; it does not print usage.
+  if (isHelpRequest(argv, VALUE_FLAGS)) {
     console.log(USAGE);
     return;
   }

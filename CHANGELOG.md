@@ -6,9 +6,18 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ## 2026-07-21 -- fourth audit pass: one place decides where eBrain lives
 
-The fourth independent pass (`docs/AUDIT-F7-F12-PASS4.md`, verdict `[AUDIT_FAIL]`) found that the
-previous entry's claim was false, and that the defect it claimed to close was still live in the
-single most load-bearing place it could be.
+The fourth independent pass (verdict `[AUDIT_FAIL]`) found that the previous entry's claim was
+false, and that the defect it claimed to close was still live in the single most load-bearing place
+it could be.
+
+> **Correction (2026-07-21).** This entry originally cited `docs/AUDIT-F7-F12-PASS4.md`. That file
+> has never existed in this repository: the pass-4 report was never written to disk, and the
+> citation was added without checking. It is the same failure as the "last two sites" claim
+> corrected below — an assertion made without running the one command that would have refuted it,
+> written in the very commit that corrected the previous instance. The pass-4 findings themselves
+> are real and are recorded in the F-Q entries below; only the pointer was fabricated.
+> `cli/citations.test.ts` now fails the build if any tracked document cites a repository file that
+> does not exist.
 
 - **F-Q1 (BLOCKING) -- `$HOME/eBrain` was hardcoded in twenty-six places, not two.** Fifteen shell
   entrypoints each rolled their own default and several had no override at all. The worst was
@@ -51,7 +60,8 @@ fail against the pre-fix code.
 
 The F7-F12 candidate shipped. PR #1 was squash-merged into `main` as `600b045` after CI passed on
 `e337b86`; the release branch is retired. A fourth independent pass over the round-3 fixes was
-commissioned in parallel -- see `docs/AUDIT-F7-F12-PASS4.md` if present.
+commissioned in parallel; its findings are recorded in the F-Q entries of the 2026-07-21 entry
+above. (It never produced a report file, despite a later entry citing one — see the correction there.)
 
 - **Website live at https://ebrain.vercel.app** -- Astro static, built on Vercel from the repository
   root (not from `website/`: `website/scripts/sync-assets.ts` copies from the repo-root `assets/`,

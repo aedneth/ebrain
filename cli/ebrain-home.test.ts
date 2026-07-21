@@ -43,8 +43,30 @@ const ALLOWED = new Map<string, string>([
 // A comment mentioning the literal is documentation, not behavior.
 const COMMENT = /^\s*(?:#|\/\/|\*)/;
 
-describe("F-Q1 — the eBrain location is resolved in one place", () => {
-  test("no tracked file hardcodes $HOME/eBrain outside the documented exemptions", () => {
+/**
+ * Pass-5 finding F-S5: the first version of this guard enumerated exactly two spellings, so it was
+ * non-vacuous only against those two. Three ways past it existed in the repository at the time:
+ * splitting the quote (`"$HOME"/eBrain`), systemd's own expansion (`%h/eBrain`, live in an
+ * unfixed unit file), and the TypeScript form `join(homedir(), "eBrain")` — which eight modules used,
+ * and which is where the blocking defect F-S1 actually lived.
+ *
+ * The guard now covers the repository's whole vocabulary for "the home directory", per language.
+ * Adding a file type to eBrain means adding its spelling here; that is the maintenance cost of the
+ * invariant, and it is cheaper than another pass finding the same bug in a new syntax.
+ */
+const HARDCODED_SPELLINGS: Array<{ label: string; pattern: RegExp }> = [
+  // POSIX shell, including split and braced quoting: $HOME/eBrain, ${HOME}/eBrain, "$HOME"/eBrain.
+  { label: "shell $HOME", pattern: /(?:"|')?\$(?:HOME|\{HOME\})(?:"|')?\/eBrain/ },
+  // systemd unit specifier for the user's home.
+  { label: "systemd %h", pattern: /%h\/eBrain/ },
+  // TypeScript/JavaScript path joins against the home directory.
+  { label: "js join(home)", pattern: /join\(\s*(?:homedir\(\)|HOME|process\.env\.HOME)\s*,\s*["'`]eBrain["'`]\s*\)/ },
+  // The same idea written with template or string concatenation.
+  { label: "js concat(home)", pattern: /(?:homedir\(\)|\$\{HOME\})\s*\+?\s*["'`]\/eBrain/ },
+];
+
+describe("F-Q1/F-S5 — the eBrain location is resolved in one place, in every language", () => {
+  test("no tracked file hardcodes the home directory, in any spelling, outside the exemptions", () => {
     const offenders: string[] = [];
     for (const rel of tracked()) {
       if (ALLOWED.has(rel)) continue;
@@ -57,12 +79,44 @@ describe("F-Q1 — the eBrain location is resolved in one place", () => {
       }
       text.split("\n").forEach((line, i) => {
         if (COMMENT.test(line)) return;
-        if (line.includes("$HOME/eBrain") || line.includes("${HOME}/eBrain")) {
-          offenders.push(`${rel}:${i + 1}: ${line.trim()}`);
+        for (const { label, pattern } of HARDCODED_SPELLINGS) {
+          if (pattern.test(line)) {
+            offenders.push(`${rel}:${i + 1} [${label}]: ${line.trim()}`);
+            return;
+          }
         }
       });
     }
     expect(offenders).toEqual([]);
+  });
+
+  test("the guard actually detects each spelling it claims to cover", () => {
+    // Without this, a typo in any pattern above turns that whole class back into a blind spot and
+    // nothing fails — the exact way the previous version of this guard was quietly incomplete.
+    const samples: Array<[string, string]> = [
+      ["shell $HOME", 'BRIDGE="$HOME/eBrain/scripts/ebrain-mcp-bridge"'],
+      ["shell $HOME", 'BRIDGE="${HOME}/eBrain/scripts/x"'],
+      ["shell $HOME", 'BRIDGE="$HOME"/eBrain/scripts/x'],
+      ["systemd %h", "ExecStart=%h/eBrain/scripts/dream-cycle"],
+      ["js join(home)", 'const H = join(homedir(), "eBrain");'],
+      ["js join(home)", 'const H = join(HOME, "eBrain");'],
+      ["js concat(home)", 'const H = homedir() + "/eBrain";'],
+    ];
+    for (const [label, line] of samples) {
+      const hit = HARDCODED_SPELLINGS.find((s) => s.pattern.test(line));
+      expect(`${line} => ${hit?.label ?? "UNDETECTED"}`).toBe(`${line} => ${label}`);
+    }
+  });
+
+  test("the guard does not fire on the sanctioned resolver call", () => {
+    const clean = [
+      "const EBRAIN_HOME = resolveEbrainHome();",
+      'ebrain_export_home "${BASH_SOURCE[0]}"',
+      "ExecStart=@EBRAIN_HOME@/scripts/dream-cycle",
+    ];
+    for (const line of clean) {
+      expect(HARDCODED_SPELLINGS.some((s) => s.pattern.test(line))).toBe(false);
+    }
   });
 
   test("the resolver finds a checkout at an arbitrary path with no EBRAIN_HOME", () => {
@@ -110,6 +164,14 @@ describe("F-Q1 — the eBrain location is resolved in one place", () => {
     for (const rel of needsIt) {
       const text = readFileSync(join(ROOT, rel), "utf8");
       if (!text.includes("EBRAIN_HOME")) continue; // does not need the location at all
+      // Non-shell artifacts cannot source anything. systemd units are templates whose placeholder is
+      // substituted at install time by scripts/install-dream-timer.sh — which does source the
+      // resolver, and which is covered by the entrypoint scan above. Assert the template shape
+      // instead of the sourcing line, so this stays a real check rather than an exemption.
+      if (!text.startsWith("#!") && !rel.endsWith(".sh")) {
+        if (!text.includes("@EBRAIN_HOME@")) missing.push(`${rel} (no @EBRAIN_HOME@ placeholder)`);
+        continue;
+      }
       if (!text.includes("ebrain-home.sh")) missing.push(rel);
     }
     expect(missing).toEqual([]);

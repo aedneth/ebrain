@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { homedir } from "os";
+import { resolveEbrainHome } from "./ebrain-home.ts";
 import { mcpUrl, DEFAULT_PORT, redactSecrets, runProcess } from "./mcp-token.ts";
 
 export const GBRAIN_REMOTE_CLIENT_SECRET_ENV = "GBRAIN_REMOTE_CLIENT_SECRET";
@@ -223,7 +224,7 @@ export async function ensureRemoteCliConfig(opts: {
   let created = false;
   if (!client) {
     client = await registerOAuthClient({
-      ebrainHome: opts.ebrainHome ?? process.env.EBRAIN_HOME ?? join(homedir(), "eBrain"),
+      ebrainHome: opts.ebrainHome ?? resolveEbrainHome(),
       sourceId,
       federatedRead,
       cwd: opts.cwd ?? join(configDir, "wd"),

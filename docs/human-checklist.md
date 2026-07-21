@@ -28,8 +28,8 @@ related: [SPRINT.md, f5-success-criteria.md, hermes-evaluation.md]
 - [ ] **3b. Corrida supervisada real:** `bash ~/eBrain/scripts/dream-cycle` — mirá `~/.config/ebrain/dream.log` y el audit `~/.gbrain/audit/` (dream-budget JSONL). Confirmá que el gasto es razonable.
 - [ ] **3c. Habilitar el timer nocturno** (03:30, catch-up al boot):
   ```bash
-  cp ~/eBrain/scripts/systemd/ebrain-dream.{service,timer} ~/.config/systemd/user/
-  systemctl --user daemon-reload && systemctl --user enable --now ebrain-dream.timer
+  bash "$EBRAIN_HOME/scripts/install-dream-timer.sh"
+  systemctl --user enable --now ebrain-dream.timer
   systemctl --user list-timers ebrain-dream.timer
   ```
 

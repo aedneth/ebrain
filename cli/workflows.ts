@@ -20,11 +20,13 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, realpathSync, statSync, 
 import { basename, isAbsolute, join, relative, resolve, sep } from "path";
 import { createHash } from "crypto";
 import { homedir } from "os";
+import { resolveEbrainHome } from "./ebrain-home.ts";
+import { isHelpRequest } from "./help-flag.ts";
 import { isClientPath, scrubSecrets } from "./sessions.ts";
 import { recentLearnings, recentSessions, type LearningEntry, type SessionEntry } from "./memory.ts";
 
 const HOME = homedir();
-const EBRAIN_HOME = process.env.EBRAIN_HOME || join(HOME, "eBrain");
+const EBRAIN_HOME = resolveEbrainHome();
 const CONFIG_DIR = process.env.EBRAIN_CONFIG_DIR || join(HOME, ".config", "ebrain");
 const DEFAULT_STORE_DIR = process.env.EBRAIN_WORKFLOWS_DIR || join(CONFIG_DIR, "workflows");
 const DEFAULT_SKILLS_DIR = process.env.EBRAIN_SKILLS_DIR || join(CONFIG_DIR, "skills");
@@ -557,6 +559,9 @@ export async function skillifyWorkflow(id: string, opts: SkillifyOptions = {}): 
   return { ok: true, path: outPath, workflow: summarizeWorkflow(w) };
 }
 
+/** Flags whose next token is a value, not a flag position. Shared with the help-flag rule. */
+const VALUE_FLAGS = new Set(["--limit", "--min-count"]);
+
 export function parseArgs(args: string[]): { sub: string; json: boolean; yes: boolean; limit: number; minCount: number; id: string; query: string } {
   const sub = args[0] && !args[0].startsWith("--") ? args[0] : "list";
   const rest = args.slice(sub === args[0] ? 1 : 0);
@@ -591,11 +596,8 @@ const USAGE =
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  // Pass-4 F-Q3: `-h` is only help in the FLAG position. Scanning the whole argv made
-  // `ebrain context get -h` print usage and exit 0 instead of rejecting an invalid pack id — a
-  // silent no-op where the user asked for a real operation. The long form is unambiguous (no
-  // subcommand takes `--help` as a value) so it still counts anywhere.
-  if (argv[0] === "--help" || argv[0] === "-h" || argv.includes("--help")) {
+  // Help is help only in a flag position — see cli/help-flag.ts for why this took three passes.
+  if (isHelpRequest(argv, VALUE_FLAGS)) {
     console.log(USAGE);
     return;
   }

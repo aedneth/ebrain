@@ -1,13 +1,16 @@
 [Unit]
 Description=ebrain nightly dream cycle (gbrain consolidation, lock-aware)
-Documentation=file://%h/eBrain/docs/runbook.md
+# @EBRAIN_HOME@ is substituted by scripts/install-dream-timer.sh with the resolved checkout.
+# This file used to hardcode %h/eBrain, which is only correct for a checkout at $HOME/eBrain —
+# the same defect class the shared resolver exists to close (pass 5, F-S2).
+Documentation=file://@EBRAIN_HOME@/docs/runbook.md
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
 # El script es lock-aware: aborta limpio si un MCP serve tiene el lock de PGLite.
-ExecStart=%h/eBrain/scripts/dream-cycle
+ExecStart=@EBRAIN_HOME@/scripts/dream-cycle
 # Baja prioridad (laptop 4GB): no competir con trabajo interactivo.
 Nice=15
 IOSchedulingClass=idle

@@ -25,6 +25,80 @@ function documentedHelpCommands(): string[] {
   return [...found].sort();
 }
 
+/**
+ * The subcommand names the dispatcher actually branches on.
+ *
+ * This is deliberately NOT a lexer. The first attempt at closing F-S6 stripped comments and string
+ * literals with regexes, and a regex literal in cli/workflows.ts — `/[`"“']([^`"”']{4,80})[`"”']/` —
+ * contains a backtick, so the template-literal stripper swallowed 130 lines including every dispatch
+ * branch, and the file silently reported zero subcommands. Hand-rolling a JavaScript tokenizer to
+ * check a JavaScript file is the same over-reach that produced the bug being fixed.
+ *
+ * Instead: a name counts only when the line it appears on IS a dispatch statement — an `if` whose
+ * condition tests a parsed-args `.sub`, or a `case` label inside a `switch` on that same field.
+ * That is a property of statement shape, not of tokenization, so:
+ *   - `// if (args.sub === "review")` is a comment, not a statement → excluded;
+ *   - "die(`try: args.sub === \"review\"`)" is a call, not an `if` → excluded;
+ *   - `switch (state) { case "review": ... }` switches on something that is not `.sub` → excluded.
+ * All three are the evasions the pass-5 auditor demonstrated, and each is asserted below.
+ */
+export function dispatchedSubcommands(source: string): Set<string> {
+  const found = new Set<string>();
+  const lines = source.split("\n");
+
+  let inBlockComment = false;
+  // Depth of the `switch (<x>.sub)` we are currently inside, or null when we are not in one.
+  let switchDepth: number | null = null;
+  let depth = 0;
+
+  for (const raw of lines) {
+    let line = raw;
+
+    if (inBlockComment) {
+      const end = line.indexOf("*/");
+      if (end === -1) continue;
+      line = line.slice(end + 2);
+      inBlockComment = false;
+    }
+    const blockStart = line.indexOf("/*");
+    if (blockStart !== -1 && !line.includes("*/", blockStart)) {
+      inBlockComment = true;
+      line = line.slice(0, blockStart);
+    }
+
+    const trimmed = line.trim();
+    // A line-comment or a JSDoc continuation is prose about the code, not the code.
+    const isComment = trimmed.startsWith("//") || trimmed.startsWith("*");
+
+    if (!isComment) {
+      // `if (...)` / `} else if (...)` testing a parsed-args `.sub`. The binding name is not
+      // hardcoded, so renaming `args` to `parsed` does not fail a defect-free change.
+      if (/^(?:\}\s*)?(?:else\s+)?if\s*\(/.test(trimmed)) {
+        for (const m of trimmed.matchAll(/\b[\w.]+\.sub\s*===\s*"([a-z][a-z-]*)"/g)) found.add(m[1]!);
+      }
+
+      if (/^switch\s*\(\s*[\w.]+\.sub\s*\)/.test(trimmed)) switchDepth = depth;
+
+      // A case label counts only at the depth of the switch that opened it, so a nested switch on
+      // an unrelated field cannot contribute labels.
+      if (switchDepth !== null && depth === switchDepth + 1) {
+        const m = trimmed.match(/^case\s+"([a-z][a-z-]*)"\s*:/);
+        if (m) found.add(m[1]!);
+      }
+
+      for (const ch of trimmed) {
+        if (ch === "{") depth += 1;
+        else if (ch === "}") {
+          depth -= 1;
+          if (switchDepth !== null && depth <= switchDepth) switchDepth = null;
+        }
+      }
+    }
+  }
+
+  return found;
+}
+
 function run(command: string, args: string[]) {
   const proc = Bun.spawnSync(["bun", "run", join(ROOT, "cli", `${command}.ts`), ...args], {
     env: { ...(process.env as Record<string, string>), EBRAIN_HOME: ROOT },
@@ -65,10 +139,12 @@ describe("documented --help actually answers", () => {
       // passed as long as the string appeared for any unrelated reason (`accept` survived because
       // an action value happens to be spelled that way). Compare against the names the dispatcher
       // actually branches on instead.
-      const source = readFileSync(join(ROOT, "cli", `${command}.ts`), "utf8");
-      const implemented = new Set<string>();
-      for (const m of source.matchAll(/\b(?:a|args)\.sub === "([a-z-]+)"/g)) implemented.add(m[1]!);
-      for (const m of source.matchAll(/case "([a-z-]+)":/g)) implemented.add(m[1]!);
+      //
+      // Pass-5 F-S6: that fix was narrowed, not closed. `case "x":` matched anywhere still counted,
+      // including a `switch` on an unrelated field (a status, an action, a state) that happens to
+      // share a spelling with a documented subcommand — structurally the same bug as `accept`.
+      // Commented-out and dead code counted too, since the scan never stripped comments.
+      const implemented = dispatchedSubcommands(readFileSync(join(ROOT, "cli", `${command}.ts`), "utf8"));
       expect(implemented.size).toBeGreaterThan(0);
 
       const missing = listed.filter((sub) => !implemented.has(sub));
@@ -76,11 +152,80 @@ describe("documented --help actually answers", () => {
     });
   }
 
+  describe("F-S6 — 'implemented' means dispatched on, not merely spelled", () => {
+    // The three evasions the pass-5 auditor demonstrated against the previous version, verbatim.
+    const evasions: Array<[string, string]> = [
+      ["commented-out dispatch", `// if (args.sub === "review") { doReview(); }`],
+      ["a name inside a string literal", 'die(`try: args.sub === "review"`);'],
+      ["a case label on an unrelated field", ['switch (state) {', '  case "review":', "    return markReviewed();", "}"].join("\n")],
+    ];
+    for (const [label, snippet] of evasions) {
+      test(`does not count ${label}`, () => {
+        expect([...dispatchedSubcommands(snippet)]).toEqual([]);
+      });
+    }
+
+    test("still counts the two real dispatch forms", () => {
+      expect([...dispatchedSubcommands(`if (args.sub === "review") { go(); }`)]).toEqual(["review"]);
+      expect([...dispatchedSubcommands(`if (a.sub === "get") { go(); }`)]).toEqual(["get"]);
+      expect([...dispatchedSubcommands(['switch (args.sub) {', '  case "list":', "    return l();", "}"].join("\n"))]).toEqual(["list"]);
+      // A differently-named parsed-args binding must keep working: the old pattern hardcoded
+      // `a` or `args`, so a rename would have failed the build for a defect-free change.
+      expect([...dispatchedSubcommands(`if (parsed.sub === "show") { go(); }`)]).toEqual(["show"]);
+    });
+
+    test("a nested switch on another field does not leak its labels", () => {
+      const src = [
+        "switch (args.sub) {",
+        '  case "list": {',
+        "    switch (state) {",
+        '      case "bogus":',
+        "        return x();",
+        "    }",
+        "  }",
+        "}",
+      ].join("\n");
+      expect([...dispatchedSubcommands(src)].sort()).toEqual(["list"]);
+    });
+
+    test("the real CLI files each report a non-empty, plausible dispatch set", () => {
+      // The regression that motivated rewriting this extractor: its first version returned an
+      // EMPTY set for cli/workflows.ts — a stripper bug — which would have made the
+      // names-only-subcommands-that-exist check vacuous for that command rather than failing it.
+      for (const command of ["context", "procedures", "workflows"]) {
+        const subs = dispatchedSubcommands(readFileSync(join(ROOT, "cli", `${command}.ts`), "utf8"));
+        expect(`${command}:${subs.size > 0}`).toBe(`${command}:true`);
+      }
+    });
+  });
+
   test("`-h` in a value position is not treated as help (F-Q3)", () => {
     // `ebrain context get -h` used to print usage and exit 0 — the user asked for a real
     // operation and silently got nothing. It must reach the command's own validation.
     const res = run("context", ["get", "-h"]);
     expect(res.stdout).not.toStartWith("usage:");
     expect(res.code).not.toBe(0);
+  });
+
+  test("`--help` as the VALUE of a value-taking flag is data, not help (F-S4)", () => {
+    // The pass-4 fix left the long form scanning all of argv, justified by the claim that no
+    // subcommand takes `--help` as a value. `--content` and `--evidence` take free text, so
+    // setting a pack's content to the literal string "--help" printed usage and exited 0 —
+    // a silent no-op indistinguishable from success. Verbatim from the pass-5 reproduction.
+    const res = run("context", ["update", "some-pack-id", "--content", "--help", "--yes"]);
+    expect(res.stdout).not.toStartWith("usage:");
+    // It must reach the real operation: either it performs it or it rejects the pack id. Either
+    // is correct; printing usage and claiming success is not.
+    expect(res.code).not.toBe(0);
+  });
+
+  test("`--help` still works in a flag position, before and after a subcommand", () => {
+    // The other direction: the F-P6 fix must survive. A reader following the documented
+    // `ebrain context --help` gets help on stdout with exit 0, not an error on stderr.
+    for (const argv of [["--help"], ["get", "--help"]]) {
+      const res = run("context", argv);
+      expect(res.stdout).toStartWith("usage:");
+      expect(res.code).toBe(0);
+    }
   });
 });
