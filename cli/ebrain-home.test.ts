@@ -12,16 +12,47 @@
  * README instructs, got an agent integration that failed silently.
  */
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 import { mkdtempSync, rmSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 const ROOT = join(import.meta.dir, "..");
 
-function tracked(): string[] {
-  const proc = Bun.spawnSync(["git", "-C", ROOT, "ls-files"], { stdout: "pipe" });
-  return proc.stdout.toString().split("\n").filter(Boolean);
+// Directories that are never eBrain source: dependencies, vendored upstreams, build output, VCS.
+// A filesystem walk must skip these or it drowns in third-party matches — and, worse, would flag a
+// dependency's own `$HOME/eBrain` as an eBrain defect.
+const SKIP_DIRS = new Set([".git", "node_modules", "vendor", "dist", ".astro", ".vercel", "coverage"]);
+
+/**
+ * Every source file to scan. Pass 6 (F-T1) found the previous implementation — a bare `git ls-files`
+ * whose stdout was `.split("\n")` — return `[]` whenever git is absent or fails. eBrain ships as a
+ * tarball, a `git archive`, a Docker `COPY`, an `npm pack`: none of those is a git checkout, and in
+ * every one of them the guard silently passed over an empty list. The invariant it exists to hold
+ * (I3: no file reintroduces a hardcoded home) had zero enforcement in exactly the environments a
+ * user installs from.
+ *
+ * So this no longer depends on git. It walks the working tree — the actual bytes that ship — and
+ * falls back to git only never. If the walk itself yields nothing, that is a bug in the walk, not a
+ * clean repo, and the canary test below fails loudly rather than passing vacuously.
+ */
+function sourceFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const abs = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (SKIP_DIRS.has(entry.name)) continue;
+        // Skip local dot-directories (.claude, .brain, …) but keep .github for CI yaml.
+        if (entry.name.startsWith(".") && entry.name !== ".github") continue;
+        walk(abs);
+      } else if (entry.isFile()) {
+        out.push(relative(ROOT, abs));
+      }
+    }
+  };
+  walk(ROOT);
+  return out;
 }
 
 // Each exemption is a place the literal is CORRECT, with the reason. A new entry here is a
@@ -59,35 +90,83 @@ const HARDCODED_SPELLINGS: Array<{ label: string; pattern: RegExp }> = [
   { label: "shell $HOME", pattern: /(?:"|')?\$(?:HOME|\{HOME\})(?:"|')?\/eBrain/ },
   // systemd unit specifier for the user's home.
   { label: "systemd %h", pattern: /%h\/eBrain/ },
+  // Tilde spelling (pass 6, F-T14). The two live occurrences were display strings, now removed; this
+  // keeps the spelling from creeping back into a resolution site. Matches `~/eBrain` as a path start.
+  { label: "tilde ~", pattern: /(?:^|["'`\s(=:])~\/eBrain/ },
   // TypeScript/JavaScript path joins against the home directory.
   { label: "js join(home)", pattern: /join\(\s*(?:homedir\(\)|HOME|process\.env\.HOME)\s*,\s*["'`]eBrain["'`]\s*\)/ },
   // The same idea written with template or string concatenation.
   { label: "js concat(home)", pattern: /(?:homedir\(\)|\$\{HOME\})\s*\+?\s*["'`]\/eBrain/ },
 ];
 
-describe("F-Q1/F-S5 — the eBrain location is resolved in one place, in every language", () => {
-  test("no tracked file hardcodes the home directory, in any spelling, outside the exemptions", () => {
-    const offenders: string[] = [];
-    for (const rel of tracked()) {
-      if (ALLOWED.has(rel)) continue;
-      if (rel.endsWith(".md") || rel.startsWith("docs/")) continue; // prose
-      let text: string;
-      try {
-        text = readFileSync(join(ROOT, rel), "utf8");
-      } catch {
-        continue; // binary or unreadable
-      }
-      text.split("\n").forEach((line, i) => {
-        if (COMMENT.test(line)) return;
-        for (const { label, pattern } of HARDCODED_SPELLINGS) {
-          if (pattern.test(line)) {
-            offenders.push(`${rel}:${i + 1} [${label}]: ${line.trim()}`);
-            return;
-          }
-        }
-      });
+/** Scan the source tree for hardcoded-home spellings, returning `path:line [label]: text` offenders. */
+function scanForHardcodedHome(files: string[]): string[] {
+  const offenders: string[] = [];
+  for (const rel of files) {
+    if (ALLOWED.has(rel)) continue;
+    if (rel.endsWith(".md") || rel.startsWith("docs/")) continue; // prose
+    let text: string;
+    try {
+      text = readFileSync(join(ROOT, rel), "utf8");
+    } catch {
+      continue; // binary or unreadable
     }
-    expect(offenders).toEqual([]);
+    text.split("\n").forEach((line, i) => {
+      if (COMMENT.test(line)) return;
+      for (const { label, pattern } of HARDCODED_SPELLINGS) {
+        if (pattern.test(line)) {
+          offenders.push(`${rel}:${i + 1} [${label}]: ${line.trim()}`);
+          return;
+        }
+      }
+    });
+  }
+  return offenders;
+}
+
+describe("F-Q1/F-S5 — the eBrain location is resolved in one place, in every language", () => {
+  test("the file scan is not empty — the guard cannot pass over nothing (F-T1)", () => {
+    // The previous version returned [] whenever git was absent, so every assertion below passed
+    // vacuously in a tarball / git archive / Docker COPY — exactly what a user installs from. If
+    // this list is ever empty, the walk is broken and the whole guard is meaningless; fail loudly.
+    const files = sourceFiles();
+    expect(files.length).toBeGreaterThan(50);
+    expect(files).toContain("harness/core/ebrain-home.sh");
+    expect(files).toContain("cli/up.ts");
+  });
+
+  test("the scanner actually catches a planted offender in a real file on disk (F-T1 canary)", () => {
+    // Prove the scan reads bytes and flags them, in the SAME environment the real test runs in —
+    // not against an in-memory string. Pass 6 planted three offending files in a non-git checkout
+    // and got 6 pass / 0 fail; this is the guard that would have caught that.
+    const base = mkdtempSync(join(tmpdir(), "ebr-canary-"));
+    try {
+      const mirror = join(base, "cli");
+      Bun.spawnSync(["mkdir", "-p", mirror]);
+      const planted = join(mirror, "planted-canary.ts");
+      Bun.write(planted, 'export const H = join(homedir(), "eBrain");\n');
+      // Scan the sandbox the same way sourceFiles scans ROOT.
+      const files: string[] = [];
+      const walk = (d: string) => {
+        for (const e of readdirSync(d, { withFileTypes: true })) {
+          const abs = join(d, e.name);
+          if (e.isDirectory()) walk(abs);
+          else files.push(relative(base, abs));
+        }
+      };
+      walk(base);
+      const offenders = files.flatMap((rel) => {
+        const text = readFileSync(join(base, rel), "utf8");
+        return HARDCODED_SPELLINGS.some((s) => s.pattern.test(text)) ? [rel] : [];
+      });
+      expect(offenders).toContain("cli/planted-canary.ts");
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  test("no source file hardcodes the home directory, in any spelling, outside the exemptions", () => {
+    expect(scanForHardcodedHome(sourceFiles())).toEqual([]);
   });
 
   test("the guard actually detects each spelling it claims to cover", () => {
@@ -98,6 +177,7 @@ describe("F-Q1/F-S5 — the eBrain location is resolved in one place, in every l
       ["shell $HOME", 'BRIDGE="${HOME}/eBrain/scripts/x"'],
       ["shell $HOME", 'BRIDGE="$HOME"/eBrain/scripts/x'],
       ["systemd %h", "ExecStart=%h/eBrain/scripts/dream-cycle"],
+      ["tilde ~", 'const p = "~/eBrain/harness/core/NORMS.md";'],
       ["js join(home)", 'const H = join(homedir(), "eBrain");'],
       ["js join(home)", 'const H = join(HOME, "eBrain");'],
       ["js concat(home)", 'const H = homedir() + "/eBrain";'],
@@ -153,7 +233,7 @@ describe("F-Q1/F-S5 — the eBrain location is resolved in one place, in every l
   test("every shell entrypoint that needs the location sources the one resolver", () => {
     // Sourcing it is what makes the policy shared. A script that computes its own root is how the
     // twenty-three copies happened in the first place.
-    const needsIt = tracked().filter(
+    const needsIt = sourceFiles().filter(
       (rel) =>
         (rel.startsWith("scripts/") || rel.startsWith("harness/core/")) &&
         !ALLOWED.has(rel) &&

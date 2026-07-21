@@ -47,6 +47,8 @@ export function dispatchedSubcommands(source: string): Set<string> {
   const lines = source.split("\n");
 
   let inBlockComment = false;
+  // Are we inside a multi-line template literal at the start of this line? (pass 6, F-T9)
+  let inTemplate = false;
   // Depth of the `switch (<x>.sub)` we are currently inside, or null when we are not in one.
   let switchDepth: number | null = null;
   let depth = 0;
@@ -70,7 +72,25 @@ export function dispatchedSubcommands(source: string): Set<string> {
     // A line-comment or a JSDoc continuation is prose about the code, not the code.
     const isComment = trimmed.startsWith("//") || trimmed.startsWith("*");
 
-    if (!isComment) {
+    // Whether the dispatch scan should look at this line: not a comment, and not sitting inside a
+    // multi-line template literal (F-T9). The evasion was a dispatch-shaped example line inside a
+    // `USAGE = \`...\`` string, which line-at-a-time detection counted as real. We do NOT strip
+    // strings/regex to find this (that lexer path caused the F-S6 backtick bug); we only track
+    // whether the line STARTS inside a template. A genuine dispatch statement never does.
+    const openInThisLine = inTemplate;
+
+    // Update template state for the NEXT line. Count backticks, but ignore any line that carries a
+    // regex literal or a same-line balanced string — otherwise workflows.ts's `/[`"“']/` (3
+    // backticks, odd) would wrongly flip us into template mode and hide every dispatch after it,
+    // which is the exact F-S6 failure. A real multi-line template opener is a line ending in an
+    // unclosed backtick with no `/` regex context; the simplest sound signal is: a line that is an
+    // assignment/return/call ending with a lone backtick.
+    const backtickCount = (trimmed.match(/`/g) ?? []).length;
+    if (!isComment && backtickCount % 2 === 1 && !/[/]/.test(trimmed.replace(/`[^`]*`/g, ""))) {
+      inTemplate = !inTemplate;
+    }
+
+    if (!isComment && !openInThisLine) {
       // `if (...)` / `} else if (...)` testing a parsed-args `.sub`. The binding name is not
       // hardcoded, so renaming `args` to `parsed` does not fail a defect-free change.
       if (/^(?:\}\s*)?(?:else\s+)?if\s*\(/.test(trimmed)) {
@@ -196,6 +216,32 @@ describe("documented --help actually answers", () => {
         const subs = dispatchedSubcommands(readFileSync(join(ROOT, "cli", `${command}.ts`), "utf8"));
         expect(`${command}:${subs.size > 0}`).toBe(`${command}:true`);
       }
+    });
+
+    test("a dispatch-shaped line inside a multi-line template literal is not counted (F-T9)", () => {
+      // The pass-6 evasion: a usage/help string is a template literal, and an example line inside it
+      // shaped like a real dispatch (`if (args.sub === "ghostcommand")`) was counted as an
+      // implemented subcommand — so a --help text documenting a command it does NOT have would pass
+      // the "names only real subcommands" check. Real dispatch after the literal must still count.
+      const src = [
+        "const USAGE = `",
+        "  ebrain foo <bar>",
+        '  if (args.sub === "ghostcommand") { ... }   // example shown in help',
+        "`;",
+        'if (args.sub === "real") { doReal(); }',
+      ].join("\n");
+      const subs = [...dispatchedSubcommands(src)];
+      expect(subs).toContain("real");
+      expect(subs).not.toContain("ghostcommand");
+    });
+
+    test("workflows.ts's regex literal with a backtick does not blind the detector (F-T9 trap)", () => {
+      // The template-tracking must NOT reintroduce the F-S6 backtick bug: cli/workflows.ts contains a
+      // regex literal `/[`"“']([^`"”']{4,80})[`"”']/` with an odd number of backticks, which a naive
+      // parity counter would treat as opening a template and hide every dispatch after it. Assert the
+      // full real set survives, not just non-emptiness.
+      const subs = [...dispatchedSubcommands(readFileSync(join(ROOT, "cli", "workflows.ts"), "utf8"))].sort();
+      expect(subs).toEqual(["capture", "ingest", "list", "run", "search", "show", "skillify"]);
     });
   });
 

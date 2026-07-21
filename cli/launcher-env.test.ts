@@ -236,4 +236,20 @@ describe("I1 — TypeScript answers the location question without help from the 
     expect((res.stdout ?? "").trim()).toBe(checkout);
     rmSync(record, { force: true });
   });
+
+  test("bridgeCommandPath registers the resolved checkout's bridge, not the home-dir fallback (F-T10)", () => {
+    // The actual string F-S1 is about — what `ebrain up` writes into every agent's MCP config. Pass
+    // 6 (F-T10) noted no test asserted this: it lived in mcp-bridge.ts behind the MCP SDK import, so
+    // on an unprovisioned checkout the tests that touch it could not even load. bridgeCommandPath now
+    // lives in the SDK-free cli/bridge-path.ts, so it runs here, from the extracted checkout, with a
+    // foreign HOME and no EBRAIN_HOME — the exact condition under which it used to guess $HOME/eBrain.
+    const res = spawnSync(
+      process.execPath,
+      ["-e", `import { bridgeCommandPath } from ${JSON.stringify(join(checkout, "cli", "bridge-path.ts"))}; console.log(bridgeCommandPath());`],
+      { encoding: "utf8", cwd: "/", env: { PATH: "/usr/bin:/bin", HOME: sandboxHome, LC_ALL: "C" } },
+    );
+    expect(res.stderr).toBe("");
+    expect((res.stdout ?? "").trim()).toBe(join(checkout, "scripts", "ebrain-mcp-bridge"));
+    expect(res.stdout ?? "").not.toContain(join(sandboxHome, "eBrain"));
+  });
 });

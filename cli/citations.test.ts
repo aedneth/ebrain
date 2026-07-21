@@ -31,8 +31,15 @@ function tracked(pattern: string[]): string[] {
  * Paths cited inside backticks that look like they name a file in this repository. Restricted to
  * backticked spans with a known source extension, because prose mentions directories, glob shapes,
  * and hypothetical filenames, and flagging those would make this test noise rather than signal.
+ *
+ * `vendor/` is deliberately NOT in the prefix set (pass 6, F-T7): it is a gitignored, vendored
+ * upstream tree, so whether a `vendor/...` citation resolves depends entirely on whether the machine
+ * running the test happens to have that checkout. On the author's machine it exists and the test
+ * failed; on CI and most machines it does not and the test passed — an assertion on machine-local
+ * state, which is the exact anti-pattern this whole effort is about. A vendored path is not a
+ * repository path this project controls, so it is out of scope for citation integrity.
  */
-const CITATION = /`((?:docs|cli|scripts|harness|overlay|website|tui|vendor)\/[\w./-]+\.(?:md|ts|tsx|sh|json|yml|yaml|astro|css|service|timer|in))`/g;
+const CITATION = /`((?:docs|cli|scripts|harness|overlay|website|tui)\/[\w./-]+\.(?:md|ts|tsx|sh|json|yml|yaml|astro|css|service|timer|in))`/g;
 
 /** Documents whose whole purpose is to describe files that do not exist yet, or no longer do. */
 const EXEMPT_DOCS = new Set<string>([
@@ -72,7 +79,6 @@ const KNOWN_BROKEN = new Set<string>([
   "docs/GUARDRAILS.md → docs/trust-map.md",
   "docs/HANDOFF-CLAUDE-F6-CORRECTIONS.md → cli/model-pricing.ts",
   "docs/SPRINT-TUI.md → cli/model-pricing.ts",
-  "docs/SPRINT.md → vendor/gstack/USING_GBRAIN_WITH_GSTACK.md",
   "docs/SPRINT.md → docs/multi-provider-brain-audit.md",
   "docs/SPRINT.md → docs/validation-f4.md",
   "docs/prompts/CLAUDE-DESIGN-BRIEF.md → tui/src/kit/wordmark.ts",

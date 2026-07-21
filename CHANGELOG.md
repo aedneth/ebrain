@@ -4,6 +4,50 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-21 (later still) -- sixth audit pass: the engineering was real, the verification was not
+
+Pass 6 (`/tmp/AUDIT-F7-F12-PASS6.md`, verdict `[AUDIT_FAIL]`) confirmed F-S1 genuinely closed — the
+first substantive "the fix works" result in six passes — then failed the branch on the same
+meta-defect it exists to remove: a guard that passed over nothing, and published numbers that were
+false. Remediated against `docs/SPEC-PORTABILITY-HARDENING.md`; measured evidence in
+`docs/MAKER-REPORT-PASS6-REMEDIATION.md`. **Every number below was produced by a command at write
+time — the standing rule now, after F-T2: measure and paste, never narrate a count from memory.**
+
+- **F-T1 (BLOCKING) -- the hardcoded-path guard was vacuous outside git.** It read `git ls-files`;
+  in a tarball / `git archive` / Docker `COPY` (what a user installs from) that returns nothing and
+  every assertion passed over an empty list. It walks the working tree now, with a non-emptiness
+  canary and an on-disk planted-offender canary. Verified in a real non-git tarball: clean passes,
+  a planted `$HOME/eBrain` and `~/eBrain` both get caught (was 6 pass / 0 fail before).
+- **F-T2 (BLOCKING) -- the published counts were false and self-contradictory** (364 vs 370 vs a real
+  369/1). Root cause was a test asserting on gitignored state (F-T7) plus counts recalled instead of
+  measured. Fixed both; the discipline is now procedural.
+- **F-T3 (HIGH) -- the "no longer silent" secret guard reached 1 of 6 agents.** The wrappers
+  *generated* by `harness/core/install.sh` (Claude/Gemini/Cursor/OpenCode/generic) still failed open
+  silently. They warn now, and `EBRAIN_GUARD_STRICT=1` makes a missing **secret** guard deny (exit 2)
+  while non-security hooks stay fail-open. Verified against the real generated artifact.
+- **F-T4 (HIGH) -- CI set `EBRAIN_HOME`,** short-circuiting the resolver, then that green was cited as
+  portability evidence. CI now runs the CLI suite without it, and again under `LC_ALL=C`.
+- **F-T5 (HIGH) -- `ebrain doctor` failed on every fresh install** (9 FAIL / exit 1), demanding
+  `$CFG` launchers nothing in the repo creates; `ebrain route` dispatched to a nonexistent launcher.
+  Created `scripts/ebrain-route`; `doctor` resolves launchers from `$EBRAIN_HOME/scripts/`; absent
+  user config is a WARN, not a FAIL. Verified fresh: `OK · 10 warn`, exit 0.
+- **F-T6 (HIGH) -- a path with a space broke session management** (7 tests). Fixtures quote via
+  `launchArgv`; a regression drives the full lifecycle under a spaced path. Verified: spaced clone
+  4 fail → 37 pass / 0 fail.
+- **F-T7…F-T15** — gitignored-state assertion removed; the tmux static guard reads the working tree;
+  the dispatch detector skips template literals (F-S6 backtick trap did not recur); `bridgeCommandPath`
+  moved to the SDK-free `cli/bridge-path.ts` so its tests load without the engine; the Codex hook no
+  longer leaks a shell error; the `~/eBrain` tilde spelling is covered; launcher count corrected to 13
+  scripts (12 launchers + installer). F-T11 (private repo) and F-T15 (`.npmrc`, human-read) recorded
+  for Eduardo.
+
+Verification: CLI **383/0** (330 on main; +53), identical under `LC_ALL=C` with no `EBRAIN_HOME`;
+TUI **442/0**; Astro 0/0/0 and 40 pages; every touched shell entrypoint passes `bash -n`. Two
+mistakes made while fixing (a fragile template heuristic caught empirically, a `bash -n` false alarm
+on bun-shebang files) are in the maker report. **Not merged: no independent verdict yet.**
+
+---
+
 ## 2026-07-21 (later) -- fifth audit pass: it has to work on a machine that is not mine
 
 The fifth independent pass (`docs/AUDIT-F7-F12-PASS5.md`, verdict `[AUDIT_FAIL]`) found the previous

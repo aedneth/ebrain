@@ -9,7 +9,12 @@
 # secret-read guard.
 ebrain__looks_like_root() { [ -f "$1/cli/ebrain" ] && [ -d "$1/harness/core" ]; }
 if [ -z "${EBRAIN_HOME:-}" ]; then
-	_rec="$(tr -d '\r\n' < "${XDG_CONFIG_HOME:-$HOME/.config}/ebrain/home" 2>/dev/null || true)"
+	# `[ -r ]` guard BEFORE the redirect (pass 6, F-T13): `< missingfile` makes the shell itself
+	# print "No such file or directory" — the `2>/dev/null` on tr does not suppress the redirect's
+	# own failure — so on a machine where the record was never written this leaked on EVERY guarded
+	# tool call, burying the INACTIVE signal. Same shape the canonical resolver already uses.
+	_rec_file="${XDG_CONFIG_HOME:-$HOME/.config}/ebrain/home"
+	if [ -r "$_rec_file" ]; then _rec="$(tr -d '\r\n' < "$_rec_file")"; else _rec=""; fi
 	if [ -n "$_rec" ] && ebrain__looks_like_root "$_rec"; then
 		EBRAIN_HOME="$_rec"
 	else

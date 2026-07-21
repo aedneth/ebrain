@@ -14,6 +14,7 @@
 
 import { describe, expect, test, afterAll } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");
@@ -59,8 +60,16 @@ describe("session listing survives a machine with no locale configured", () => {
   test("the tmux format string does not use a character tmux may sanitize", () => {
     // Static guard: the defect returns the moment someone reaches for a tab or another control
     // character as a delimiter, and the E2E test above only runs where tmux is installed.
-    const src = spawnSync("git", ["-C", ROOT, "show", ":cli/sessions.ts"], { encoding: "utf8" }).stdout ?? "";
+    //
+    // Pass 6 (F-T8): this read `git show :cli/sessions.ts` — the git INDEX — which is empty outside a
+    // git checkout (tarball, archive, Docker COPY) AND stale for any unstaged edit to the working
+    // tree. Both make the guard vacuous exactly when it matters. Read the working-tree file instead:
+    // that is the byte that ships and the byte a developer is editing.
+    const src = readFileSync(join(ROOT, "cli", "sessions.ts"), "utf8");
     const formats = [...src.matchAll(/"#\{[^"]*\}"/g)].map((m) => m[0]);
+    // Canary: if the pattern ever stops matching the real format strings, this test must fail loudly
+    // rather than iterate over an empty list — the F-T1 emptiness-passes disease in miniature.
+    expect(formats.length).toBeGreaterThan(0);
     for (const fmt of formats) {
       // eslint-disable-next-line no-control-regex
       expect(`${fmt} contains control char: ${/[\x00-\x1f]/.test(fmt)}`).toBe(`${fmt} contains control char: false`);

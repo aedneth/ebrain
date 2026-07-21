@@ -13,7 +13,7 @@ import { constants } from "fs";
 import { dirname, join } from "path";
 import { homedir } from "os";
 import { resolveEbrainHome } from "./ebrain-home.ts";
-import { bridgeCommandConfig, bridgeCommandPath } from "./mcp-bridge.ts";
+import { bridgeCommandConfig, bridgeCommandPath } from "./bridge-path.ts";
 import {
   EBRAIN_MCP_TOKEN_ENV,
   DEFAULT_PORT,

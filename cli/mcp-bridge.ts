@@ -9,7 +9,7 @@
 import { existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { resolveEbrainHome } from "./ebrain-home.ts";
+import { bridgeCommandConfig, bridgeCommandPath, type BridgeCommandConfig } from "./bridge-path.ts";
 import { Client } from "../vendor/gbrain/node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js";
 import { StreamableHTTPClientTransport } from "../vendor/gbrain/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js";
 import { Server } from "../vendor/gbrain/node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js";
@@ -30,18 +30,9 @@ const CFG = join(HOME, ".config", "ebrain");
 const SERVER_NAME = "ebrain";
 const BRIDGE_VERSION = "1";
 
-export interface BridgeCommandConfig {
-  command: string;
-  args: string[];
-}
-
-export function bridgeCommandPath(ebrainHome = resolveEbrainHome()): string {
-  return join(ebrainHome, "scripts", "ebrain-mcp-bridge");
-}
-
-export function bridgeCommandConfig(command = bridgeCommandPath()): BridgeCommandConfig {
-  return { command, args: [] };
-}
+// Re-exported from the SDK-free module (cli/bridge-path.ts) so existing importers keep working while
+// tests can reach these pure functions without loading the MCP SDK (pass 6, F-T10).
+export { bridgeCommandConfig, bridgeCommandPath, type BridgeCommandConfig };
 
 export function resolveBridgeToken(opts: {
   env?: Record<string, string | undefined>;

@@ -24,7 +24,7 @@ add() { CTX="${CTX}$1
 
 add "▶ ebrain: MCP conectado. Usá list_skills/get_skill (skills federadas: ckis+company+gstack+harness, incl. 'remember') y query/search/think (memoria semántica cross-source: Second Brain + Company Brain + agent-memory) ANTES de asumir. Estructura de código → graphify/Dev Brain."
 add "▶ Memoria de escritura: cuando aprendas algo durable, guardalo con 'ebrain remember \"<learning>\"' (permanente, cross-agente). El session log al cerrar es automático."
-add "▶ Normas activas (bloque ebrain-norms, fuente ~/eBrain/harness/core/NORMS.md): secretos = nunca leer/imprimir dotenv/credenciales (guard PreToolUse activo); repos denegados (política local de deny) = deny de exfiltración/push; SOP + maker≠checker (Opus audita al constructor); rastro narrativo; un agente vivo a la vez (RAM 4GB); nunca auto-escalar a frontier."
+add "▶ Normas activas (bloque ebrain-norms, fuente $EBRAIN_HOME/harness/core/NORMS.md): secretos = nunca leer/imprimir dotenv/credenciales (guard PreToolUse activo); repos denegados (política local de deny) = deny de exfiltración/push; SOP + maker≠checker (Opus audita al constructor); rastro narrativo; un agente vivo a la vez (RAM 4GB); nunca auto-escalar a frontier."
 
 # CHANGELOG del repo activo (desde cwd), si existe.
 REPO="$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null || true)"

@@ -76,7 +76,15 @@ export AGENT_NAME=$AGENT_NAME_V
 # Baked in at install time: this wrapper is a copy living outside the checkout, so it
 # has no checkout to walk up to and no EBRAIN_HOME in its environment.
 CANON="$EBRAIN_HOME/harness/core/$core"
-[ -f "\$CANON" ] && exec bash "\$CANON" "\$@"
+if [ -f "\$CANON" ]; then exec bash "\$CANON" "\$@"; fi
+# CANON missing → this hook is INACTIVE. Pass 6 (F-T3): the pass-5 "no longer silent" fix reached
+# only the Codex overlay copy; these generated wrappers — Claude/Gemini/Cursor/OpenCode/generic —
+# still failed open with exit 0 and empty stderr. A disabled SECRET guard that says nothing is
+# indistinguishable from one that ran and allowed the call, so it must announce itself. Strict mode
+# turns the missing secret guard into a denial; non-security hooks stay fail-open (blocking a
+# session start because a context hook moved would be worse than the gap it covers).
+printf 'ebrain harness: %s INACTIVE — %s not found (EBRAIN_HOME=%s)\n' "$core" "\$CANON" "$EBRAIN_HOME" >&2
+if [ "$core" = "guard-secrets.sh" ] && [ "\${EBRAIN_GUARD_STRICT:-0}" = "1" ]; then exit 2; fi
 exit 0
 EOF
       chmod +x "$w" 2>/dev/null || true

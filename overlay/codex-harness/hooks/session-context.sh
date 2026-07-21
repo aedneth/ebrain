@@ -12,7 +12,10 @@ set -uo pipefail
 # the record produced a path with a trailing carriage return that matched nothing.
 ebrain__looks_like_root() { [ -f "$1/cli/ebrain" ] && [ -d "$1/harness/core" ]; }
 if [ -z "${EBRAIN_HOME:-}" ]; then
-	_rec="$(tr -d '\r\n' < "${XDG_CONFIG_HOME:-$HOME/.config}/ebrain/home" 2>/dev/null || true)"
+	# `[ -r ]` guard before the redirect: `< missingfile` makes the shell print an error that
+	# `2>/dev/null` on tr does not suppress (pass 6, F-T13).
+	_rec_file="${XDG_CONFIG_HOME:-$HOME/.config}/ebrain/home"
+	if [ -r "$_rec_file" ]; then _rec="$(tr -d '\r\n' < "$_rec_file")"; else _rec=""; fi
 	if [ -n "$_rec" ] && ebrain__looks_like_root "$_rec"; then
 		EBRAIN_HOME="$_rec"
 	else

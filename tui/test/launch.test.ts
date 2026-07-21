@@ -22,7 +22,7 @@ function launchState(selected = 0, focusRegion = 0): AppState {
   return {
     tab: "launch",
     confirmQuit: false,
-    cwd: "~/eBrain",
+    cwd: "/home/dev/project",
     launch: { selected, task: "", taskCapability: "general", status: "idle", wizard: null },
     focusRegion,
   };

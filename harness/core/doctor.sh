@@ -44,12 +44,22 @@ c_sec(){  [ "$JSON" = 1 ] || printf '\n\033[1m%s\033[0m\n' "$1"; }
 [ "$JSON" = 1 ] || printf '\033[1mebrain doctor\033[0m — %s\n' "$(date '+%Y-%m-%d %H:%M')"
 
 # ── launchers ────────────────────────────────────────────────────────────────
+# Pass 6 (F-T5): this used to demand seven executables in $CFG that NOTHING in the repo creates —
+# only the manual scripts/README.md procedure did, which install.sh never runs. A correctly
+# installed fresh checkout failed here with ten FAILs. The launchers are versioned now and live in
+# $EBRAIN_HOME/scripts/; that is the authoritative location. A $CFG copy is honored if present (a
+# legacy install, or a user who ran the old manual procedure) but is no longer required.
 c_sec "launchers"
+launcher_path() { # echoes the first existing/executable launcher for $1, or nothing
+  if [ -x "$CFG/$1" ]; then printf '%s' "$CFG/$1"; return 0; fi
+  if [ -x "$EBRAIN_HOME/scripts/$1" ]; then printf '%s' "$EBRAIN_HOME/scripts/$1"; return 0; fi
+  return 1
+}
 for f in ebrain-run ebrain-mcp ebrain-route ebrain-q ebrain-brain ebrain-daemon ebrain-up; do
-  if [ -x "$CFG/$f" ]; then c_ok "launcher:$f" "$f"; else c_fail "launcher:$f" "$f falta o no ejecutable ($CFG/$f)"; fi
+  if p="$(launcher_path "$f")"; then c_ok "launcher:$f" "$f ($p)"; else c_fail "launcher:$f" "$f falta o no ejecutable (ni $CFG/$f ni $EBRAIN_HOME/scripts/$f)"; fi
 done
 for f in gbrain-run gbrain-mcp; do
-  if [ -e "$CFG/$f" ]; then c_ok "launcher:compat:$f" "$f compat"; else c_warn "launcher:compat:$f" "$f compat ausente (fallback stdio/legacy podría requerirlo)"; fi
+  if [ -e "$CFG/$f" ] || [ -e "$EBRAIN_HOME/scripts/$f" ]; then c_ok "launcher:compat:$f" "$f compat"; else c_warn "launcher:compat:$f" "$f compat ausente (fallback stdio/legacy podría requerirlo)"; fi
 done
 if command -v ebrain >/dev/null 2>&1; then c_ok "path:ebrain" "ebrain en PATH ($(command -v ebrain))"; else c_warn "path:ebrain" "ebrain no está en PATH (~/.local/bin)"; fi
 
@@ -62,7 +72,12 @@ fi
 
 # ── config ───────────────────────────────────────────────────────────────────
 c_sec "config"
-[ -f "$CFG/routing.yaml" ] && c_ok "config:routing.yaml" "routing.yaml" || c_fail "config:routing.yaml" "routing.yaml falta ($CFG/routing.yaml)"
+# Pass 6 (F-T5): user config (routing.yaml + the config dotenv) is created by `ebrain up` and by the
+# user adding provider keys — a freshly installed checkout legitimately has neither yet. Reporting
+# their absence as a hard FAIL (rc=1) told a correct fresh install it was "broken", the friction this
+# whole effort exists to remove. Absent → WARN with a "run ebrain up" hint (not-configured-yet);
+# present-but-wrong (bad perms) stays a WARN; only real corruption would be a FAIL.
+[ -f "$CFG/routing.yaml" ] && c_ok "config:routing.yaml" "routing.yaml" || c_warn "config:routing.yaml" "routing.yaml aún no creado — corré 'ebrain up' para configurar ($CFG/routing.yaml)"
 if [ -f "$CFG/.env" ]; then
   perm="$(stat -c '%a' "$CFG/.env" 2>/dev/null || echo '?')"
   [ "$perm" = "600" ] && c_ok "config:dotenv:perm" "dotenv de config presente (chmod 600)" || c_warn "config:dotenv:perm" "dotenv presente pero perms=$perm (esperado 600)"
@@ -71,7 +86,7 @@ if [ -f "$CFG/.env" ]; then
     if ( set +u; . "$CFG/.env" >/dev/null 2>&1; [ -n "${!k:-}" ] ); then c_ok "config:env:$k" "$k set"; else c_warn "config:env:$k" "$k no presente en la config"; fi
   done
 else
-  c_fail "config:dotenv" "dotenv de config falta ($CFG/.env)"
+  c_warn "config:dotenv" "dotenv de config aún no creado — corré 'ebrain up' y agregá tus keys ($CFG/.env)"
 fi
 
 # ── guard / contract (alarma de drift) ───────────────────────────────────────

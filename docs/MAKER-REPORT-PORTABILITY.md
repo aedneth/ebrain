@@ -88,7 +88,7 @@ shrink; a second test fails if an entry stops being broken and is left on the li
 
 | Finding | Change |
 | --- | --- |
-| F-S1 | `cli/ebrain-home.ts` (new): TypeScript resolves the checkout from `import.meta.dir`, independent of any env var. All 8 hardcoded `.ts` sites now call it. `ebrain_export_home` added to the shell resolver; all 12 launchers use it. Two redundant mechanisms — either alone is sufficient. |
+| F-S1 | `cli/ebrain-home.ts` (new): TypeScript resolves the checkout from `import.meta.dir`, independent of any env var. All 8 hardcoded `.ts` sites now call it. `ebrain_export_home` added to the shell resolver; every launcher uses it (pass 6, F-T12: 13 scripts source it — 12 launchers plus the installer `scripts/install-dream-timer.sh`). Two redundant mechanisms — either alone is sufficient. |
 | F-S2 | systemd units are now `.service.in` / `.timer.in` templates with `@EBRAIN_HOME@`, installed by `scripts/install-dream-timer.sh`, which resolves the real checkout and aborts if substitution fails. Docs no longer teach `cp`. |
 | F-S3 | Launchers resolve their own symlink **before** sourcing the resolver; degrades gracefully where `readlink -f` is absent. |
 | F-S4 | `cli/help-flag.ts` (new): `--help` is help only in a flag position. `--content --help` sets the content to `--help`. |
