@@ -1,171 +1,203 @@
-# eBrain — OpenAI Build Week (Devpost) Submission Package
+# eBrain — OpenAI Build Week (Devpost) Submission Copy
 
-> Category: **Developer Tools**. Copy-paste ready. Fields that need Eduardo's input are marked
-> **⚠️ NEEDS INPUT**. Nothing here names a competitor; superiority is stated implicitly.
-
----
-
-## 1. Project overview
-
-**Project name:** `eBrain`
-
-**Elevator pitch** (≤ 200 chars — paste one):
-
-> One permanent memory for every AI coding agent. eBrain shares memory across Claude Code, Codex & Gemini, and routes tasks across providers by capability under a hard cost cap.
-
-*(Alt, punchier):* `One brain for all your AI coding agents — permanent shared memory + capability-based multi-provider routing, local-first and cost-capped.`
-
-**Thumbnail:** ⚠️ NEEDS INPUT — 3:2, ≤5 MB (JPG/PNG/GIF). Use the eBrain isotype on the dark
-brand background (matches the current draft thumbnail).
+> Category: **Developer Tools** · Deadline: Tue Jul 21, 5:00 PM PT. Paste-ready, in form order:
+> Project overview → Project details → Additional info → Submit. No emoji. Product-description
+> register matches the README; the story is the author's voice. Fields needing a value are marked
+> **NEEDS INPUT**.
 
 ---
 
-## 2. Project Story (paste into "About the project", Markdown)
+## 1 · Project overview
 
+**Project name**
+```
+eBrain
+```
+
+**Elevator pitch** (the README's definitional line; ~88 chars)
+```
+A local-first control plane for persistent agent memory, workspaces, and coding sessions.
+```
+*Alternate (outcome instead of category, still under 200):*
+```
+Give every coding agent one shared, permanent memory — and one cockpit for the work around it.
+```
+
+**Thumbnail:** 3:2, ≤5 MB (JPG/PNG). Use `ebrain-logo-3x2.jpg` (eBrain wordmark on the dark brand
+background, full logo visible).
+
+---
+
+## 2 · Project details (public project page)
+
+### Project Story — paste as Markdown into "About the project"
+
+```markdown
 ## Inspiration
 
-Every AI coding agent starts from zero. We explain the same architecture to Claude Code, then
-again to Codex, then again tomorrow. Run several agents in parallel and it gets worse: N cold
-starts, N private silos, N ways to blow the API budget — and no shared understanding between any
-of them. Context is the real bottleneck of agentic development, and today it's rebuilt from
-scratch on every session. We wanted the opposite: a system where every agent shares one memory
-that gets smarter over time.
+I run my whole company on AI. Along the way I noticed the same waste, every single day: every
+coding agent I opened — Codex, Claude Code, Gemini, Cursor — started from zero. Same context
+re-explained. Same decisions re-made. Same "wait, why did we do it this way?" A week of hard-won
+reasoning evaporated the moment I closed the terminal.
+
+The agents kept getting smarter. The memory around them stayed dumb. And it was per-tool: a
+decision I reached in one agent was invisible to the next.
+
+So I built the missing layer. Not another agent — the control plane the agents plug into. One
+memory that outlives the session and is shared across every tool, plus one cockpit for the work
+that usually gets scattered across a dozen terminal tabs.
 
 ## What it does
 
-eBrain is a unified agentic harness. It gives any AI coding agent — Claude Code, Codex, Gemini,
-Cursor, OpenCode — a single **permanent memory they all share** over the Model Context Protocol.
-What Codex learns, Claude Code remembers. It also **routes work across providers by capability**
-(coding, agentic, long-context…) using a model map you govern, with native fallback and a **hard
-monthly spend cap**. It's **local-first**: the memory lives on your machine behind an
-authenticated loopback channel, secrets are scrubbed at the boundary, and designated client
-repositories are walled off entirely. One command — `ebrain up` — starts the shared brain and
-connects every agent you have; you never touch a token, OAuth flow, or lock.
+eBrain is a local-first control plane for coding agents. It runs one authenticated MCP daemon on
+loopback and gives you:
 
-## How we built it
+- **Persistent, cross-agent memory.** A decision you record from Codex is retrievable from Claude
+  Code. The memory belongs to you and your project, not to one vendor's session history.
+- **Workspaces and sessions.** Validated project directories, persistent tmux-backed agent
+  sessions, and one terminal cockpit — Home, Launch, Sessions, Workspaces, Memory, Routing,
+  Doctor — instead of a wall of tabs.
+- **User-owned routing.** You choose the model and the budget per task. eBrain shows the route it
+  will take and the tokens the provider actually returned. No "this model is always best" theater.
+- **Governed by default.** A fail-closed deny policy enforced identically in TypeScript and shell,
+  a loopback-bound authenticated daemon, secret scrubbing, confirmation gates on destructive
+  actions, and source isolation checked at boot. Federation is opt-in; a clean install works with
+  local memory alone.
 
-TypeScript on Bun. The core is a memory **daemon** that owns the database writer lock and exposes
-it to agents over authenticated MCP on `127.0.0.1`; each agent CLI is registered automatically by
-`ebrain up`. The knowledge engine is the open-source [gbrain](https://github.com/garrytan/gbrain)
-(vendored, MIT) — eBrain is the harness, routing, isolation, onboarding, and terminal cockpit
-(TUI over tmux) wrapped around it. Provider routing goes through OpenRouter behind a
-capability→model map with hard spend caps. We built it spec-first with a **maker ≠ checker**
-pipeline (see below).
+The whole thing installs from source and boots with one idempotent command. You never paste a
+token, hand-manage a writer lock, or wire an OAuth flow.
 
-## Challenges we ran into
+## How I built it
 
-The hardest bug was silent: MCP would connect but never finish loading. Root cause — the embedded
-database is **single-writer**, and every agent's own MCP server was polling the held writer lock
-forever. The fix reshaped the architecture: **one daemon owns the lock**, and all agents connect
-to it over MCP-HTTP instead of each opening the database. We also engineered for constraint — the
-whole thing was built and tested on a **4 GB laptop**, so "one heavy agent at a time" and hosted
-embeddings became design principles, not afterthoughts. And making it plug-and-play meant hiding
-every sharp edge (tokens, OAuth, locks) behind a single idempotent command.
+Runtime: Bun and TypeScript for the CLI and TUI, POSIX shell for the harness, MCP as the wire
+between agents and the daemon. It bridges the local agent CLIs you already use and speaks to a
+pinned, separately installed knowledge engine.
 
-## Accomplishments that we're proud of
+I built it with a strict maker-and-checker pipeline, and both roles were AI:
 
-- **N agents, one memory — proven concurrent.** Multiple agents load the shared MCP memory over
-  HTTP at once, with a single writer and no hangs.
-- **Zero-friction onboarding.** `ebrain up` → the whole fleet is connected; the user never sees a
-  token or a lock.
-- **Cost as an architectural constraint** — a hard spend cap and factual, never-inflated cost
-  telemetry.
-- **Security by construction** — loopback-only, boundary secret scrubbing, and a symlink-safe
-  client-repo deny-list.
-- The tool **dogfoods its own thesis**: it was built by agents that shared memory and audited each
-  other.
+- **Codex was the builder.** It wrote the harness, the CLI surface, the seven-view TUI, the daemon
+  and MCP bridge, and the test suites — feature by feature, each behind its own contract.
+- **GPT-5.6 did the heavy reasoning.** The hard calls — the daemon and federation architecture, the
+  security boundaries, the deny-policy grammar that has to mean the same thing in two languages,
+  the way memory stays governed instead of dumping every transcript into context — were reasoned
+  through with GPT-5.6 before a line was written, then used again to pressure-test what came back.
 
-## What we learned
+Nothing high-risk merged on one pass. The builder's work was independently audited before it
+shipped.
 
-Permanent, shared memory changes what agentic development *is* — the value isn't a smarter model,
-it's continuity across agents and sessions. We learned to treat routing as a **governed** layer
-(the user owns the model order; the tool never claims a universally "best" model), and that the
-real moat of an agentic tool is the harness — memory, orchestration, and cost discipline — not any
-single provider.
+## Challenges I ran into
+
+The honest one: it worked on my machine.
+
+The logic was right and the delivery was broken — over and over. The published quickstart failed at
+step four. The install script wasn't executable when checked out fresh. The tool resolved its own
+location correctly in shell and then handed the wrong path to the process that actually registers
+every agent's connection. Twenty-six places hardcoded a home directory that only existed on my
+laptop. Under a container's default locale, listing your own sessions returned garbage.
+
+None of it showed up while I tested in the one environment where eBrain already worked — mine. So I
+made "not my machine" the acceptance bar: an arbitrary checkout path, a foreign home directory, no
+environment set, the C locale a container ships with. Six independent audit passes later, the thing
+installs and runs where a stranger runs it, not just where I built it. That fight — making it real
+for someone else — was most of the work, and it is the part I am proudest of.
+
+## Accomplishments that I'm proud of
+
+- Memory that is genuinely cross-agent and cross-provider. A harness can't do that; it only sees
+  itself.
+- A security posture that is the default, not a setting: fail-closed isolation enforced in both
+  languages, verified at daemon boot.
+- A verification culture I can point to — every fix carries a test proven to fail against the code
+  before it, and the false starts are documented instead of hidden.
+- Built and hardened solo, from San Salvador, to a bar where it runs on a machine that isn't mine.
+
+## What I learned
+
+"It works" and "I verified it works" are not the same sentence, and the gap between them is where
+real software lives. A test that checks a copy of the artifact can't catch a broken delivery. A
+green suite on the author's machine is not evidence of portability. The discipline that actually
+moves a tool from personal to public is boring and relentless: reproduce the failure first, then
+fix it, then prove the fix in the environment you don't control.
 
 ## What's next for eBrain
 
-A one-command installer and CI release pipeline; pluggable embedding providers (hosted and local,
-with a zero-config fallback); a richer review surface in the cockpit; and an optional always-on
-autonomous runtime that keeps the same memory and routing running 24/7. Open-source launch to
-follow.
+Distribution first — a one-command install so the onboarding matches the product. Then a
+substantially better routing layer with many more providers you can launch directly, more embedding
+choices, and reviewed workflow reuse — all without weakening the approval and isolation boundaries
+that make it safe to hand an agent your machine.
+```
+
+### Built with — tags (comma-separated, up to 25)
+```
+bun, typescript, posix-shell, mcp, model-context-protocol, tmux, pglite, node, cli, tui, astro, vercel, git, sqlite, openai-codex, gpt-5.6, agents, developer-tools, local-first, ai-agents
+```
+
+### "Try it out" links
+```
+https://ebrain.vercel.app
+https://github.com/aedneth/ebrain
+```
+
+### Project Media
+- Image gallery: `ebrain-logo-3x2.jpg` + 2–3 TUI frames (memory, routing, doctor). JPG/PNG, 5 MB, 3:2.
+- **Video demo link (REQUIRED):** YouTube URL once uploaded (public/unlisted). NEEDS INPUT.
 
 ---
 
-## 3. Built with (tags — up to 25)
+## 3 · Additional info (for judges/organizers)
 
+- **Submitter Type:** `Individual`
+- **Country of Residence:** `El Salvador`
+- **Category:** `Developer Tools`
+- **URL to code repo (REQUIRED — highlight Codex & GPT-5.6):**
+  ```
+  https://github.com/aedneth/ebrain
+  ```
+  Repo is **private** → share with `testing@devpost.com` and `build-week-event@openai.com`
+  (Settings → Collaborators) before submitting. The README's **"How this was built with Codex and
+  GPT-5.6"** section documents the usage judges look for.
+- **`/feedback` Codex Session ID (REQUIRED):** NEEDS INPUT — see `docs/codex-session-and-feedback.md`.
+- **Link + instructions for judges to test:**
+  ```
+  Live docs and product site: https://ebrain.vercel.app
+
+  Local install (source), works on a fresh machine — arbitrary path, no env required:
+    git clone https://github.com/aedneth/ebrain.git ebrain
+    cd ebrain && bun install && ./scripts/install.sh --from-source
+    ebrain up && ebrain doctor
+
+  Then: ebrain remember "Review a DB migration before merge."
+        ebrain q "what must happen before a database migration merges?"
+  to see cross-agent memory, or run bare `ebrain` for the terminal cockpit.
+  Requirements: Bun, git, tmux, and at least one supported local agent CLI.
+  No API key or credits are required to run the control plane itself.
+  ```
+
+### Plugin / dev-tool installation instructions
 ```
-bun, typescript, model-context-protocol, mcp, tmux, pglite, postgres, pgvector,
-openrouter, openai, codex, gpt-5.6, claude-code, gemini, cursor, opencode,
-rag, embeddings, cli, tui, agentic-ai, multi-agent, developer-tools, git, zod
+eBrain is a developer tool (local control plane + CLI/TUI). Supported platforms: Linux and macOS
+(POSIX shell + Bun; tmux for persistent sessions). Install from source, no build-from-scratch
+required by judges:
+
+  git clone https://github.com/aedneth/ebrain.git ebrain
+  cd ebrain && bun install && ./scripts/install.sh --from-source
+  ebrain up && ebrain doctor
+
+To test without any external account: `ebrain remember "..."` then `ebrain q "..."` exercises the
+full local memory plane offline. `ebrain` opens the seven-view cockpit. Bridging a live agent is one
+`ebrain onboard <agent>` away and needs only that agent's own CLI. CI is green from a clean checkout
+with no environment preset.
 ```
-
-## 4. "Try it out" links
-
-- **Code repo:** `https://github.com/aedneth/ebrain` — ⚠️ confirm the public slug before submit.
-- **Demo video:** ⚠️ NEEDS INPUT (YouTube, < 3 min — see §7).
 
 ---
 
-## 5. Additional info (for judges)
+## 4 · Submit — final checklist
 
-- **Submitter Type:** Individual.
-- **Country of Residence:** ⚠️ NEEDS INPUT — El Salvador.
-- **Category:** Developer Tools.
-- **URL to code repo (REQUIRED — README highlights how Codex & GPT-5.6 were used):** the README's
-  **"Built with Codex & GPT-5.6"** section covers this. If the repo is private, share access with
-  `testing@devpost.com` and `build-week-event@openai.com`.
-- **`/feedback` Codex Session ID (REQUIRED):** ⚠️ NEEDS INPUT — the Codex session where the
-  majority of the work was done (Codex was the primary maker). Run `/feedback` in that Codex
-  session to retrieve the ID.
-- **Link + instructions for judges to test:** see §6 (installation for judges).
-- **Upload a file:** optional — a short architecture PDF can go here.
-
-## 6. Installation instructions for judges (plugin/dev-tool field)
-
-```bash
-# Prerequisites: Bun (https://bun.sh), tmux, gh, and at least one agent CLI
-#   (claude, codex, gemini, cursor, or opencode).
-
-# Install
-curl -fsSL https://raw.githubusercontent.com/aedneth/ebrain/main/scripts/install.sh | sh
-#   (or from source: git clone … ~/eBrain && cd ~/eBrain && bun install && ./scripts/install.sh --from-source)
-
-# Bring the shared brain up and connect every detected agent (idempotent)
-ebrain up
-
-# Verify
-ebrain doctor
-
-# Prove the shared memory: write from one agent, read from another (or the CLI)
-ebrain remember "Judges test: eBrain shares one memory across agents."
-ebrain q "what did we note for judges?"
-
-# Open the cockpit
-ebrain
-```
-
-Expected: `ebrain doctor` is healthy; `ebrain q` returns the note just written; opening any
-connected agent CLI exposes the `ebrain` memory tools. Semantic recall needs an embeddings key;
-without one, eBrain falls back to zero-cost keyword search automatically.
-
-## 7. Media checklist
-
-- **Video demo (< 3 min, YouTube, required):** ⚠️ NEEDS INPUT. Script beats: (1) the problem —
-  agents forget, silos multiply; (2) `ebrain up` connects the fleet in one command; (3) write a
-  memory in Codex, recall it in Claude Code; (4) capability routing + the cost cap; (5) the cockpit;
-  (6) one line on how **Codex & GPT-5.6** built it. Voiceover must explain what you built, how you
-  used Codex, and how you used GPT-5.6.
-- **Image gallery (≤ 15, 3:2):** ⚠️ NEEDS INPUT — TUI screenshots (memory, routing, doctor),
-  the architecture diagram, a `ebrain q` cross-agent recall shot.
-
-## 8. Final submission checklist (from Devpost)
-
-- [ ] Demo video < 3 min, public on YouTube, link in the form.
-- [ ] Voiceover explains what was built + how Codex and GPT-5.6 were used.
+- [ ] Demo video public/unlisted on YouTube; link in the Video demo field.
+- [ ] Voiceover covers what I built, how I used Codex, and how I used GPT-5.6 (the script does this).
 - [ ] `/feedback` Codex Session ID retrieved and entered.
-- [ ] Private code repo shared with Devpost & OpenAI (if private).
-- [ ] README has setup instructions and explains how Codex & GPT-5.6 were used. ✅ (done)
-- [ ] Installation instructions for judges included. ✅ (§6)
-- [ ] Team + category selected (Developer Tools).
-- [ ] Terms accepted; submission not left as a draft.
+- [ ] Private repo shared with testing@devpost.com and build-week-event@openai.com.
+- [ ] README has setup instructions and the "How this was built with Codex and GPT-5.6" section.
+- [ ] Dev-tool install instructions + no-rebuild test path included (above).
+- [ ] Category = Developer Tools. Country = El Salvador. Submitter = Individual.
+- [ ] Submission shows **Submitted** (green) on My Projects — not a draft.
