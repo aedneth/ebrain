@@ -6,6 +6,9 @@
 # stdio vivo, arrancar el host se colgaría → se rehúsa con puntero al runbook de cutover).
 set -uo pipefail
 
+. "$(dirname -- "${BASH_SOURCE[0]}")/../harness/core/ebrain-home.sh"
+EBRAIN_HOME="$(ebrain_resolve_home "${BASH_SOURCE[0]}")"
+
 CFG="$HOME/.config/ebrain"
 PIDFILE="$CFG/ebrain-brain.pid"
 LOG="$CFG/daemon.log"
@@ -13,7 +16,7 @@ PORT="${EBRAIN_BRAIN_PORT:-8541}"
 
 # Launcher: copia instalada en $CFG, con fallback al repo (para correr pre-install).
 LAUNCHER="$CFG/ebrain-brain"
-[ -x "$LAUNCHER" ] || LAUNCHER="${EBRAIN_HOME:-$HOME/eBrain}/scripts/ebrain-brain"
+[ -x "$LAUNCHER" ] || LAUNCHER="$EBRAIN_HOME/scripts/ebrain-brain"
 
 is_running() {
   [ -f "$PIDFILE" ] || return 1

@@ -8,8 +8,11 @@
 #   opencode → ~/.config/opencode/opencode.json (.mcp.ebrain + .instructions → AGENTS.md de normas)
 set -uo pipefail
 
+. "$(dirname -- "${BASH_SOURCE[0]}")/ebrain-home.sh"
+EBRAIN_HOME="$(ebrain_resolve_home "${BASH_SOURCE[0]}")"
+
 agent="${1:?uso: mcp-wire.sh <cursor|opencode>}"
-SRV="$HOME/eBrain/scripts/ebrain-mcp-bridge"
+SRV="$EBRAIN_HOME/scripts/ebrain-mcp-bridge"
 [ -x "$SRV" ] || SRV="$HOME/.config/ebrain/ebrain-mcp-bridge"
 [ -x "$SRV" ] || SRV="$HOME/.config/ebrain/ebrain-mcp"
 [ -x "$SRV" ] || SRV="$HOME/.config/ebrain/gbrain-mcp"

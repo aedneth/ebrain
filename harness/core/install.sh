@@ -10,7 +10,10 @@
 # gemini/generic = agente nuevo: crea todo desde el manifest (la prueba de la tesis).
 set -uo pipefail
 
-HARNESS="$HOME/eBrain/harness"
+. "$(dirname -- "${BASH_SOURCE[0]}")/ebrain-home.sh"
+EBRAIN_HOME="$(ebrain_resolve_home "${BASH_SOURCE[0]}")"
+
+HARNESS="$EBRAIN_HOME/harness"
 CORE="$HARNESS/core"
 ADAPTERS="$HARNESS/adapters"
 MGET="$CORE/manifest-get.ts"
@@ -70,7 +73,9 @@ if [ "$DOCTOR_ONLY" = 0 ]; then
 # ebrain harness — wrapper generado ($AGENT/$event → core/$core). Ejecuta el core canónico. FAIL-OPEN.
 # NO editar a mano: se regenera con \`ebrain harness install $AGENT\`. La lógica vive en el core.
 export AGENT_NAME=$AGENT_NAME_V
-CANON="\$HOME/eBrain/harness/core/$core"
+# Baked in at install time: this wrapper is a copy living outside the checkout, so it
+# has no checkout to walk up to and no EBRAIN_HOME in its environment.
+CANON="$EBRAIN_HOME/harness/core/$core"
 [ -f "\$CANON" ] && exec bash "\$CANON" "\$@"
 exit 0
 EOF

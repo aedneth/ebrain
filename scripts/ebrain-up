@@ -4,7 +4,9 @@
 # bootstrap admin token o el token MCP local, sin imprimir valores.
 set -euo pipefail
 
-EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
+. "$(dirname -- "${BASH_SOURCE[0]}")/../harness/core/ebrain-home.sh"
+EBRAIN_HOME="$(ebrain_resolve_home "${BASH_SOURCE[0]}")"
+
 CFG="$HOME/.config/ebrain"
 mkdir -p "$CFG/wd"
 

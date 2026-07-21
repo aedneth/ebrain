@@ -2,6 +2,9 @@
 # ebrain-run — launcher seguro del motor interno gbrain.
 # Superficie ebrain-owned; el motor sigue siendo vendor/gbrain.
 set -euo pipefail
+
+. "$(dirname -- "${BASH_SOURCE[0]}")/../harness/core/ebrain-home.sh"
+EBRAIN_HOME="$(ebrain_resolve_home "${BASH_SOURCE[0]}")"
 WD="$HOME/.config/ebrain/wd"
 mkdir -p "$WD"
 cd "$WD"
@@ -27,4 +30,4 @@ export GBRAIN_SKILLS_DIR="$HOME/.config/ebrain/skills"
 export GBRAIN_CHAT_MODEL="${GBRAIN_CHAT_MODEL:-openrouter:minimax/minimax-m3}"
 BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"
 command -v bun >/dev/null 2>&1 && BUN_BIN=bun
-exec "$BUN_BIN" run "$HOME/eBrain/vendor/gbrain/src/cli.ts" "$@"
+exec "$BUN_BIN" run "$EBRAIN_HOME/vendor/gbrain/src/cli.ts" "$@"

@@ -328,7 +328,11 @@ const USAGE = "usage: ebrain procedures <list|show|use|review> [--json]";
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  if (argv.includes("--help") || argv.includes("-h")) {
+  // Pass-4 F-Q3: `-h` is only help in the FLAG position. Scanning the whole argv made
+  // `ebrain context get -h` print usage and exit 0 instead of rejecting an invalid pack id — a
+  // silent no-op where the user asked for a real operation. The long form is unambiguous (no
+  // subcommand takes `--help` as a value) so it still counts anywhere.
+  if (argv[0] === "--help" || argv[0] === "-h" || argv.includes("--help")) {
     console.log(USAGE);
     return;
   }

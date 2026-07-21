@@ -7,7 +7,8 @@
 # NO lleva MCP_STDIO=1 (eso es el modo stdio); esto es HTTP en loopback.
 set -euo pipefail
 # Resolve the checkout BEFORE the cd below — a relative $BASH_SOURCE would not survive it.
-EBRAIN_HOME="${EBRAIN_HOME:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)}"
+. "$(dirname -- "${BASH_SOURCE[0]}")/../harness/core/ebrain-home.sh"
+EBRAIN_HOME="$(ebrain_resolve_home "${BASH_SOURCE[0]}")"
 cd "$HOME/.config/ebrain/wd"          # cwd neutral: bun no auto-carga un .env ajeno
 ENV_FILE="$HOME/.config/ebrain/.env"
 if [ -f "$ENV_FILE" ]; then set -a; . "$ENV_FILE"; set +a; fi

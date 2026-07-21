@@ -61,9 +61,26 @@ describe("documented --help actually answers", () => {
       const listed = usage.match(/<([a-z|-]+)>/)?.[1]?.split("|") ?? [];
       expect(listed.length).toBeGreaterThan(0);
 
+      // Pass-4 F-Q4: matching the name anywhere in the file was far too weak — a fake subcommand
+      // passed as long as the string appeared for any unrelated reason (`accept` survived because
+      // an action value happens to be spelled that way). Compare against the names the dispatcher
+      // actually branches on instead.
       const source = readFileSync(join(ROOT, "cli", `${command}.ts`), "utf8");
-      const missing = listed.filter((sub) => !new RegExp(`["'\`]${sub}["'\`]`).test(source));
+      const implemented = new Set<string>();
+      for (const m of source.matchAll(/\b(?:a|args)\.sub === "([a-z-]+)"/g)) implemented.add(m[1]!);
+      for (const m of source.matchAll(/case "([a-z-]+)":/g)) implemented.add(m[1]!);
+      expect(implemented.size).toBeGreaterThan(0);
+
+      const missing = listed.filter((sub) => !implemented.has(sub));
       expect(missing).toEqual([]);
     });
   }
+
+  test("`-h` in a value position is not treated as help (F-Q3)", () => {
+    // `ebrain context get -h` used to print usage and exit 0 — the user asked for a real
+    // operation and silently got nothing. It must reach the command's own validation.
+    const res = run("context", ["get", "-h"]);
+    expect(res.stdout).not.toStartWith("usage:");
+    expect(res.code).not.toBe(0);
+  });
 });

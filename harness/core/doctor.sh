@@ -16,7 +16,9 @@
 # que el path humano: rc=1 solo si hay algún fail). El path humano (sin --json) es el de siempre.
 set -uo pipefail
 
-EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
+. "$(dirname -- "${BASH_SOURCE[0]}")/ebrain-home.sh"
+EBRAIN_HOME="$(ebrain_resolve_home "${BASH_SOURCE[0]}")"
+
 CORE="$EBRAIN_HOME/harness/core"
 CFG="$HOME/.config/ebrain"
 RUN="$CFG/ebrain-run"

@@ -4,6 +4,12 @@
 # Emite additionalContext (Claude-compatible). FAIL-OPEN: cualquier error → sin contexto (exit 0).
 set -uo pipefail
 
+# This file is installed as a COPY outside the checkout, so it cannot locate eBrain by
+# walking up from its own path the way harness/core/ebrain-home.sh does. It reads the
+# location install.sh recorded instead.
+EBRAIN_HOME="${EBRAIN_HOME:-$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/ebrain/home" 2>/dev/null)}"
+: "${EBRAIN_HOME:=$HOME/eBrain}"
+
 CTX=""
 add() { CTX="${CTX}$1
 "; }
@@ -12,7 +18,7 @@ add "▶ ebrain: MCP conectado (mcp ebrain). Usá list_skills/get_skill (75 skil
 add "▶ Normas activas (~/.codex/AGENTS.md): secretos = nunca leer/imprimir .env/credenciales (guard PreToolUse activo); repos denegados (política local de deny) = deny de exfiltración/push; SOP + maker≠checker (Opus audita a Codex); rastro narrativo (session log + CHANGELOG); un agente vivo a la vez (RAM 4GB)."
 
 # Última línea estructural del CHANGELOG de ebrain, si estamos en/cerca del repo o siempre útil.
-CL="$HOME/eBrain/CHANGELOG.md"
+CL="$EBRAIN_HOME/CHANGELOG.md"
 if [ -f "$CL" ]; then
   latest="$(grep -m1 '^## ' "$CL" 2>/dev/null | sed 's/^## //')"
   [ -n "$latest" ] && add "▶ ebrain último cambio: ${latest}"

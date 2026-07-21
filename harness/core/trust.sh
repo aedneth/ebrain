@@ -42,7 +42,7 @@ trust__load() {
     [ -n "$tok" ] || continue
     tok="$(printf '%s' "$tok" | LC_ALL=C tr '[:upper:]' '[:lower:]')"
     n=$((n + 1))
-    if ! printf '%s' "$tok" | LC_ALL=C grep -Eq '^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$'; then
+    if ! printf '%s' "$tok" | LC_ALL=C grep -Eq '^[a-z0-9]([a-z0-9._-]{0,126}[a-z0-9])?$'; then
       # Report the position, never the token: a malformed entry can still contain a real name.
       TRUST_POLICY_ERROR=1
       TRUST_DENY=''

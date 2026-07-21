@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
 # compat: old surface name kept for existing configs. Prefer ebrain-run.
 set -euo pipefail
-exec "$HOME/eBrain/scripts/ebrain-run" "$@"
+
+. "$(dirname -- "${BASH_SOURCE[0]}")/../harness/core/ebrain-home.sh"
+EBRAIN_HOME="$(ebrain_resolve_home "${BASH_SOURCE[0]}")"
+exec "$EBRAIN_HOME/scripts/ebrain-run" "$@"
