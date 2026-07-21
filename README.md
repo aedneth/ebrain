@@ -269,13 +269,9 @@ Exploratory work such as an autonomous runtime, team memory, or native shell cap
 
 ## How this was built with Codex and GPT-5.6
 
-eBrain was built with a strict maker-and-checker pipeline in which both roles were AI.
-
 **Codex was the builder.** It implemented the harness, the CLI surface, the seven-view TUI, the shared MCP daemon and command-only bridge, the deny policy in both TypeScript and shell, and the test suites — feature by feature, each behind its own contract. The majority of the implementation work was done in Codex sessions, and the `/feedback` session for the bulk of that work is recorded in the submission.
 
-**GPT-5.6 did the heavy reasoning.** The load-bearing design decisions were reasoned through with GPT-5.6 before implementation and used again to pressure-test the result: the daemon-and-federation architecture and its loopback authentication model; the security boundaries (fail-closed source isolation, secret scrubbing, confirmation gates); the deny-policy grammar that must mean the same thing when read by the CLI and by the shell harness; and the governed-memory design that records bounded, reviewable memory instead of dumping every transcript into context.
-
-No high-risk change shipped on a single pass. Builder output was independently audited before merge, every fix carries a test proven to fail against the pre-fix code, and the portability hardening that makes eBrain install and run on a machine other than the author's was driven by repeated independent audit passes rather than a green suite on one laptop. That verification history is visible in `docs/` and the `CHANGELOG`.
+**GPT-5.6 was the reasoning partner.** The load-bearing design decisions were worked through with GPT-5.6: the daemon-and-federation architecture and its loopback authentication model; the security boundaries (fail-closed source isolation, secret scrubbing, confirmation gates); the deny-policy grammar that must mean the same thing when read by the CLI and by the shell harness; and the governed-memory design that records bounded, reviewable memory instead of dumping every transcript into context.
 
 ## Acknowledgements
 
