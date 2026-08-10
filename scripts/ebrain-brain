@@ -30,6 +30,15 @@ export GBRAIN_CHAT_MODEL="${GBRAIN_CHAT_MODEL:-openrouter:minimax/minimax-m3}"
 PORT="${EBRAIN_BRAIN_PORT:-8541}"
 BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"
 command -v bun >/dev/null 2>&1 && BUN_BIN=bun
+# Ensure the brain store exists before serving. On a fresh, keyless clone the engine's init demands
+# an embedding provider, and a bare `serve` over an uninitialized store exits non-zero — so a first
+# `ebrain up` would hard-fail. Initialize once, embedding-DISABLED (keyword-only recall, zero provider
+# calls); enabling semantic recall is the explicit `ebrain embedder migrate`. An already-initialized
+# store is left exactly as it is — this never re-inits or touches an existing brain.
+GBRAIN_STORE_DIR="${GBRAIN_HOME:-$HOME}/.gbrain"
+if [ ! -f "$GBRAIN_STORE_DIR/config.json" ]; then
+  "$BUN_BIN" run "$EBRAIN_HOME/vendor/gbrain/src/cli.ts" init --pglite --non-interactive --no-embedding
+fi
 "$BUN_BIN" run "$EBRAIN_HOME/cli/up.ts" ensure-token --boot --quiet
 if [ -f "$TOKEN_FILE" ]; then set -a; . "$TOKEN_FILE"; set +a; fi
 # Isolation gate: refuse to bind HTTP if any denied source reached the federated set.
