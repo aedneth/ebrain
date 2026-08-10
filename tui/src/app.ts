@@ -2290,7 +2290,7 @@ function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, focused: s
             const row = renderFleetRow(r, rowW, i === sSel, theme);
             return focused === "sessions" && i === sSel ? highlightRow(padTo(row, rowW), theme) : row;
           })
-        : [theme.fg("text.secondary") + "no active sessions · press 2" + theme.reset];
+        : [theme.fg("text.secondary") + "none · press l to launch" + theme.reset];
     const sesionesPanel = panel(
       {
         title: `active sessions · ${sessions.rows.length}`,
@@ -2318,7 +2318,7 @@ function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, focused: s
             const row = formatOverviewMemoryRow(l, memW, theme);
             return focused === "memories" && i === mSel ? highlightRow(padTo(row, memW), theme) : row;
           })
-        : [theme.fg("text.secondary") + "no recent memories" + theme.reset];
+        : [theme.fg("text.secondary") + "no recent memories · press 5 then r to save one" + theme.reset];
     out.push(
       ...panel(
         { title: "latest memories", focus: focused === "memories", width: cols, height: memoriesPanelHeight, body: memoriesBody },
@@ -2899,7 +2899,7 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
           },
           theme,
         )
-      : [theme.fg("text.secondary") + "no local episodes or recent learnings" + theme.reset];
+      : [theme.fg("text.secondary") + "no memories yet · press r to save one" + theme.reset];
   const leftPanel = panel(
     { title: m.search ? `search results · ${searchResults.length}` : `recall · ${episodes.length} episodes · ${learnings.length} learnings`, focus: focused === "results", width: leftRect.width, height: midRect.height, body: resultsBody },
     theme,
@@ -2911,7 +2911,7 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
   const contextRoom = Math.max(1, contextRect.height - 2);
   const contextBody = contexts.length > 0
     ? contexts.slice(0, contextRoom).map((pack) => renderContextRow(pack, contextW, theme))
-    : [theme.fg("text.secondary") + "no active context packs" + theme.reset];
+    : [theme.fg("text.secondary") + "no packs · ebrain context" + theme.reset];
   const contextsPanel = panel(
     { title: `context · ${contexts.length}`, focus: false, width: contextRect.width, height: contextRect.height, body: contextBody },
     theme,
@@ -2928,7 +2928,7 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
           const row = renderProcedureRow(procedure, procedureW, isSelected, theme);
           return isSelected ? highlightRow(padTo(row, procedureW), theme) : row;
         })
-      : [theme.fg("text.secondary") + "no reviewed procedures" + theme.reset];
+      : [theme.fg("text.secondary") + "none · ebrain procedures" + theme.reset];
   const proceduresPanel = panel(
     { title: `procedures · ${procedures.length}`, focus: focused === "procedures", width: procedureRect.width, height: procedureRect.height, body: proceduresBody },
     theme,
