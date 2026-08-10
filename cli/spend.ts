@@ -7,20 +7,39 @@
  * de negocio nueva, solo agregación de lo que route.ts ya loguea. Reusa monthKey/monthSpend/
  * expandHome de route.ts (una sola fuente de verdad para "qué cuenta como este mes").
  *
- * gbrain_untracked:true — gap conocido (ver harness/core/doctor.sh check "spend:gbrain-gap"):
- * el gasto de gbrain (think/dream, servidor MCP) NO pasa por este ledger; su cap real es
- * server-side (key OpenAI). Esta CLI solo ve el carril Tier 1 (route.ts/OpenRouter).
+ * `engine` (added: memory-ootb) — folds in the memory engine's OWN spend ledgers
+ * (`~/.gbrain/audit/budget-*.jsonl` + `dream-budget-*.jsonl`, parsed by `./engine-spend.ts`).
+ * `gbrain_untracked` is `false` ONLY when `engine.observed` is `true` (a real ledger was found
+ * and parsed); otherwise it stays `true` — the gap is never hidden without evidence. When the
+ * engine ledger is present but has unpriced/corrupt lines, `engine.partiallyObserved` says so;
+ * `engine.usd` still only ever sums what was actually priced, never a fabricated estimate.
  *
  * Uso:
- *   ebrain spend --json     # {month,budget,mtd,remaining,by_capability[],gbrain_untracked}
+ *   ebrain spend --json     # {month,budget,mtd,remaining,by_capability[],engine,gbrain_untracked}
  *   ebrain spend            # mismo dato, texto plano
  */
 import { homedir } from "os";
 import { join } from "path";
 import { monthKey, monthSpend, expandHome } from "./route.ts";
+import { readEngineSpend } from "./engine-spend.ts";
 
 const HOME = homedir();
 const CFG_PATH = join(HOME, ".config", "ebrain", "routing.yaml");
+
+/**
+ * Resolve the memory engine's audit ledger directory: `<GBRAIN_HOME or $HOME>/.gbrain/audit`.
+ * Mirrors `cli/embedder-detect.ts`'s `resolveConfigPath` convention exactly — GBRAIN_HOME is a
+ * *parent* directory, `.gbrain` is always appended — so the two lanes (engine config detection,
+ * engine spend detection) never drift on where "the engine's home" is. `env` is injectable for
+ * tests; production callers use the default `process.env`.
+ */
+export function resolveEngineAuditDir(env: NodeJS.ProcessEnv = process.env): string {
+  const base =
+    (env.GBRAIN_HOME && env.GBRAIN_HOME.trim() !== "" && env.GBRAIN_HOME) ||
+    env.HOME ||
+    homedir();
+  return join(base, ".gbrain", "audit");
+}
 
 interface Budget { monthly_usd: number; hard_stop: boolean; log: string }
 interface RoutingCfg { budget: Budget; capabilities: Record<string, { models: string[] }> }
@@ -73,6 +92,7 @@ async function main() {
   const spentTotal = await monthSpend(logPath);
   const byCap = await spendByCapability(logPath, Object.keys(cfg.capabilities ?? {}));
   const remaining = cfg.budget.monthly_usd - spentTotal;
+  const engineSpend = readEngineSpend(resolveEngineAuditDir());
 
   const payload = {
     month: monthKey(),
@@ -80,7 +100,13 @@ async function main() {
     mtd: +spentTotal.toFixed(6),
     remaining: +remaining.toFixed(6),
     by_capability: byCap,
-    gbrain_untracked: true, // gap conocido: gasto de gbrain (think/dream) no entra a este ledger
+    engine: {
+      usd: +engineSpend.usd.toFixed(6),
+      observed: engineSpend.observed,
+      partiallyObserved: engineSpend.partiallyObserved,
+    },
+    // false ONLY when the engine ledger was actually found and parsed — never fabricated.
+    gbrain_untracked: !engineSpend.observed,
   };
 
   if (json) {
@@ -91,7 +117,12 @@ async function main() {
   console.log(`ebrain spend — ${payload.month}`);
   console.log(`  mtd $${payload.mtd.toFixed(4)} / cap $${payload.budget.monthly_usd} (restante $${payload.remaining.toFixed(4)})`);
   for (const c of byCap) console.log(`  ${c.capability.padEnd(14)} $${c.mtd.toFixed(4)}  (${c.routes} rutas)`);
-  console.log("  ⚠ el motor (think/dream) no entra a este ledger — su cap real es server-side");
+  if (payload.engine.observed) {
+    const note = payload.engine.partiallyObserved ? " (parcial — llamadas sin precio)" : "";
+    console.log(`  motor (think/dream) $${payload.engine.usd.toFixed(4)}${note}`);
+  } else {
+    console.log("  ⚠ el motor (think/dream) no entra a este ledger — su cap real es server-side");
+  }
 }
 
 if (import.meta.main) main().catch((e) => die(String(e?.message ?? e)));

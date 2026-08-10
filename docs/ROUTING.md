@@ -115,7 +115,7 @@ El `routing.yaml` resultante de F4 es la verdad; esta tabla es la hipótesis ini
 - **Atajos de una línea:** sufijo `:floor` al slug = provider más barato; `:nitro` = mayor throughput. Default de ebrain: `:floor` en jobs batch, slug limpio en interactivo.
 - **Objeto `provider` por request** (defensa en profundidad): `data_collection: "deny"` (privacidad — obligatorio cuando el prompt contiene contexto Korvex/vault), `max_price` como techo por request (cinturón extra al cap), `sort: "price"` para batch.
 - **Fallback NUNCA a frontier:** la cadena termina en un modelo abierto. Claude/GPT/Gemini premium jamás aparecen en un array `models` de Tier 1.
-- **Embeddings: OpenRouter NO ofrece API de embeddings.** Los embeddings de gbrain (ingesta, búsqueda) van por provider directo barato (Gemini embeddings o OpenAI small) con su propia key y su propio límite. Solo las llamadas LLM de gbrain (dream cycle, judges, `think`) rutean por OpenRouter.
+- **Embeddings: OpenRouter SÍ ofrece API de embeddings.** `/v1/embeddings` proxea `openai/text-embedding-3-small` a 1536 dims (Matryoshka `dims_options` hasta 512/768/1024) — es el embedder por defecto out-of-the-box de eBrain, reusando la misma `OPENROUTER_API_KEY` del routing (sin key de OpenAI aparte). Alternativa local $0: Ollama `nomic-embed-text` (768 dims); sin embedder configurado, el recall cae al keyword search nativo del motor. Ver `docs/memory/embedding-providers.md`.
 
 ### 3.4 `ebrain route` — implementado (as-built, `cli/route.ts` + `routing.yaml`)
 

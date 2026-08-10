@@ -129,6 +129,17 @@ describe("6.1.2 doctor --json", () => {
 });
 
 // ── 6.1.3 ebrain spend --json ────────────────────────────────────────────────
+// `engine` lane added (memory-ootb): folds in the memory engine's own think/dream spend
+// (parsed from ~/.gbrain/audit/ by cli/engine-spend.ts). `gbrain_untracked` is no longer
+// hardcoded `true` — it is `false` ONLY when `engine.observed` is `true` (a real ledger was
+// found and parsed). That is a semantic invariant zod's structural schema can't express by
+// itself, so it's checked separately by `gbrainUntrackedCoherente()`, same pattern as the
+// doctor rc↔checks invariant above.
+const SpendEngineSchema = z.object({
+  usd: z.number(),
+  observed: z.boolean(),
+  partiallyObserved: z.boolean(),
+});
 const SpendSchema = z.object({
   month: z.string().regex(/^\d{4}-\d{2}$/, "formato YYYY-MM"),
   budget: z.object({ monthly_usd: z.number(), hard_stop: z.boolean() }),
@@ -139,10 +150,15 @@ const SpendSchema = z.object({
     mtd: z.number(),
     routes: z.number().int().nonnegative(),
   })),
-  gbrain_untracked: z.literal(true),
+  engine: SpendEngineSchema,
+  gbrain_untracked: z.boolean(),
 });
 
-// Fixture = captura real de `bun run cli/spend.ts --json` (2026-07-12).
+function gbrainUntrackedCoherente(spend: z.infer<typeof SpendSchema>): boolean {
+  return spend.gbrain_untracked === !spend.engine.observed;
+}
+
+// Fixture = captura real de `bun run cli/spend.ts --json` (2026-07-12, motor no observado).
 const spendFixture = {
   month: "2026-07",
   budget: { monthly_usd: 10, hard_stop: true },
@@ -153,21 +169,40 @@ const spendFixture = {
     { capability: "coding", mtd: 0.001253, routes: 2 },
     { capability: "terminal", mtd: 0, routes: 0 },
   ],
+  engine: { usd: 0, observed: false, partiallyObserved: false },
   gbrain_untracked: true,
 };
 
+// Fixture con ledger del motor presente y parseado (~/.gbrain/audit/budget-*.jsonl real).
+const spendFixtureEngineObserved = {
+  ...spendFixture,
+  engine: { usd: 0.0421, observed: true, partiallyObserved: false },
+  gbrain_untracked: false,
+};
+
 describe("6.1.3 spend --json", () => {
-  test("fixture real pasa el schema", () => {
-    expect(() => SpendSchema.parse(spendFixture)).not.toThrow();
+  test("fixture real (motor no observado) pasa el schema y la invariante", () => {
+    const parsed = SpendSchema.parse(spendFixture);
+    expect(gbrainUntrackedCoherente(parsed)).toBe(true);
+  });
+  test("fixture con motor observado pasa el schema y la invariante", () => {
+    const parsed = SpendSchema.parse(spendFixtureEngineObserved);
+    expect(gbrainUntrackedCoherente(parsed)).toBe(true);
   });
   test("rompe month (formato inválido) → falla", () => {
     expect(SpendSchema.safeParse({ ...spendFixture, month: "julio-2026" }).success).toBe(false);
   });
-  test("gbrain_untracked debe ser literalmente true (el gap NUNCA se puede ocultar poniéndolo false)", () => {
-    expect(SpendSchema.safeParse({ ...spendFixture, gbrain_untracked: false }).success).toBe(false);
+  test("gbrain_untracked=false sin motor observado rompe la invariante (el gap NUNCA se puede ocultar poniéndolo false sin evidencia)", () => {
+    const broken = { ...spendFixture, gbrain_untracked: false };
+    const parsed = SpendSchema.parse(broken); // estructuralmente válido (sigue siendo boolean)…
+    expect(gbrainUntrackedCoherente(parsed)).toBe(false); // …pero la invariante semántica lo atrapa
   });
   test("routes negativo (dato imposible) → falla", () => {
     const broken = { ...spendFixture, by_capability: [{ capability: "x", mtd: 0, routes: -1 }] };
+    expect(SpendSchema.safeParse(broken).success).toBe(false);
+  });
+  test("engine ausente → falla (campo requerido, no opcional)", () => {
+    const { engine: _drop, ...broken } = spendFixture;
     expect(SpendSchema.safeParse(broken).success).toBe(false);
   });
 });
@@ -436,6 +471,14 @@ const CostEventSchema = z.object({
   cost_kind: CostKindSchema,
   source: z.enum(["route", "adapter"]),
 });
+// `engine` lane added (memory-ootb): same shape and same read-side source (cli/engine-spend.ts)
+// as the spend --json engine lane above — folds in the memory engine's own think/dream spend,
+// separate from the provider/adapter cost lanes this report already tracked.
+const CostEngineSchema = z.object({
+  usd: z.number(),
+  observed: z.boolean(),
+  partiallyObserved: z.boolean(),
+});
 const CostSchema = z.object({
   schema_version: z.literal(2),
   month: z.string().regex(/^\d{4}-\d{2}$/),
@@ -443,6 +486,7 @@ const CostSchema = z.object({
   openrouter_mtd: z.number().nonnegative(),
   known_mtd: z.number().nonnegative(),
   remaining_openrouter: z.number(),
+  engine: CostEngineSchema,
   providers: z.array(CostProviderSchema),
   agents: z.array(CostBreakdownSchema),
   models: z.array(CostBreakdownSchema),
@@ -462,6 +506,7 @@ const costFixture = {
   openrouter_mtd: 0.0012,
   known_mtd: 0.0014,
   remaining_openrouter: 9.9988,
+  engine: { usd: 0, observed: false, partiallyObserved: false },
   providers: [
     { ...costBreakdownFixture, provider: "openrouter", status: "metered" },
     { ...costBreakdownFixture, key: "gemini", provider: "gemini", status: "token-only", usd: 0, actual_usd: 0, estimated_usd: 0, events: 1, tokens_in: 40, tokens_out: 20, token_only_events: 1 },
@@ -484,6 +529,14 @@ describe("6.6E cost --json", () => {
   test("kind desconocido falla", () => {
     const broken = { ...costFixture, entries: [{ ...costFixture.entries[0], cost_kind: "subscription" }] };
     expect(CostSchema.safeParse(broken).success).toBe(false);
+  });
+  test("engine ausente → falla (campo requerido, no opcional)", () => {
+    const { engine: _drop, ...broken } = costFixture;
+    expect(CostSchema.safeParse(broken).success).toBe(false);
+  });
+  test("fixture con motor observado (con lane parcialmente observada) también pasa el schema", () => {
+    const withEngine = { ...costFixture, engine: { usd: 0.0421, observed: true, partiallyObserved: true } };
+    expect(() => CostSchema.parse(withEngine)).not.toThrow();
   });
 });
 
