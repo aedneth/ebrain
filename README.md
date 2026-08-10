@@ -27,7 +27,7 @@
 
 [![The real eBrain cockpit — click to watch the animated demo](assets/ebrain-tui-demo.svg)](https://ebrain.vercel.app/demo/)
 
-<p align="center"><a href="https://ebrain.vercel.app/demo/">▶ Watch the animated demo</a> — the real cockpit and a cross-agent memory hand-off, rendered from the production renderer.</p>
+<p align="center"><a href="https://ebrain.vercel.app/demo/">Watch the animated demo</a> — the real cockpit and a cross-agent memory hand-off, rendered from the production renderer.</p>
 
 **Coding agents start from zero every session, and each one keeps its own context. eBrain gives them a single governed memory that outlives the session and crosses agents — on your own machine.**
 

@@ -377,6 +377,10 @@ async function cmdUp(args: string[]): Promise<void> {
     console.log(smoke.ok ? `  smoke: tools/list ok (${smoke.tools} tools)` : `  smoke: warning ${smoke.message}`);
     console.log("  onboard:");
     printOnboard(results, false);
+    console.log("  next:");
+    console.log(`    ebrain remember "Review database migrations before merge."   save a decision`);
+    console.log(`    ebrain q "what must happen before a migration merges?"       recall it`);
+    console.log(`    ebrain                                                       open cockpit`);
   }
   if (results.some((r) => r.status === "failed")) process.exit(1);
 }

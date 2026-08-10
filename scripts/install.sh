@@ -142,7 +142,8 @@ else
 fi
 
 say "eBrain is ready."
-log "Try:  $LAUNCHER_NAME q \"what did we set up?\""
+log "Try:  $LAUNCHER_NAME remember \"eBrain remembers this across sessions.\""
+log "      $LAUNCHER_NAME q \"what does eBrain remember?\""
 case ":$PATH:" in
   *":$EBRAIN_BIN_DIR:"*) : ;;
   *) log "Add $EBRAIN_BIN_DIR to your PATH to use '$LAUNCHER_NAME' directly." ;;
