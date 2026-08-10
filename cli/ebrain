@@ -66,6 +66,8 @@ ebrain — unified harness + agentic-memory layer (provider-agnostic)
   ebrain spend [--json]                                      MTD spend per capability vs routing.yaml cap
   ebrain routing [--json]                                    OpenRouter stack: chains, models and spend
   ebrain cost [--json]                                       unified ledger by provider/agent/model/session/workflow
+  ebrain embedder status|migrate [--to P:M@D] [--dry-run] [--yes]  show or switch the memory embedder (migrate previews cost, then confirms)
+  ebrain dream [--dry-run] [--at-cap] [--keyless]            submit the memory maintenance cycle to the running daemon
   ebrain context <list|proposals|init|get|update|propose|review> [--json] reviewed local operating context packs
   ebrain episodes <list|get|recall|record> [--json]          bounded local episode recall (no raw transcripts)
   ebrain procedures <list|show|use|review> [--json]          reviewed lifecycle for local workflows/skills

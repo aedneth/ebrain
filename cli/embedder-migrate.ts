@@ -22,7 +22,7 @@
  *  5. Confirmation gate (HARD): `--dry-run` prints the preview and exits 0 changing NOTHING; a real run
  *     needs `--yes` OR an interactive-TTY `y`; a non-TTY run without `--yes` prints the preview + a
  *     "re-run with --yes" hint and exits non-zero WITHOUT mutating.
- *  6. Only on confirmation (the effectful path — built here, NEVER executed by the build task): refuse if
+ *  6. Only on confirmation (the effectful path, reached only past the confirmation gate): refuse if
  *     the daemon is unreachable or the target dims are illegal; otherwise switch the engine config to the
  *     target provider (config write FIRST) and submit the daemon-mediated re-embed (submit SECOND).
  *
@@ -218,6 +218,8 @@ export function formatPreview(target: TargetEmbedder, actions: EmbedderAction[],
   let costLine: string;
   if (cost.estimatedUsd !== null) {
     costLine = `~$${cost.estimatedUsd.toFixed(2)} (estimate)`;
+  } else if (cost.pricePerMTok !== null) {
+    costLine = `$${cost.pricePerMTok.toFixed(2)} per 1M tokens — precise total on a confirmed run (daemon-backed)`;
   } else if (!cost.pricingKnown) {
     costLine = `estimate unavailable — no published price for ${target.providerId}`;
   } else {
@@ -238,32 +240,46 @@ export function formatPreview(target: TargetEmbedder, actions: EmbedderAction[],
 // ─── Default (impure) wiring — vendor imported lazily only ───────────
 
 /**
- * Default cost preview. Uses ONLY the PURE pricing table (lazy `vendor/` import) and does NOT open the
- * store — so `--dry-run` on a real machine touches nothing effectful (no lock contention, no spend). A
- * precise chunk count comes from the engine estimator on the daemon-backed confirmed path.
+ * Published per-1M-token embedding prices for eBrain's catalog defaults. The engine's pricing table is
+ * keyed by gateway strings like `openai:…` and carries no `openrouter:…` entry, so a target routed
+ * through OpenRouter would otherwise show no price at all. These are the providers' OWN published rates
+ * (the openrouter recipe's `touchpoints.embedding.cost_per_1m_tokens_usd`), not fabricated estimates.
+ */
+const CATALOG_EMBEDDING_PRICE_PER_MTOK: Readonly<Record<string, number>> = {
+  "openrouter:openai/text-embedding-3-small": 0.02,
+  "ollama:nomic-embed-text": 0,
+};
+
+/**
+ * Default cost preview. Uses ONLY pricing tables (lazy `vendor/` import + the catalog fallback) and
+ * does NOT open the store — so `--dry-run` on a real machine touches nothing effectful (no lock
+ * contention, no spend). The precise chunk count (hence a total USD figure) comes from the engine
+ * estimator on the daemon-backed confirmed path; here we surface the per-token RATE when it is known.
  */
 async function defaultEstimate(target: TargetEmbedder): Promise<CostPreview> {
+  let pricePerMTok: number | null = null;
+  let pricingKnown = false;
   try {
     const { lookupEmbeddingPrice } = await import("../vendor/gbrain/src/core/embedding-pricing.ts");
     const price = lookupEmbeddingPrice(target.model);
-    const pricingKnown = price.kind === "known";
-    return computeCostPreview({
-      chunkCount: null,
-      pricePerMTok: pricingKnown ? price.pricePerMTok : null,
-      pricingKnown,
-      source: "rough",
-      note: "rough preview — chunk count deferred to the daemon-backed estimate on a confirmed run",
-    });
+    if (price.kind === "known") {
+      pricePerMTok = price.pricePerMTok;
+      pricingKnown = true;
+    }
   } catch {
-    // Vendor unavailable (e.g. CI without vendor/) — still a clearly-labeled, safe preview.
-    return computeCostPreview({
-      chunkCount: null,
-      pricePerMTok: null,
-      pricingKnown: false,
-      source: "rough",
-      note: "pricing table unavailable in this environment",
-    });
+    // Vendor unavailable (e.g. CI without vendor/) — fall through to the catalog table below.
   }
+  if (!pricingKnown && Object.prototype.hasOwnProperty.call(CATALOG_EMBEDDING_PRICE_PER_MTOK, target.model)) {
+    pricePerMTok = CATALOG_EMBEDDING_PRICE_PER_MTOK[target.model]!;
+    pricingKnown = true;
+  }
+  return computeCostPreview({
+    chunkCount: null,
+    pricePerMTok,
+    pricingKnown,
+    source: "rough",
+    note: "rough preview — chunk count (hence the total) comes from the daemon on a confirmed run",
+  });
 }
 
 /**
@@ -281,7 +297,7 @@ async function defaultIsDaemonReachable(): Promise<boolean> {
 }
 
 /**
- * Default config switch (EFFECTFUL — never executed by the build task). Loads the engine config
+ * Default config switch (EFFECTFUL — reached only past the confirmation gate). Loads the engine config
  * file-only, points it at the target provider, clears the keyword-only flag, and saves. Lazy `vendor/`
  * import. This writes a plain config (model/dims), never a credential.
  */
@@ -296,7 +312,7 @@ async function defaultWriteConfig(target: TargetEmbedder): Promise<void> {
 }
 
 /**
- * Default submit (EFFECTFUL — never executed by the build task). Reuses cli/remote-tools.ts → callTool to
+ * Default submit (EFFECTFUL — reached only past the confirmation gate). Reuses cli/remote-tools.ts → callTool to
  * submit the `submit_job` MCP tool with the re-embed payload, exactly as submitCycle does. Lazy import.
  */
 async function defaultSubmit(payload: ReembedSubmission): Promise<unknown> {
@@ -436,7 +452,7 @@ export async function runMigrate(opts: RunMigrateOptions = {}): Promise<MigrateR
     return { status: "confirm-required", exitCode: EXIT_CONFIRM_REQUIRED, target, actions, cost };
   }
 
-  // 6. Effectful path (built, NEVER executed by the build task). Refuse before ANY mutation if the
+  // 6. Effectful path — reached only past the confirmation gate. Refuse before ANY mutation if the
   //    daemon is unreachable or the target dims are illegal; then config-write FIRST, submit SECOND.
   const reachable = await isDaemonReachable();
   if (!reachable) throw new DaemonUnreachableError();
