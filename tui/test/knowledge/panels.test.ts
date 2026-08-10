@@ -67,6 +67,49 @@ describe("Overview panel (6.5.1) + lock banner (6.5.5)", () => {
     const t = frameText(base("home", {}));
     expect(t).toContain("loading system status");
   });
+
+  // First-run: the brain is up but nothing exists yet. Each empty box must TEACH the key
+  // that creates the first item instead of a mute "none" — verified at the tightest
+  // supported size (80x24), where frameTextAt also asserts exact rows×cols so the teaching
+  // strings are proven to fit their panels without truncation.
+  const firstRun = base("home", {
+    overview: {
+      data: {
+        brain: { state: "up", servedBy: "mcp:8541", cached: false },
+        spend: { mtd: 0, cap: 10, remaining: 10 },
+        fleet: { total: 0, online: 0 },
+        memory: { learnings: 0, sessions: 0 },
+      },
+      memory: { learnings: [], sessions: [] },
+      status: "ready",
+      atLabel: "14:31",
+    },
+  });
+
+  it("empty sessions box teaches the launch key (l), not a bare tab number", () => {
+    const t = frameTextAt(firstRun, { cols: 80, rows: 24 });
+    expect(t).toContain("none · press l to launch");
+    expect(t).not.toContain("press 2");
+  });
+
+  it("empty latest-memories box teaches how to save the first memory (5 then r)", () => {
+    const t = frameTextAt(firstRun, { cols: 80, rows: 24 });
+    expect(t).toContain("no recent memories · press 5 then r to save one");
+  });
+
+  it("first-run shows a single 'start here' cue naming the first keys, and it fits 80x24", () => {
+    for (const size of [{ cols: 80, rows: 24 }, { cols: 100, rows: 30 }, { cols: 160, rows: 48 }]) {
+      // frameTextAt asserts exact rows×cols, so a present CTA is also proof it fits its row.
+      const t = frameTextAt(firstRun, size);
+      expect(t).toContain("start here · l launch · 4 then a add workspace · 5 then r save memory");
+    }
+  });
+
+  it("the 'start here' cue is suppressed once there are sessions or memories (not for existing users)", () => {
+    // `cached` has live fleet + a saved learning → not a brand-new brain → no cue.
+    const t = frameText(cached);
+    expect(t).not.toContain("start here");
+  });
 });
 
 // ── Memory (F9.2) ───────────────────────────────────────────────────────────
@@ -130,6 +173,42 @@ describe("Memory panel (F9.2)", () => {
     expect(detail.kind).toBe("detail");
     expect(detail.body).toContain("Episode text is available only through explicit bounded retrieval.");
     expect(detail.body).not.toContain("deepseek v3 falla");
+  });
+});
+
+// ── Memory empty states TEACH the first action (F2-C) ────────────────────────
+// A brand-new brain has nothing recalled, no context packs, and no procedures. Each empty
+// panel must name the key that creates the first item (recall → `r`) or, for the read-only
+// collections, where they come from (the `ebrain context` / `ebrain procedures` CLIs) —
+// never a mute "none". Asserted at 80x24 so frameTextAt's exact rows×cols check doubles as
+// proof each teaching line fits its (narrow) panel without truncation.
+describe("Memory empty states teach the first action (F2-C)", () => {
+  const emptyMemory = base("memory", {
+    memory: {
+      data: { learnings: [], sessions: [] },
+      episodes: { episodes: [] },
+      contexts: { packs: [] },
+      procedures: { procedures: [] },
+      workflows: { workflows: [] },
+      selected: 0,
+      workflowSelected: 0,
+      status: "ready",
+    },
+  });
+
+  it("recall names the save key (r), not a mute 'no episodes/learnings'", () => {
+    const t = frameTextAt(emptyMemory, { cols: 80, rows: 24 });
+    expect(t).toContain("no memories yet · press r to save one");
+  });
+
+  it("context packs (read-only) point at where they come from (ebrain context)", () => {
+    const t = frameTextAt(emptyMemory, { cols: 80, rows: 24 });
+    expect(t).toContain("no packs · ebrain context");
+  });
+
+  it("procedures (read-only) point at where they come from (ebrain procedures)", () => {
+    const t = frameTextAt(emptyMemory, { cols: 80, rows: 24 });
+    expect(t).toContain("none · ebrain procedures");
   });
 });
 
