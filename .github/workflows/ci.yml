@@ -101,27 +101,44 @@ jobs:
           bun install --frozen-lockfile
           bun install --cwd vendor/gbrain --frozen-lockfile --ignore-scripts
 
-      - name: Materialize a non-git checkout at a path with a space
+      # Dimension 1 — a checkout path that CONTAINS A SPACE (F-T6), kept git-backed so the git-aware
+      # release-readiness tests (tracked mode bits, `git clone HEAD`, gitignore hygiene) still apply.
+      - name: A git-backed checkout at a path with a space (F-T6)
         run: |
-          dest="$RUNNER_TEMP/ebrain install dir"   # the space is deliberate (F-T6)
-          mkdir -p "$dest"
-          rsync -a --exclude='.git' ./ "$dest/"
-          test ! -e "$dest/.git" || { echo "::error::checkout is still a git repo — the non-git case is not being exercised"; exit 1; }
-          echo "DEST=$dest" >> "$GITHUB_ENV"
+          dest="$RUNNER_TEMP/ebrain space dir"     # the space is deliberate
+          git worktree add --detach "$dest" HEAD
+          rsync -a node_modules "$dest/"
+          mkdir -p "$dest/vendor"
+          rsync -a vendor/gbrain "$dest/vendor/"
+          echo "SPACED=$dest" >> "$GITHUB_ENV"
 
-      - name: Full suite from the non-git spaced checkout (sandbox HOME, C locale, no EBRAIN_HOME)
+      - name: Full suite from the spaced checkout (sandbox HOME, C locale, no EBRAIN_HOME)
         env:
           LC_ALL: C
           LANG: C
         run: |
           sandbox="$RUNNER_TEMP/sandbox home a"
           mkdir -p "$sandbox"
-          cd "$DEST"
+          cd "$SPACED"
           env -u EBRAIN_HOME HOME="$sandbox" bun test ./cli/ ./tui/test/
+
+      # Dimension 2 — the NON-GIT surface a user actually installs from (git archive / Docker COPY).
+      # Only the checks that must hold without git run here; the git-aware release-readiness tests
+      # (tracked mode bits, `git clone HEAD`, gitignore hygiene) are out of scope for a tarball.
+      - name: A non-git tarball checkout (git archive surface)
+        run: |
+          dest="$RUNNER_TEMP/ebrain tarball dir"
+          mkdir -p "$dest"
+          git archive HEAD | tar -x -C "$dest"
+          test ! -e "$dest/.git" || { echo "::error::checkout is still a git repo — the non-git case is not being exercised"; exit 1; }
+          rsync -a node_modules "$dest/"
+          mkdir -p "$dest/vendor"
+          rsync -a vendor/gbrain "$dest/vendor/"
+          echo "TARBALL=$dest" >> "$GITHUB_ENV"
 
       - name: The hardcoded-home guard must be non-vacuous outside git (plant an offender)
         run: |
-          cd "$DEST"
+          cd "$TARBALL"
           # Compose the forbidden spelling at runtime — never let it live in a tracked file, or this
           # workflow would trip the very guard it exists to test (the guard scans .github too).
           name='eBrain'
@@ -133,12 +150,12 @@ jobs:
           rm -f scripts/__ci_planted_offender.sh
           echo "guard correctly failed on the planted offender"
 
-      - name: ebrain doctor degrades to warnings on a fresh install (exit 0)
+      - name: ebrain doctor exits 0 on a fresh non-git install
         env:
           LC_ALL: C
           LANG: C
         run: |
           sandbox="$RUNNER_TEMP/sandbox home b"
           mkdir -p "$sandbox"
-          cd "$DEST"
+          cd "$TARBALL"
           env -u EBRAIN_HOME HOME="$sandbox" bash ./cli/ebrain doctor
