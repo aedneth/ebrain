@@ -12,7 +12,7 @@ import { test, expect, describe } from "bun:test";
 // Deny policy is operator configuration; this suite declares its own neutral fixture policy.
 process.env.EBRAIN_DENIED_REPOS = "denied-alpha,denied-beta";
 import { execSync } from "child_process";
-import { mkdirSync, rmSync, writeFileSync, chmodSync, mkdtempSync, symlinkSync } from "fs";
+import { mkdirSync, rmSync, writeFileSync, chmodSync, mkdtempSync, symlinkSync, cpSync, existsSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -190,7 +190,11 @@ d("E2E — new→list→peek→send→kill contra scripts/fake-agent.sh (tmux re
   });
 
   test("new: crea la sesión con el fake-agent (launchCmd override, NO manifest real)", async () => {
-    const r = await newSession("test", slug, { cwd: workDir, launchCmd: `bash ${FAKE_AGENT}` });
+    // launchArgv (not an interpolated launchCmd string): it goes through shellCommandFromArgv, which
+    // quotes each token. Interpolating `bash ${FAKE_AGENT}` into a raw command breaks the instant the
+    // checkout path contains a space (pass 6, F-T6) — sh splits `/tmp/weird path/...` in two and the
+    // session dies before it starts. The spec's acceptance path is "arbitrary", which includes spaces.
+    const r = await newSession("test", slug, { cwd: workDir, launchArgv: ["bash", FAKE_AGENT] });
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.session.name).toBe(name);
@@ -247,6 +251,46 @@ d("E2E — new→list→peek→send→kill contra scripts/fake-agent.sh (tmux re
     // proceso zombie corriendo entre corridas de `bun test`.
     await killSession(name, true).catch(() => {});
     rmSync(workDir, { recursive: true, force: true });
+    expect(true).toBe(true);
+  });
+});
+
+// Pass 6, F-T6: a checkout at a path containing a space broke session management — five CLI and two
+// TUI tests failed solely because of the space, because they interpolated the fake-agent path into a
+// raw command string. The root fix is quoting (launchArgv), but the space must also be exercised
+// where the test can control it, independent of where the suite happens to be cloned. This creates
+// both the cwd AND the launched script under a spaced path and drives the full lifecycle.
+d("F-T6 — session management survives a path with a space", () => {
+  const suffix = `space-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const name = `${SESSION_PREFIX}test-${suffix}`;
+  let spacedDir = "";
+  let spacedAgent = "";
+
+  test("setup: crear un cwd y un fake-agent bajo una ruta con espacio", () => {
+    spacedDir = join(tmpdir(), `ebrain has a space ${suffix}`);
+    mkdirSync(spacedDir, { recursive: true });
+    spacedAgent = join(spacedDir, "fake-agent.sh");
+    cpSync(join(import.meta.dir, "..", "scripts", "fake-agent.sh"), spacedAgent);
+    expect(existsSync(spacedAgent)).toBe(true);
+    expect(spacedDir).toContain(" ");
+  });
+
+  test("new + list: la sesión arranca y aparece con su cwd espaciado intacto", async () => {
+    const created = await newSession("test", suffix, { cwd: spacedDir, launchArgv: ["bash", spacedAgent] });
+    expect(created.ok).toBe(true);
+    const listed = await listSessions();
+    expect(listed.ok).toBe(true);
+    if (listed.ok) {
+      const row = listed.sessions.find((s) => s.name === name);
+      expect(row).toBeDefined();
+      // The space must survive the round trip through tmux's format output and our parser.
+      expect(row?.cwd).toBe(spacedDir);
+    }
+  });
+
+  test("kill + teardown", async () => {
+    await killSession(name, true).catch(() => {});
+    if (spacedDir) rmSync(spacedDir, { recursive: true, force: true });
     expect(true).toBe(true);
   });
 });

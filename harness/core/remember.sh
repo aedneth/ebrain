@@ -13,10 +13,12 @@
 # se NIEGA a escribir (exit ≠ 0). Robusto en lo demás. NO es un hook: lo invoca el agente/CLI a mano.
 set -uo pipefail
 
+. "$(dirname -- "${BASH_SOURCE[0]}")/ebrain-home.sh"
+EBRAIN_HOME="$(ebrain_resolve_home "${BASH_SOURCE[0]}")"
+
 # Resolve the eBrain root ONCE, here, and derive everything else from it. The checkout path is the
 # operator's choice: `cli/ebrain` exports EBRAIN_HOME from its own location, so an install at any
 # path reaches this script correctly. The $HOME default only applies to a direct, uninstalled call.
-EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
 MEM="${EBRAIN_MEMORY_HOME:-$EBRAIN_HOME/memory}"
 LEARN="$MEM/learnings"
 # Shared trust policy (deny policy + unified redaction) — single source of truth for the harness.

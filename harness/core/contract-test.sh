@@ -26,7 +26,8 @@ if [ "${EBRAIN_CONTRACT_TESTED:-}" = "1" ]; then
 fi
 
 HARNESS="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-EBRAIN_HOME="$(cd "$HARNESS/.." && pwd)"
+. "$(dirname -- "${BASH_SOURCE[0]}")/ebrain-home.sh"
+EBRAIN_HOME="$(ebrain_resolve_home "${BASH_SOURCE[0]}")"
 GUARD="${1:-$HARNESS/core/guard-secrets.sh}"
 PARITY="${2:-}"
 FIX="$HARNESS/contract/fixtures"

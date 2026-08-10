@@ -33,7 +33,8 @@ external-actions-pending: third audit pass, squash merge, Vercel deployment, any
 > The candidate is **merged and deployed**. PR #1 was squash-merged into `main` as `600b045`, and the
 > documentation website is live at **https://ebrain.vercel.app** (40 pages, 38 documentation routes,
 > strict CSP, HSTS, Speed Insights). A fourth independent pass over the round-3 fixes was commissioned
-> in parallel; read `docs/AUDIT-F7-F12-PASS4.md` if it is present before assuming this tree is final.
+> in parallel. It never wrote a report file — its findings live in the F-Q entries of `CHANGELOG.md`.
+> Passes 5 and onward do have reports: `docs/AUDIT-F7-F12-PASS5.md` and any later `PASS<n>` file.
 >
 > **F-A3 is resolved as an owner decision, not a defect:** the repository stays **private** for now
 > while the site is public. GitHub links on the site therefore 404 for visitors, and that is accepted

@@ -4,11 +4,163 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-07-21 (later still) -- sixth audit pass: the engineering was real, the verification was not
+
+Pass 6 (`/tmp/AUDIT-F7-F12-PASS6.md`, verdict `[AUDIT_FAIL]`) confirmed F-S1 genuinely closed — the
+first substantive "the fix works" result in six passes — then failed the branch on the same
+meta-defect it exists to remove: a guard that passed over nothing, and published numbers that were
+false. Remediated against `docs/SPEC-PORTABILITY-HARDENING.md`; measured evidence in
+`docs/MAKER-REPORT-PASS6-REMEDIATION.md`. **Every number below was produced by a command at write
+time — the standing rule now, after F-T2: measure and paste, never narrate a count from memory.**
+
+- **F-T1 (BLOCKING) -- the hardcoded-path guard was vacuous outside git.** It read `git ls-files`;
+  in a tarball / `git archive` / Docker `COPY` (what a user installs from) that returns nothing and
+  every assertion passed over an empty list. It walks the working tree now, with a non-emptiness
+  canary and an on-disk planted-offender canary. Verified in a real non-git tarball: clean passes,
+  a planted `$HOME/eBrain` and `~/eBrain` both get caught (was 6 pass / 0 fail before).
+- **F-T2 (BLOCKING) -- the published counts were false and self-contradictory** (364 vs 370 vs a real
+  369/1). Root cause was a test asserting on gitignored state (F-T7) plus counts recalled instead of
+  measured. Fixed both; the discipline is now procedural.
+- **F-T3 (HIGH) -- the "no longer silent" secret guard reached 1 of 6 agents.** The wrappers
+  *generated* by `harness/core/install.sh` (Claude/Gemini/Cursor/OpenCode/generic) still failed open
+  silently. They warn now, and `EBRAIN_GUARD_STRICT=1` makes a missing **secret** guard deny (exit 2)
+  while non-security hooks stay fail-open. Verified against the real generated artifact.
+- **F-T4 (HIGH) -- CI set `EBRAIN_HOME`,** short-circuiting the resolver, then that green was cited as
+  portability evidence. CI now runs the CLI suite without it, and again under `LC_ALL=C`.
+- **F-T5 (HIGH) -- `ebrain doctor` failed on every fresh install** (9 FAIL / exit 1), demanding
+  `$CFG` launchers nothing in the repo creates; `ebrain route` dispatched to a nonexistent launcher.
+  Created `scripts/ebrain-route`; `doctor` resolves launchers from `$EBRAIN_HOME/scripts/`; absent
+  user config is a WARN, not a FAIL. Verified fresh: `OK · 10 warn`, exit 0.
+- **F-T6 (HIGH) -- a path with a space broke session management** (7 tests). Fixtures quote via
+  `launchArgv`; a regression drives the full lifecycle under a spaced path. Verified: spaced clone
+  4 fail → 37 pass / 0 fail.
+- **F-T7…F-T15** — gitignored-state assertion removed; the tmux static guard reads the working tree;
+  the dispatch detector skips template literals (F-S6 backtick trap did not recur); `bridgeCommandPath`
+  moved to the SDK-free `cli/bridge-path.ts` so its tests load without the engine; the Codex hook no
+  longer leaks a shell error; the `~/eBrain` tilde spelling is covered; launcher count corrected to 13
+  scripts (12 launchers + installer). F-T11 (private repo) and F-T15 (`.npmrc`, human-read) recorded
+  for Eduardo.
+
+Verification: CLI **383/0** (330 on main; +53), identical under `LC_ALL=C` with no `EBRAIN_HOME`;
+TUI **442/0**; Astro 0/0/0 and 40 pages; every touched shell entrypoint passes `bash -n`. Two
+mistakes made while fixing (a fragile template heuristic caught empirically, a `bash -n` false alarm
+on bun-shebang files) are in the maker report. **Not merged: no independent verdict yet.**
+
+---
+
+## 2026-07-21 (later) -- fifth audit pass: it has to work on a machine that is not mine
+
+The fifth independent pass (`docs/AUDIT-F7-F12-PASS5.md`, verdict `[AUDIT_FAIL]`) found the previous
+entry's fix applied to the wrong layer, plus a second fabricated citation. Remediated against a
+written acceptance contract this time: `docs/SPEC-PORTABILITY-HARDENING.md`, with every fix's
+pre-fix failure output recorded in `docs/MAKER-REPORT-PORTABILITY.md`.
+
+**The pattern, stated plainly.** Five passes, five `[AUDIT_FAIL]`, one shape: every check had been
+run in the one environment where eBrain already works -- this laptop, checkout at `$HOME/eBrain`,
+`EBRAIN_HOME` already exported by an ancestor process, engine modules already installed, and an
+`en_US.UTF-8` locale. A developer who installs this gets none of those. The spec now makes "not the
+author's machine" the acceptance environment.
+
+- **F-S1 (BLOCKING) -- the location was resolved and then never handed across the process boundary.**
+  Eleven launchers found the right checkout, assigned it to a plain shell variable, and `exec`ed into
+  `bun` -- where a plain assignment is not inherited. `cli/up.ts` read `undefined`, fell back to
+  `$HOME/eBrain`, and wrote that guess into the MCP command string registered with **every agent**.
+  The shell layer knew; the process that acts on the answer did not. Now two independent mechanisms:
+  `ebrain_export_home` exports from shell, and `cli/ebrain-home.ts` resolves from `import.meta.dir`,
+  so TypeScript never needs to be told. `cli/launcher-env.test.ts` spawns the shipped launchers and
+  asserts what the grandchild process actually inherits.
+- **F-S2 -- systemd units hardcoded `%h/eBrain`,** a spelling the F-Q1 guard could not see. They are
+  templates now, installed by `scripts/install-dream-timer.sh`, which aborts if substitution fails.
+- **F-S3 -- a launcher symlinked onto PATH died before the resolver ran.** Launchers resolve their
+  own symlink first, degrading gracefully where `readlink -f` is absent.
+- **F-S4 -- `--help` ate a real operation.** `context update <id> --content --help` printed usage and
+  exited 0 instead of setting the content to the literal string. Help is now only help in a flag
+  position (`cli/help-flag.ts`, which carries the full three-pass history of getting this wrong).
+- **F-S5/F-S6 -- two guards that were narrower than they claimed.** The hardcoded-path guard now
+  covers shell, systemd and TypeScript spellings; dispatch detection matches statement shape rather
+  than text.
+- **F-S7 -- the overlay hook copies had drifted from the resolver.** They validate the recorded path
+  and tolerate CRLF now. The Codex secret guard still fails open, but no longer *silently*: it warns,
+  and `EBRAIN_GUARD_STRICT=1` makes it deny.
+
+**Found by running the suite the way the spec demands, reported by no audit.** Under `LC_ALL=C` --
+the default in containers and in systemd units with no locale -- tmux substitutes `_` for the TAB in
+`-F` format output, so `listSessions` parsed every row as a single field: mangled name, empty cwd,
+creation date of 1970. Everything that resolves a session by name was silently wrong on every machine
+without a configured locale. Fixed with a printable separator; `cli/locale-portability.test.ts` runs
+the real CLI against real tmux in a real `C`-locale process.
+
+**Integrity.** The previous entry cited `docs/AUDIT-F7-F12-PASS4.md`. That file has never existed --
+a second false claim of the same class as "the last two sites", written in the commit that corrected
+the first. Corrected in place above, and `cli/citations.test.ts` now fails the build on any citation
+that does not resolve. It found twenty broken references on its first run; fourteen pre-existing ones
+are a frozen baseline that can only shrink.
+
+Verification: CLI **370/0** identically under the normal locale and under `LC_ALL=C` with no
+`EBRAIN_HOME` set, TUI **442/0**, Astro check 0/0/0 and 40 pages built, CI green from a clean
+checkout. 29 new tests, each run against the pre-fix code first. **Not merged: no independent
+verdict yet.**
+
+---
+
+## 2026-07-21 -- fourth audit pass: one place decides where eBrain lives
+
+The fourth independent pass (verdict `[AUDIT_FAIL]`) found that the previous entry's claim was
+false, and that the defect it claimed to close was still live in the single most load-bearing place
+it could be.
+
+> **Correction (2026-07-21).** This entry originally cited `docs/AUDIT-F7-F12-PASS4.md`. That file
+> has never existed in this repository: the pass-4 report was never written to disk, and the
+> citation was added without checking. It is the same failure as the "last two sites" claim
+> corrected below — an assertion made without running the one command that would have refuted it,
+> written in the very commit that corrected the previous instance. The pass-4 findings themselves
+> are real and are recorded in the F-Q entries below; only the pointer was fabricated.
+> `cli/citations.test.ts` now fails the build if any tracked document cites a repository file that
+> does not exist.
+
+- **F-Q1 (BLOCKING) -- `$HOME/eBrain` was hardcoded in twenty-six places, not two.** Fifteen shell
+  entrypoints each rolled their own default and several had no override at all. The worst was
+  `scripts/ebrain-mcp-bridge`: the literal command every supported agent spawns to reach eBrain over
+  MCP, registered by `ebrain up`. A user who cloned anywhere but `$HOME/eBrain` -- exactly as the
+  README instructs -- got an agent integration that failed silently, detected by neither the
+  onboarding smoke test (which talks to the daemon over HTTP and never spawns the bridge) nor
+  `doctor` (which checks a different mechanism). All twenty-six now resolve through
+  `harness/core/ebrain-home.sh`, which walks up from the caller to find the checkout it lives in.
+  Files installed as **copies** outside any checkout -- the agent hooks under `~/.codex/hooks` --
+  cannot walk up to anything, so `install.sh` records the location and they read it.
+  `cli/ebrain-home.test.ts` fails if any tracked file reintroduces the literal, because the reason
+  the false claim shipped is that nobody ran the search.
+- **F-Q2 (HIGH) -- deny entries are now length-bounded.** A 32,000-character entry made the combined
+  ERE pathological and grep spent minutes on one match: a denial of service on `remember` and
+  `sessions-federate` reachable from a config file. The audit attributed this to the round-3
+  `LC_ALL=C` change; that attribution did not reproduce -- both locales blow up on the same input --
+  so the bound closes it regardless of locale.
+- **F-Q3 (MEDIUM) -- `-h` is only help in the flag position.** `ebrain context get -h` printed usage
+  and exited 0 instead of rejecting an invalid pack id: the user asked for a real operation and
+  silently got none.
+- **F-Q4/F-Q5 (MEDIUM) -- two round-3 tests were vacuous and are now not.** The "usage names only
+  real subcommands" check matched the name anywhere in the file, so a fake name passed if the string
+  appeared for any unrelated reason; it now compares against the names the dispatcher branches on.
+  The engine-install test passed with the script-disabling flag deleted from the installer, leaving
+  the one flag the code calls a supply-chain guarantee with no coverage; it now asserts the flag.
+- **Root npm config added** (exact pinning, lifecycle scripts disabled, and a two-day minimum
+  release age), adopted from the study in `docs/COMPETITIVE-STUDY-PI.md`. The local git hook had been
+  requesting it on every commit.
+- **A test no longer depends on how long the checkout's path is.** `cli/ebrain.test.ts` asserted
+  against raw tmux pane output, which hard-wraps at the pane width -- so it failed purely because a
+  worktree path was long. Same class as everything else here: it worked on one machine.
+
+CLI 335/0 with, without, and under a sandboxed `HOME`; TUI 442/0. Every fix carries a test proven to
+fail against the pre-fix code.
+
+---
+
 ## 2026-07-20 (later) -- merged to main, and the documentation website is live
 
 The F7-F12 candidate shipped. PR #1 was squash-merged into `main` as `600b045` after CI passed on
 `e337b86`; the release branch is retired. A fourth independent pass over the round-3 fixes was
-commissioned in parallel -- see `docs/AUDIT-F7-F12-PASS4.md` if present.
+commissioned in parallel; its findings are recorded in the F-Q entries of the 2026-07-21 entry
+above. (It never produced a report file, despite a later entry citing one — see the correction there.)
 
 - **Website live at https://ebrain.vercel.app** -- Astro static, built on Vercel from the repository
   root (not from `website/`: `website/scripts/sync-assets.ts` copies from the repo-root `assets/`,
@@ -67,9 +219,13 @@ published documentation was audited as a public contract. Narrative:
 - **F-P7/F-P8 (LOW) -- the i18n guard skipped shell `case` arms** (`*) echo "…"` read as a comment;
   four live lines in `cli/ebrain` had zero protection) and carried one real English word in its
   "not English at all" tier. Both closed.
-- **F-P9's class closed at its last two sites.** `cli/fleet.ts` and `cli/sessions.ts` still defaulted
+- **F-P9's class narrowed at two sites.** `cli/fleet.ts` and `cli/sessions.ts` still defaulted
   `EBRAIN_HOME` to `$HOME/eBrain`, so a source user who cloned elsewhere got no adapters. The suite
   now passes identically under a sandboxed `HOME` with an empty `XDG_CONFIG_HOME`.
+  > **Correction (2026-07-21).** This entry originally called those "the last two sites". That was
+  > false: twenty-four more existed across fifteen shell entrypoints, including the MCP bridge every
+  > agent spawns. The claim was written without running the search that would have refuted it. See
+  > the 2026-07-21 entry.
 
 CLI 330/0 (with, without, and under a sandboxed `HOME`), TUI 442/0, Astro 0/0/0, 40 pages/38 routes.
 Every fix has a test proven to fail against the pre-fix code. **These fixes were verified by their

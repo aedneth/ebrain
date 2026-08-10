@@ -287,7 +287,7 @@ describe("the shipped artifact, not a copy of it", () => {
       mkdirSync(bin, { recursive: true });
       writeFileSync(
         join(bin, "bun"),
-        `#!/bin/sh\ncase "$1" in --version) echo 1.3.14;; install) printf '%s\\n' "$PWD" >> ${log};; esac\nexit 0\n`,
+        `#!/bin/sh\ncase "$1" in --version) echo 1.3.14;; install) printf '%s\\t%s\\n' "$PWD" "$*" >> ${log};; esac\nexit 0\n`,
         { mode: 0o755 },
       );
       chmodSync(join(bin, "bun"), 0o755);
@@ -308,9 +308,16 @@ describe("the shipped artifact, not a copy of it", () => {
       });
       expect(res.code).toBe(0);
 
-      const ranIn = readFileSync(log, "utf8").split("\n").filter(Boolean);
-      expect(ranIn).toContain(ebrainHome);
-      expect(ranIn).toContain(join(ebrainHome, "vendor", "gbrain"));
+      const ranIn = readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => l.split("\t"));
+      const dirs = ranIn.map(([dir]) => dir);
+      expect(dirs).toContain(ebrainHome);
+      expect(dirs).toContain(join(ebrainHome, "vendor", "gbrain"));
+
+      // Pass-4 F-Q5: the previous version passed with --ignore-scripts deleted from the installer,
+      // so the one flag the code calls a supply-chain guarantee had no coverage at all. A pinned
+      // commit only pins the code; it does nothing about a postinstall hook that runs on install.
+      const engineInstall = ranIn.find(([dir]) => dir === join(ebrainHome, "vendor", "gbrain"));
+      expect(engineInstall?.[1] ?? "").toContain("--ignore-scripts");
     } finally {
       rmSync(base, { recursive: true, force: true });
     }

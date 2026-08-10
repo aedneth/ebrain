@@ -113,10 +113,14 @@ bash ~/eBrain/scripts/dream-cycle             # real; ver ~/.config/ebrain/dream
 
 **Habilitar el timer nocturno (HUMANO — gasto autónomo recurrente):** unit files listos en `~/eBrain/scripts/systemd/` (03:30, `Persistent=true` = catch-up al próximo boot si la laptop estuvo apagada; evita dip-collect 19:30 y el cluster de las 02:2x).
 ```bash
-cp ~/eBrain/scripts/systemd/ebrain-dream.{service,timer} ~/.config/systemd/user/
-systemctl --user daemon-reload && systemctl --user enable --now ebrain-dream.timer
-systemctl --user list-timers ebrain-dream.timer   # verificar
+bash "$EBRAIN_HOME/scripts/install-dream-timer.sh"   # resuelve el checkout real y sustituye la ruta
+systemctl --user enable --now ebrain-dream.timer     # gasto autónomo recurrente — decisión humana
+systemctl --user list-timers ebrain-dream.timer      # verificar
 ```
+
+> Las unidades son plantillas (`.service.in` / `.timer.in`). No las copies con `cp`: hasta 2026-07-21
+> traían `%h/eBrain` hardcodeado, que solo es correcto si clonaste en `$HOME/eBrain`. El instalador
+> sustituye la ruta real y aborta si la sustitución falla.
 
 ## Backup (F2 §2.8)
 

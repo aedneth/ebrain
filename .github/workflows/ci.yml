@@ -32,10 +32,19 @@ jobs:
       - name: Install documentation website dependencies
         run: bun install --cwd website --frozen-lockfile
 
-      - name: CLI test suite
+      # Pass 6 (F-T4): this used to set EBRAIN_HOME: ${{ github.workspace }}, which short-circuits the
+      # resolver — the exact thing the fix exists to make unnecessary. CI then "passed" while a fresh
+      # install failed, and that green was cited as portability evidence. Run WITHOUT EBRAIN_HOME so
+      # the suite exercises real resolution, and a second time under the C locale with no EBRAIN_HOME
+      # so CI is the portability proof (F-S1 + the tmux/locale defect) rather than a claim about one.
+      - name: CLI test suite (real resolution, no EBRAIN_HOME)
+        run: bun test ./cli/
+
+      - name: CLI test suite (C locale, the container/minimal-server default)
         run: bun test ./cli/
         env:
-          EBRAIN_HOME: ${{ github.workspace }}
+          LC_ALL: C
+          LANG: C
 
       - name: TUI test suite
         run: bun test ./tui/test/

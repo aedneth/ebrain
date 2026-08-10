@@ -131,9 +131,11 @@ tmuxTest("validated workspace records launch independent fake-agent sessions in 
     const alphaWorkspace = registered.workspaces.find((workspace) => workspace.label === "Alpha")!;
     const betaWorkspace = registered.workspaces.find((workspace) => workspace.label === "Beta")!;
 
+    // launchArgv, not an interpolated launchCmd string: quotes each token so a checkout path with a
+    // space does not split (pass 6, F-T6).
     const [left, right] = await Promise.all([
-      newSession("test", `${suffix}-a`, { cwd: alphaWorkspace.cwd, launchCmd: `bash ${fakeAgent}` }),
-      newSession("test", `${suffix}-b`, { cwd: betaWorkspace.cwd, launchCmd: `bash ${fakeAgent}` }),
+      newSession("test", `${suffix}-a`, { cwd: alphaWorkspace.cwd, launchArgv: ["bash", fakeAgent] }),
+      newSession("test", `${suffix}-b`, { cwd: betaWorkspace.cwd, launchArgv: ["bash", fakeAgent] }),
     ]);
     expect(left.ok).toBe(true);
     expect(right.ok).toBe(true);

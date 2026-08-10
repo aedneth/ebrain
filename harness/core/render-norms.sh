@@ -7,10 +7,13 @@
 # Uso:  render-norms.sh [--source <NORMS.md>] <archivo-destino>
 set -uo pipefail
 
+. "$(dirname -- "${BASH_SOURCE[0]}")/ebrain-home.sh"
+EBRAIN_HOME="$(ebrain_resolve_home "${BASH_SOURCE[0]}")"
+
 BEGIN_MARK="<!-- ebrain-norms:begin -->"
 END_MARK="<!-- ebrain-norms:end -->"
 NOTE="<!-- gestionado por 'ebrain norms render' — editá harness/core/NORMS.md, NO este bloque -->"
-SRC="$HOME/eBrain/harness/core/NORMS.md"
+SRC="$EBRAIN_HOME/harness/core/NORMS.md"
 TARGET=""
 
 while [ $# -gt 0 ]; do
@@ -28,7 +31,7 @@ NORMS="$(cat "$SRC")"
 
 # Backup del destino (si existe) antes de modificar.
 if [ -f "$TARGET" ]; then
-  BK="$HOME/eBrain/harness/.backups"; mkdir -p "$BK" 2>/dev/null || true
+  BK="$EBRAIN_HOME/harness/.backups"; mkdir -p "$BK" 2>/dev/null || true
   cp "$TARGET" "$BK/$(basename "$TARGET").$(date +%Y%m%d-%H%M%S).bak" 2>/dev/null || true
 fi
 

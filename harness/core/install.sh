@@ -10,7 +10,10 @@
 # gemini/generic = agente nuevo: crea todo desde el manifest (la prueba de la tesis).
 set -uo pipefail
 
-HARNESS="$HOME/eBrain/harness"
+. "$(dirname -- "${BASH_SOURCE[0]}")/ebrain-home.sh"
+EBRAIN_HOME="$(ebrain_resolve_home "${BASH_SOURCE[0]}")"
+
+HARNESS="$EBRAIN_HOME/harness"
 CORE="$HARNESS/core"
 ADAPTERS="$HARNESS/adapters"
 MGET="$CORE/manifest-get.ts"
@@ -70,8 +73,18 @@ if [ "$DOCTOR_ONLY" = 0 ]; then
 # ebrain harness — wrapper generado ($AGENT/$event → core/$core). Ejecuta el core canónico. FAIL-OPEN.
 # NO editar a mano: se regenera con \`ebrain harness install $AGENT\`. La lógica vive en el core.
 export AGENT_NAME=$AGENT_NAME_V
-CANON="\$HOME/eBrain/harness/core/$core"
-[ -f "\$CANON" ] && exec bash "\$CANON" "\$@"
+# Baked in at install time: this wrapper is a copy living outside the checkout, so it
+# has no checkout to walk up to and no EBRAIN_HOME in its environment.
+CANON="$EBRAIN_HOME/harness/core/$core"
+if [ -f "\$CANON" ]; then exec bash "\$CANON" "\$@"; fi
+# CANON missing → this hook is INACTIVE. Pass 6 (F-T3): the pass-5 "no longer silent" fix reached
+# only the Codex overlay copy; these generated wrappers — Claude/Gemini/Cursor/OpenCode/generic —
+# still failed open with exit 0 and empty stderr. A disabled SECRET guard that says nothing is
+# indistinguishable from one that ran and allowed the call, so it must announce itself. Strict mode
+# turns the missing secret guard into a denial; non-security hooks stay fail-open (blocking a
+# session start because a context hook moved would be worse than the gap it covers).
+printf 'ebrain harness: %s INACTIVE — %s not found (EBRAIN_HOME=%s)\n' "$core" "\$CANON" "$EBRAIN_HOME" >&2
+if [ "$core" = "guard-secrets.sh" ] && [ "\${EBRAIN_GUARD_STRICT:-0}" = "1" ]; then exit 2; fi
 exit 0
 EOF
       chmod +x "$w" 2>/dev/null || true

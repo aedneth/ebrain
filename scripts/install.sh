@@ -114,6 +114,14 @@ fi
 say "Installing dependencies"
 ( cd "$EBRAIN_HOME" && { bun install --frozen-lockfile 2>/dev/null || bun install; } )
 
+# 4b. Record the chosen location. Files that are installed as COPIES outside the checkout — the
+# agent hooks under ~/.codex/hooks — cannot find eBrain by walking up from their own path, and
+# their environment has no EBRAIN_HOME. This record is how they locate it.
+say "Recording the install location"
+EBRAIN_RECORD_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/ebrain"
+mkdir -p "$EBRAIN_RECORD_DIR"
+printf '%s\n' "$EBRAIN_HOME" > "$EBRAIN_RECORD_DIR/home"
+
 # 5. Launcher on PATH (idempotent: always rewritten to the canonical dispatcher)
 say "Linking '$LAUNCHER_NAME' into $EBRAIN_BIN_DIR"
 mkdir -p "$EBRAIN_BIN_DIR"

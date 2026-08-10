@@ -126,7 +126,7 @@ case "$cmd" in
   up)         run "$SCRIPTS/ebrain-up" up "$@" ;;
   onboard)    run "$SCRIPTS/ebrain-up" onboard "$@" ;;
   daemon)    run "$SCRIPTS/ebrain-daemon" "$@" ;;
-  route)     if [ -x "$CFG/ebrain-route" ]; then "$CFG/ebrain-route" "$@"; else echo "ebrain: missing $CFG/ebrain-route" >&2; exit 127; fi ;;
+  route)     if [ -x "$CFG/ebrain-route" ]; then "$CFG/ebrain-route" "$@"; else run "$SCRIPTS/ebrain-route" "$@"; fi ;;
   ui)       run_ui "$@" ;;
   harness)
     sub="${1:-}"; shift || true

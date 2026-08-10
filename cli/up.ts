@@ -12,7 +12,8 @@ import { access } from "fs/promises";
 import { constants } from "fs";
 import { dirname, join } from "path";
 import { homedir } from "os";
-import { bridgeCommandConfig, bridgeCommandPath } from "./mcp-bridge.ts";
+import { resolveEbrainHome } from "./ebrain-home.ts";
+import { bridgeCommandConfig, bridgeCommandPath } from "./bridge-path.ts";
 import {
   EBRAIN_MCP_TOKEN_ENV,
   DEFAULT_PORT,
@@ -27,7 +28,7 @@ import {
 } from "./mcp-token.ts";
 
 const HOME = homedir();
-const EBRAIN_HOME = process.env.EBRAIN_HOME || join(HOME, "eBrain");
+const EBRAIN_HOME = resolveEbrainHome();
 const CFG = join(HOME, ".config", "ebrain");
 const SCRIPTS = join(EBRAIN_HOME, "scripts");
 const DEFAULT_AGENTS = ["claude", "codex", "gemini", "cursor", "opencode"] as const;

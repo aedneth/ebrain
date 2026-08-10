@@ -6,6 +6,7 @@
  * separate from Task Profile and user profiles: neither can invent CLI support for an adapter.
  */
 import { homedir } from "node:os";
+import { resolveEbrainHome } from "./ebrain-home.ts";
 import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { appendAdapterEvent, makeAdapterEvent } from "./cost.ts";
@@ -13,7 +14,7 @@ import { readProfileStore, type ExecutionProfile } from "./profiles.ts";
 import { newSession, sendToSession, type NewSessionInfo, type Result, type TmuxError } from "./sessions.ts";
 
 const HOME = homedir();
-const EBRAIN_HOME = process.env.EBRAIN_HOME || join(HOME, "eBrain");
+const EBRAIN_HOME = resolveEbrainHome();
 const ADAPTERS_DIR = process.env.EBRAIN_ADAPTERS_DIR || join(EBRAIN_HOME, "harness", "adapters");
 const SAFE_ID = /^[a-zA-Z0-9][a-zA-Z0-9._/:@-]{0,160}$/;
 const SAFE_TARGET_ID = /^[a-z][a-z0-9-]{0,63}$/;

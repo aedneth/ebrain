@@ -12,6 +12,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { isHelpRequest } from "./help-flag.ts";
 import { scrubSecrets } from "./sessions.ts";
 import { referencesDeniedRepo } from "./deny-policy.ts";
 import { readWorkspaceStore } from "./workspaces.ts";
@@ -485,7 +486,9 @@ const USAGE = "usage: ebrain context <list|proposals|init|get|update|propose|rev
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  if (argv.includes("--help") || argv.includes("-h")) {
+  // Help is help only in a flag position — see cli/help-flag.ts for why this took three passes.
+  // `--content --help` sets the content to "--help"; it does not print usage.
+  if (isHelpRequest(argv, VALUE_FLAGS)) {
     console.log(USAGE);
     return;
   }

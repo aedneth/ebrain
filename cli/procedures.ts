@@ -11,6 +11,7 @@ import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { isHelpRequest } from "./help-flag.ts";
 
 import { findWorkflow, loadWorkflows, summarizeWorkflow, type WorkflowRecord, type WorkflowSummary } from "./workflows.ts";
 
@@ -328,7 +329,11 @@ const USAGE = "usage: ebrain procedures <list|show|use|review> [--json]";
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  if (argv.includes("--help") || argv.includes("-h")) {
+  // Pass-4 F-Q3: `-h` is only help in the FLAG position. Scanning the whole argv made
+  // `ebrain context get -h` print usage and exit 0 instead of rejecting an invalid pack id — a
+  // silent no-op where the user asked for a real operation. The long form is unambiguous (no
+  // subcommand takes `--help` as a value) so it still counts anywhere.
+  if (isHelpRequest(argv, VALUE_FLAGS)) {
     console.log(USAGE);
     return;
   }

@@ -26,7 +26,9 @@ import { homedir } from "os";
 import { join } from "path";
 
 /** A deny entry is a bare directory/source name: no separators, no globs, no whitespace. */
-const SAFE_ENTRY = /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/;
+// Bounded on purpose (pass-4 F-Q2): an unbounded entry makes the combined shell ERE pathological
+// and grep spends minutes on a single match. Real repository names are far below this.
+const SAFE_ENTRY = /^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/;
 
 // Separators are spelled out as an explicit ASCII set rather than `\s`, and trimming uses the same
 // set instead of `String.trim()`. Both of those are Unicode-aware in JavaScript and locale-aware in

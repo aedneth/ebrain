@@ -2,7 +2,18 @@
 # Thin executable entrypoint; structured parsing and isolation live in cli/query.ts.
 set -euo pipefail
 
-EBRAIN_HOME="${EBRAIN_HOME:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)}"
+# Resolve our own symlink FIRST: a launcher symlinked onto PATH has a BASH_SOURCE pointing at the
+# symlink, so `dirname`/../harness would look for the resolver next to the link, not next to the
+# real script, and the source would fail before the resolver could do anything (pass 5, F-S3).
+# `readlink -f` is coreutils; where it is absent this degrades to the previous behaviour.
+EBRAIN_SELF="${BASH_SOURCE[0]}"
+# `|| true` and an `if` rather than an `&&` chain: under `set -e` a trailing failed `&&` would
+# abort the launcher on any system where readlink lacks -f, turning a graceful degradation into
+# a hard failure.
+EBRAIN_REAL="$(readlink -f -- "$EBRAIN_SELF" 2>/dev/null || true)"
+if [ -n "$EBRAIN_REAL" ]; then EBRAIN_SELF="$EBRAIN_REAL"; fi
+. "$(dirname -- "$EBRAIN_SELF")/../harness/core/ebrain-home.sh"
+ebrain_export_home "$EBRAIN_SELF"
 BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"
 command -v bun >/dev/null 2>&1 && BUN_BIN=bun
 

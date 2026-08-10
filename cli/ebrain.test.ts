@@ -67,7 +67,12 @@ ttyTest("bare ebrain and the ui alias start the same TUI entrypoint from a real 
       const captured = Bun.spawn(["tmux", "capture-pane", "-p", "-t", session], { stdout: "pipe", stderr: "pipe" });
       const [out, exit] = await Promise.all([new Response(captured.stdout).text(), captured.exited]);
       expect(exit).toBe(0);
-      expect(out).toContain(`FAKE_BUN_TUI:run ${ROOT}/tui/src/app.ts`);
+      // tmux hard-wraps the pane at its width, so a checkout path longer than the pane inserts a
+      // newline into the middle of the string being asserted. Unwrap before comparing: the test is
+      // about which entrypoint was launched, not about how a terminal reflowed it. Without this the
+      // suite passes or fails on how long the checkout's absolute path happens to be.
+      const unwrapped = out.replace(/\n/g, "");
+      expect(unwrapped).toContain(`FAKE_BUN_TUI:run ${ROOT}/tui/src/app.ts`);
     } finally {
       const killed = Bun.spawn(["tmux", "kill-session", "-t", session], { stdout: "ignore", stderr: "ignore" });
       await killed.exited;

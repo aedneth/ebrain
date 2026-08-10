@@ -19,9 +19,10 @@
 import { existsSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { resolveEbrainHome } from "./ebrain-home.ts";
 
 const HOME = homedir();
-const EBRAIN_HOME = process.env.EBRAIN_HOME || join(HOME, "eBrain");
+const EBRAIN_HOME = resolveEbrainHome();
 // Memory is USER DATA and may live outside the code checkout. Readers must agree with the writer
 // (harness/core/remember.sh) or a set override produces a silent split brain: writes land in one
 // tree while `ebrain memory recent` reports an empty other one.

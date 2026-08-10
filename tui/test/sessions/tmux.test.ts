@@ -72,7 +72,7 @@ describeE2E("tmux E2E (real server + fake-agent 6.4.2)", () => {
   test(
     "hasServer → new → list → peek(SCRUBBED) → send → kill",
     async () => {
-      const created = await newSession("test", SLUG, { launchCmd: `bash ${FAKE}` });
+      const created = await newSession("test", SLUG, { launchArgv: ["bash", FAKE] });
       expect(created.ok).toBe(true);
 
       // server is now up, and our session is enumerated
@@ -117,7 +117,7 @@ describeE2E("tmux E2E (real server + fake-agent 6.4.2)", () => {
     async () => {
       const litSlug = SLUG + "lit";
       const litName = sessionName("test", litSlug);
-      const created = await newSession("test", litSlug, { launchCmd: `bash ${FAKE}` });
+      const created = await newSession("test", litSlug, { launchArgv: ["bash", FAKE] });
       expect(created.ok).toBe(true);
       await Bun.sleep(600);
       // Without -l, "Space" would inject a space char (fake-agent echoes "recibí:  ");
