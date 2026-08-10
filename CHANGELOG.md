@@ -4,6 +4,31 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-08-09 (later) -- memory that works out-of-the-box (#6)
+
+A keyless clone now boots into working keyword recall instead of crashing, and reports its recall posture
+honestly. Merged to `main` as `73f7b03`. Full suite **923 pass / 0 fail**; keyless + portability CI green.
+Acceptance contract: `docs/PLAN-MEMORY-OOTB.md`.
+
+- **Keyless-safe boot** — the daemon initializes the store embedding-disabled when it does not exist, so a
+  fresh clone with no embedding provider boots into keyword mode instead of the engine's hard-fail.
+- **Pluggable embedder decision** (`cli/embedder.ts`) — chooses hosted (OpenRouter `text-embedding-3-small`
+  @1536, reusing the routing key — no separate OpenAI key) / local (Ollama) / keyword from what the machine
+  has, keeping an existing store's signature sticky. `ebrain doctor` / `ebrain embedder status` claim
+  semantic recall only when the store is actually on the decided signature; keys are read by presence only.
+- **`ebrain embedder migrate`** — a confirmation-gated re-embed with a USD cost preview; nothing mutates or
+  spends without `--yes`/TTY, and a confirmed run refuses if the daemon is down or the dims are invalid.
+- **`ebrain dream`** — submits the maintenance cycle to the daemon that owns the store lock (the local cycle
+  could never run while the daemon was up); the phase set degrades under keyless/at-cap (no new spend) and
+  always keeps the deterministic GC subset.
+- **Engine spend visible** — `ebrain spend` / `cost` fold in the engine's own think/dream ledgers;
+  `gbrain_untracked` flips false only with observed evidence.
+- **Deferred (documented in #6, none a safety gap):** auto at-cap detection for the nightly cycle,
+  `routing --json` spend consistency, a `migrate` availability pre-check, and enabling the nightly timer
+  (an operator recurring-spend decision).
+
+---
+
 ## 2026-08-09 -- portability landed: eBrain runs on a machine that is not the author's
 
 The portability-hardening branch merged to `main` (#4), with a CI gate merged behind it (#5) so the
