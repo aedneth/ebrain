@@ -72,3 +72,70 @@ jobs:
                 --glob '!vendor/**' --glob '!**/*.test.ts' .; then
             echo "::error::possible secret detected"; exit 1
           fi
+
+  # The `test` job runs inside a git checkout at a space-free path — the one environment where the
+  # resolver has the most help. This job reproduces the acceptance environment from
+  # docs/SPEC-PORTABILITY-HARDENING.md instead: an arbitrary checkout path that CONTAINS A SPACE,
+  # with NO .git (a tarball / Docker COPY install — the surface a user actually installs from), a
+  # sandboxed $HOME with no pre-existing eBrain state, the C locale, and EBRAIN_HOME absent from the
+  # ancestry. It exists so the class of defect that took six audit passes to close cannot regress
+  # silently: a guard that only enforces inside git, a path that breaks on a space, a doctor that
+  # fails on a fresh install.
+  portability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Clone pinned gbrain engine
+        run: |
+          git clone --quiet https://github.com/garrytan/gbrain.git vendor/gbrain
+          git -C vendor/gbrain checkout --quiet a25209bbb2bacf1b88e06fd5282b27f1bf4a3e7a
+
+      - name: Install dependencies
+        run: |
+          bun install --frozen-lockfile
+          bun install --cwd vendor/gbrain --frozen-lockfile --ignore-scripts
+
+      - name: Materialize a non-git checkout at a path with a space
+        run: |
+          dest="$RUNNER_TEMP/ebrain install dir"   # the space is deliberate (F-T6)
+          mkdir -p "$dest"
+          rsync -a --exclude='.git' ./ "$dest/"
+          test ! -e "$dest/.git" || { echo "::error::checkout is still a git repo — the non-git case is not being exercised"; exit 1; }
+          echo "DEST=$dest" >> "$GITHUB_ENV"
+
+      - name: Full suite from the non-git spaced checkout (sandbox HOME, C locale, no EBRAIN_HOME)
+        env:
+          LC_ALL: C
+          LANG: C
+        run: |
+          sandbox="$RUNNER_TEMP/sandbox home a"
+          mkdir -p "$sandbox"
+          cd "$DEST"
+          env -u EBRAIN_HOME HOME="$sandbox" bun test ./cli/ ./tui/test/
+
+      - name: The hardcoded-home guard must be non-vacuous outside git (plant an offender)
+        run: |
+          cd "$DEST"
+          printf 'X="$HOME/eBrain"\n' > scripts/__ci_planted_offender.sh
+          if env -u EBRAIN_HOME bun test ./cli/ebrain-home.test.ts >/dev/null 2>&1; then
+            rm -f scripts/__ci_planted_offender.sh
+            echo "::error::the guard passed with a planted \$HOME/eBrain offender present — it is vacuous outside git"; exit 1
+          fi
+          rm -f scripts/__ci_planted_offender.sh
+          echo "guard correctly failed on the planted offender"
+
+      - name: ebrain doctor degrades to warnings on a fresh install (exit 0)
+        env:
+          LC_ALL: C
+          LANG: C
+        run: |
+          sandbox="$RUNNER_TEMP/sandbox home b"
+          mkdir -p "$sandbox"
+          cd "$DEST"
+          env -u EBRAIN_HOME HOME="$sandbox" bash ./cli/ebrain doctor
