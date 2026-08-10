@@ -122,10 +122,13 @@ jobs:
       - name: The hardcoded-home guard must be non-vacuous outside git (plant an offender)
         run: |
           cd "$DEST"
-          printf 'X="$HOME/eBrain"\n' > scripts/__ci_planted_offender.sh
+          # Compose the forbidden spelling at runtime — never let it live in a tracked file, or this
+          # workflow would trip the very guard it exists to test (the guard scans .github too).
+          name='eBrain'
+          printf 'X="$HOME/%s"\n' "$name" > scripts/__ci_planted_offender.sh
           if env -u EBRAIN_HOME bun test ./cli/ebrain-home.test.ts >/dev/null 2>&1; then
             rm -f scripts/__ci_planted_offender.sh
-            echo "::error::the guard passed with a planted \$HOME/eBrain offender present — it is vacuous outside git"; exit 1
+            echo "::error::the guard passed with a planted offender present — it is vacuous outside git"; exit 1
           fi
           rm -f scripts/__ci_planted_offender.sh
           echo "guard correctly failed on the planted offender"
