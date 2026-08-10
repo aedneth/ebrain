@@ -7,7 +7,10 @@ import { ORDERED_DOCS } from "../src/lib/navigation.ts";
 const WEBSITE = fileURLToPath(new URL("../", import.meta.url));
 const DIST = join(WEBSITE, "dist");
 const HTML_LINK = /(?:href|src)="([^"]+)"/g;
-const FORBIDDEN = /(?:\/home\/|~\/\.config|\.env(?:\b|\*)|(?:API|TOKEN|SECRET|PASSWORD)_[A-Z0-9_]+\s*=|sk-[A-Za-z0-9]{16,}|HANDOFF|SPRINT-|AUDIT-|F10\.0-)/;
+const FORBIDDEN = /(?:\/home\/|~\/\.config|\.env(?:\b|\*)|(?:API|TOKEN|SECRET|PASSWORD)_[A-Z0-9_]+\s*=|sk-[A-Za-z0-9]{16,}|HANDOFF|SPRINT-|AUDIT-|F10\.0-|pop-os)/;
+// The /demo page ships real captured frames; it must stay persona-neutral. Author names are fine in
+// the site's own attribution (footer, links) but must never appear inside the sanitized demo capture.
+const DEMO_IDENTITY = /Eduardo|Borjas/;
 
 function walk(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -30,6 +33,10 @@ for (const doc of ORDERED_DOCS) {
 }
 for (const asset of ["assets/ebrain-wordmark.svg", "assets/ebrain-tui-demo.svg", "icons/github.svg", "icons/x.svg", "icons/search.svg", "demo/index.html"]) {
   if (!existsSync(join(DIST, asset))) throw new Error(`missing static asset: ${asset}`);
+}
+const demoHtml = join(DIST, "demo", "index.html");
+if (existsSync(demoHtml) && DEMO_IDENTITY.test(readFileSync(demoHtml, "utf8"))) {
+  throw new Error("demo/index.html must stay persona-neutral (real author name found)");
 }
 for (const file of walk(DIST).filter((path) => path.endsWith(".html") || path.endsWith(".json"))) {
   const text = readFileSync(file, "utf8");

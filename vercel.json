@@ -8,7 +8,7 @@
   "github": { "silent": true },
   "headers": [
     {
-      "source": "/((?!demo).*)",
+      "source": "/((?!demo/).*)",
       "headers": [
         {
           "key": "Content-Security-Policy",
