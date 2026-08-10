@@ -132,6 +132,12 @@ function storedProviderHint(cfg: EngineEmbedConfig | null): { label: string; hin
 export function describeEmbedder(decision: EmbedderDecision, sources: DetectSources): string {
   if (decision.mode === "semantic" && decision.selected) {
     const s = decision.selected;
+    // The decision names an embedder, but the store is only ACTUALLY on it when nothing is left to do.
+    // A pending configure/re-embed (or an embedding-disabled store) means recall is still keyword until
+    // a migrate applies it — say that honestly rather than claim a semantic recall that isn't live yet.
+    if (decision.actions.length > 0) {
+      return `keyword-only recall now · ${s.providerId}:${s.modelId} available (${s.dims}d) — run: ebrain embedder migrate to enable semantic`;
+    }
     let line = `semantic recall · ${s.providerId}:${s.modelId} (${s.dims}d)`;
     if (decision.reasons.includes("dims-over-hnsw-cap")) {
       line += ` · flat scan (dimensions exceed the HNSW cap of ${HNSW_DIM_CAP})`;
@@ -266,7 +272,8 @@ export function detectEmbedder(opts: {
  */
 function main(): void {
   const { decision, describe } = detectEmbedder({});
-  process.stdout.write(`${JSON.stringify({ mode: decision.mode, describe, decision }, null, 2)}\n`);
+  const active = decision.mode === "semantic" && decision.actions.length === 0;
+  process.stdout.write(`${JSON.stringify({ mode: decision.mode, active, describe, decision }, null, 2)}\n`);
 }
 
 if (import.meta.main) main();

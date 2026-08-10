@@ -101,15 +101,33 @@ describe("buildEmbedderInput — mapping", () => {
 // ── describeEmbedder ──────────────────────────────────────────────────────────────────────────
 
 describe("describeEmbedder — every branch", () => {
-  test("semantic → names provider:model and dims", () => {
+  test("decided but not applied (fresh store, key present) → honest keyword-now + migrate", () => {
     const sources = makeSources({ envPresent: { OPENROUTER_API_KEY: true } });
     const line = describeEmbedder(decide(sources), sources);
-    expect(line).toBe("semantic recall · openrouter:openai/text-embedding-3-small (1536d)");
+    expect(line).toBe(
+      "keyword-only recall now · openrouter:openai/text-embedding-3-small available (1536d) — run: ebrain embedder migrate to enable semantic",
+    );
   });
 
-  test("semantic over the HNSW cap → flags a flat scan on the same line", () => {
-    const sources = makeSources({ override: "openrouter:openai/text-embedding-3-large@3072" });
-    const line = describeEmbedder(decide(sources), sources);
+  test("active semantic (store already on the decided signature) → names provider:model and dims", () => {
+    const sources = makeSources({
+      envPresent: { OPENROUTER_API_KEY: true },
+      engineConfig: { embedding_model: "openrouter:openai/text-embedding-3-small", embedding_dimensions: 1536, embedding_disabled: false },
+    });
+    const decision = decide(sources);
+    expect(decision.actions).toEqual([]);
+    expect(describeEmbedder(decision, sources)).toBe("semantic recall · openrouter:openai/text-embedding-3-small (1536d)");
+  });
+
+  test("active semantic over the HNSW cap → flags a flat scan on the same line", () => {
+    const sources = makeSources({
+      envPresent: { OPENROUTER_API_KEY: true },
+      engineConfig: { embedding_model: "openrouter:openai/text-embedding-3-large", embedding_dimensions: 3072, embedding_disabled: false },
+      override: "openrouter:openai/text-embedding-3-large@3072",
+    });
+    const decision = decide(sources);
+    expect(decision.actions).toEqual([]);
+    const line = describeEmbedder(decision, sources);
     expect(line).toContain("semantic recall · openrouter:openai/text-embedding-3-large (3072d)");
     expect(line).toContain("flat scan");
   });
@@ -248,6 +266,9 @@ describe("detectEmbedder — injected probe + tmp-dir fake config", () => {
     const home = tmpHome();
     const out = detectEmbedder({ gbrainHome: home, env: {}, probe: () => ({ ollama: true }) });
     expect(out.decision.selected?.providerId).toBe("ollama");
-    expect(out.describe).toContain("semantic recall · ollama:nomic-embed-text (768d)");
+    // Fresh store: ollama is the DECIDED embedder but nothing is embedded yet, so recall is honestly
+    // keyword-until-migrate rather than an already-active semantic claim.
+    expect(out.describe).toContain("ollama:nomic-embed-text available (768d)");
+    expect(out.describe).toContain("ebrain embedder migrate");
   });
 });

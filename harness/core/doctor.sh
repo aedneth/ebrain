@@ -207,6 +207,30 @@ else
   rm -f "$h_tmp"
 fi
 
+# ── memory recall (embedder) ─────────────────────────────────────────────────
+c_sec "memory recall"
+emb_tmp="$(mktemp)"
+EMB_ENV_FILE="$HOME/.config/ebrain/.env"
+# The embedder decision hinges on whether a hosted key (e.g. OPENROUTER_API_KEY) is configured — which
+# lives in the daemon's env file, not a bare shell. Source it in a SUBSHELL (scoped; the value is never
+# printed — the detector reports presence by NAME only) so doctor reflects the daemon's real posture.
+# embedder-detect reads the engine config read-only and never writes.
+if ( set -a
+     if [ -f "$EMB_ENV_FILE" ]; then . "$EMB_ENV_FILE" 2>/dev/null; fi
+     set +a
+     "$BUN_BIN" run "$EBRAIN_HOME/cli/embedder-detect.ts" ) >"$emb_tmp" 2>/dev/null && [ -s "$emb_tmp" ]; then
+  emb_active="$(jq -r '.active // false' "$emb_tmp" 2>/dev/null)"
+  emb_desc="$(jq -r '.describe // "embedder status unavailable"' "$emb_tmp" 2>/dev/null)"
+  if [ "$emb_active" = "true" ]; then
+    c_ok "memory:embedder" "$emb_desc"
+  else
+    c_warn "memory:embedder" "$emb_desc"
+  fi
+else
+  c_warn "memory:embedder" "could not determine the embedder (embedder-detect did not respond)"
+fi
+rm -f "$emb_tmp"
+
 # ── veredicto ────────────────────────────────────────────────────────────────
 rc=0; [ "$FAILN" -gt 0 ] && rc=1
 
