@@ -21,8 +21,8 @@ commitments.
 
 - **One-command installer + CI release pipeline** — `curl | sh` that installs Bun, pins the
   engine, links `ebrain`, and runs `ebrain up`; GitHub Actions gating every PR.
-- **Pluggable embedding providers** — hosted and local backends behind one interface, with a
-  zero-config keyword fallback when no embedding key is present.
+- **Pluggable embedding providers** — a policy layer over the engine's existing provider recipes
+  (hosted and local), with a zero-config keyword fallback when no embedding key is present.
 - **Richer review surface in the cockpit** — diff/preview of exactly what an agent will run,
   with workflow attribution in the cost ledger.
 
