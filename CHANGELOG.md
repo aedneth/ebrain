@@ -4,6 +4,33 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-08-10 -- onboarding UX and an animated product demo on the site (#7)
+
+The real animated cockpit demo now ships at `ebrain.vercel.app/demo`, a brand-new user gets a first-run
+path that teaches the capture->recall loop, and the site and README lead with the value in one line. Merged
+to `main` as `63616e8`. Suites **cli 481/0 · tui 449/0**; website build + portability/test CI green. An
+independent review found and we fixed a persona leak in the captured demo and tightened the CSP carve-out.
+
+- **Animated demo at `/demo`** — the real captured cockpit and agent-CLI frames (rendered from the
+  production renderer), made self-contained (system fonts, no remote font host), viewport-fit, and
+  persona-neutral. The landing and README link to it with a play poster and lead with a one-line value hook.
+- **CSP carve-out scoped to `/demo/` only** — that route allows `'unsafe-inline'` styles for the demo's
+  inline styling; every other directive and the full security-header set stay identical to the strict
+  site-wide policy, and a negative-lookahead keeps the strict policy from double-applying to the demo route.
+- **Onboarding aha** — `ebrain up` prints a `next:` cue (capture -> recall -> open the cockpit), and the
+  installer's first suggested commands capture then recall so the first `q` returns a result.
+- **Teaching TUI empty states + Home first-run cue** — every empty state names the key that creates the
+  first item; Home shows a single "start here" cue until there is activity. Keys verified against handlers;
+  strings fit 80x24 / 100x30 / 160x48; +79 tests.
+- **Hardened build gate** — `verify-build` now requires the demo asset, forbids a machine hostname in public
+  output, and fails if the demo ever reintroduces a real author name.
+- **Deferred (non-blocking):** a robustness guard for arbitrary demo URL hashes; optional scrub of minor
+  personal details (account tier, a real project name) in the capture; the narrated video is a separate
+  owner deliverable. Repo history still carries backup auto-commits (`8120650`, `33b20e5`) to squash before
+  the public flip.
+
+---
+
 ## 2026-08-09 (later) -- memory that works out-of-the-box (#6)
 
 A keyless clone now boots into working keyword recall instead of crashing, and reports its recall posture
