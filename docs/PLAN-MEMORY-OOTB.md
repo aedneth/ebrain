@@ -89,7 +89,7 @@ until this is answered.
 | W3 | Engine-spend read lane (parse `~/.gbrain/audit/{budget,dream-budget}-*.jsonl`) | **new**: `cli/engine-spend.ts`, `cli/engine-spend.test.ts` | fixture tests incl. absent/corrupt + `partially_observed` |
 | W4 | Wiring: embedder decision → `up.ts` + daemon env + dispatch + doctor/status | **shared**: `cli/up.ts`, `scripts/ebrain-brain`, `cli/ebrain`, `harness/core/{doctor,status}.sh` | `ebrain up` keyless → keyword mode, honest output; doctor exit 0 fresh |
 | W5 | Fold engine lane into spend/cost + contract fixtures | **shared**: `cli/spend.ts`, `cli/cost.ts`, `cli/contract.test.ts` | contract suite green (additive schema only) |
-| W6 | Daemon-mediated dream cycle (curated phases; keep `--direct` fallback) | `cli/dream.ts`(+test), `scripts/dream-cycle`, `scripts/systemd/*` | supervised submit runs embedding-free subset; at-cap/keyless degrades, never fails |
+| W6 | Daemon-mediated dream cycle (curated phases; keep `--direct` fallback) | new cli/dream.ts (+test), `scripts/dream-cycle`, `scripts/systemd/*` | supervised submit runs embedding-free subset; at-cap/keyless degrades, never fails |
 | W7 | `ebrain embedder migrate` — cost preview, resumable re-embed; then migrate the live store | `cli/embedder.ts` (extend) | e2e switch on scratch brain; preview matches; refuses when daemon down / dims invalid |
 | W8 | Docs sync — correct the OpenRouter-embeddings claim, provider doc, runbook, checklist, roadmap | `docs/*` | public-safe: no competitor names, no internal-process references |
 | W9 | Final audit — client isolation intact, secrets-by-name, CI portability green, contract ↔ real output, at-cap contract holds | read-only | independent pass |
