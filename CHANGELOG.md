@@ -4,6 +4,29 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-08-09 -- portability landed: eBrain runs on a machine that is not the author's
+
+The portability-hardening branch merged to `main` (#4), with a CI gate merged behind it (#5) so the
+defect class cannot regress silently. eBrain now installs and runs from a checkout at an arbitrary
+path, under an arbitrary `$HOME`, with no `EBRAIN_HOME` in the process ancestry, with no pre-existing
+state, and under the `C` locale — or fails loudly. Full suite green in that acceptance environment:
+**825 pass / 0 fail**. Acceptance contract: `docs/SPEC-PORTABILITY-HARDENING.md`.
+
+- **One home resolver, reachable from both languages.** Shell (`harness/core/ebrain-home.sh`) and
+  TypeScript (`cli/ebrain-home.ts`) each answer independently; the resolved location crosses the
+  shell→bun boundary into every grandchild an agent spawns.
+- **The hardcoded-home guard walks the working tree, not the git index.** It enforces in a tarball /
+  `git archive` / Docker `COPY` install — the surface a user actually installs from — and is proven
+  non-vacuous against a planted offender outside git.
+- **`ebrain doctor` degrades to warnings on a fresh install (exit 0).** `ebrain route` launcher added;
+  paths containing spaces handled across the session lifecycle; CI runs the CLI suite without
+  `EBRAIN_HOME` and under `LC_ALL=C`.
+- **New CI `portability` job** reproduces the acceptance environment on every PR: the full suite in a
+  git-backed checkout at a spaced path, plus a non-git tarball where only the guard and `doctor` run
+  (the git-aware release-readiness tests are correctly scoped out of the tarball).
+
+---
+
 ## 2026-07-21 (later still) -- sixth audit pass: the engineering was real, the verification was not
 
 Pass 6 (`/tmp/AUDIT-F7-F12-PASS6.md`, verdict `[AUDIT_FAIL]`) confirmed F-S1 genuinely closed — the
