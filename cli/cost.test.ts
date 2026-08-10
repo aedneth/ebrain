@@ -60,6 +60,31 @@ describe("cost ledger v2", () => {
     expect(report.untracked_providers).not.toContain("claude");
   });
 
+  test("engine lane defaults to unobserved/zero when no engine spend is supplied", () => {
+    const report = buildCostReport(
+      [{ ts: "2026-07-15T12:00:00.000Z", cap: "coding", usd: 0.001 }],
+      [],
+      { month: "2026-07", budget: { monthly_usd: 10, hard_stop: true } },
+    );
+    expect(report.engine).toEqual({ usd: 0, observed: false, partiallyObserved: false });
+  });
+
+  test("engine lane folds in a supplied EngineSpend, independent of the OpenRouter/adapter lanes", () => {
+    const report = buildCostReport(
+      [{ ts: "2026-07-15T12:00:00.000Z", cap: "coding", usd: 0.001 }],
+      [],
+      {
+        month: "2026-07",
+        budget: { monthly_usd: 10, hard_stop: true },
+        engine: { usd: 0.0421, observed: true, partiallyObserved: true, files: 2, lines: 10, skipped: 1 },
+      },
+    );
+    expect(report.engine).toEqual({ usd: 0.0421, observed: true, partiallyObserved: true });
+    // engine spend is a separate lane — it never leaks into the OpenRouter-scoped cap fields.
+    expect(report.openrouter_mtd).toBe(0.001);
+    expect(report.remaining_openrouter).toBe(9.999);
+  });
+
   test("explicit adapter event validates identifiers and persists with private permissions", async () => {
     const dir = tmp();
     const path = join(dir, "ledger", "cost.jsonl");

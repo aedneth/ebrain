@@ -8,6 +8,11 @@
  * no provider is guessed, no token-only usage is converted into invented USD, and no secret
  * is read by this command.
  *
+ * `engine` (added: memory-ootb) folds in the memory engine's own think/dream spend ledgers
+ * (`~/.gbrain/audit/`, parsed by `./engine-spend.ts`) as a separate top-level lane —
+ * `{ usd, observed, partiallyObserved }`. `usd` only ever sums real, priced spend; when no
+ * ledger is found `observed` is `false` and `usd` stays `0`, never a guess.
+ *
  * Usage:
  *   ebrain cost --json
  *   ebrain cost record --provider openai --model gpt-4.1 --tokens-in 120 --tokens-out 80 --usd 0.001 --yes --json
@@ -17,8 +22,9 @@ import { appendFile, chmod, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { loadRoutingCfg } from "./spend.ts";
+import { loadRoutingCfg, resolveEngineAuditDir } from "./spend.ts";
 import { expandHome, monthKey } from "./route.ts";
+import { readEngineSpend, type EngineSpend } from "./engine-spend.ts";
 
 const HOME = homedir();
 const DEFAULT_SIDECAR_LOG = process.env.EBRAIN_COST_LOG || join(HOME, ".config", "ebrain", "cost.jsonl");
@@ -60,6 +66,13 @@ export interface ProviderBreakdown extends CostBreakdown {
   status: ProviderStatus;
 }
 
+/** The memory engine's own think/dream spend, folded into `ebrain cost` (added: memory-ootb). */
+export interface EngineCostLane {
+  usd: number;
+  observed: boolean;
+  partiallyObserved: boolean;
+}
+
 export interface CostReport {
   schema_version: 2;
   month: string;
@@ -67,6 +80,7 @@ export interface CostReport {
   openrouter_mtd: number;
   known_mtd: number;
   remaining_openrouter: number;
+  engine: EngineCostLane;
   providers: ProviderBreakdown[];
   agents: CostBreakdown[];
   models: CostBreakdown[];
@@ -232,12 +246,15 @@ function providerStatus(provider: string, row: CostBreakdown): ProviderStatus {
   return PROVIDER_STATUS[provider] ?? "untracked";
 }
 
+const UNOBSERVED_ENGINE_SPEND: EngineSpend = { usd: 0, observed: false, partiallyObserved: false, files: 0, lines: 0, skipped: 0 };
+
 export function buildCostReport(
   routeRecords: RawRecord[],
   adapterRecords: RawRecord[],
-  opts: { month?: string; budget?: { monthly_usd: number; hard_stop: boolean }; limit?: number } = {},
+  opts: { month?: string; budget?: { monthly_usd: number; hard_stop: boolean }; limit?: number; engine?: EngineSpend } = {},
 ): CostReport {
   const month = opts.month ?? monthKey();
+  const engineSpend = opts.engine ?? UNOBSERVED_ENGINE_SPEND;
   const events = [
     ...routeRecords.map(normalizeRouteRecord),
     ...adapterRecords.map(normalizeAdapterRecord),
@@ -261,6 +278,11 @@ export function buildCostReport(
     openrouter_mtd: openrouter.usd,
     known_mtd: knownMtd,
     remaining_openrouter: money(budget.monthly_usd - openrouter.usd),
+    engine: {
+      usd: money(engineSpend.usd),
+      observed: engineSpend.observed,
+      partiallyObserved: engineSpend.partiallyObserved,
+    },
     providers: providerList,
     agents: breakdown(events, (event) => event.agent),
     models: breakdown(events, (event) => event.model),
@@ -275,7 +297,8 @@ export async function loadCostReport(limit = DEFAULT_LIMIT, sidecarPath = DEFAUL
   const cfg = await loadRoutingCfg();
   const routeLog = expandHome(cfg.budget.log);
   const [routeRecords, adapterRecords] = await Promise.all([readJsonl(routeLog), readJsonl(sidecarPath)]);
-  return buildCostReport(routeRecords, adapterRecords, { budget: cfg.budget, limit });
+  const engine = readEngineSpend(resolveEngineAuditDir());
+  return buildCostReport(routeRecords, adapterRecords, { budget: cfg.budget, limit, engine });
 }
 
 export interface RecordInput {
@@ -369,6 +392,10 @@ function printReport(report: CostReport): void {
   console.log(`ebrain cost — ${report.month}`);
   console.log(`  OpenRouter $${report.openrouter_mtd.toFixed(4)} / cap $${report.budget.monthly_usd} (restante $${report.remaining_openrouter.toFixed(4)})`);
   console.log(`  conocido total $${report.known_mtd.toFixed(4)}; cap aplica solo a OpenRouter`);
+  if (report.engine.observed) {
+    const note = report.engine.partiallyObserved ? " (parcial — llamadas sin precio)" : "";
+    console.log(`  motor (think/dream) $${report.engine.usd.toFixed(4)}${note}`);
+  }
   for (const provider of report.providers) {
     const status = provider.status === "metered" ? `$${provider.usd.toFixed(4)}` : provider.status;
     console.log(`  ${provider.provider.padEnd(12)} ${status.padEnd(14)} events=${provider.events} tokens=${provider.tokens_in}+${provider.tokens_out}`);

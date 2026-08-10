@@ -3,7 +3,7 @@
  * `bun test cli/spend.test.ts`.
  */
 import { test, expect } from "bun:test";
-import { spendByCapability } from "./spend.ts";
+import { spendByCapability, resolveEngineAuditDir } from "./spend.ts";
 import { monthKey } from "./route.ts";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -75,4 +75,24 @@ test("spendByCapability: ordena descendente por mtd", async () => {
   const rows = await spendByCapability(path, ["low", "high"]);
   expect(rows[0].capability).toBe("high");
   expect(rows[1].capability).toBe("low");
+});
+
+// ── resolveEngineAuditDir (memory-ootb: fold the engine lane into ebrain spend) ────────────────
+// Mirrors cli/embedder-detect.ts's resolveConfigPath convention: GBRAIN_HOME is a *parent*
+// directory, `.gbrain` is always appended. Uses an injected env object throughout — never reads
+// or touches the real process.env / real ~/.gbrain.
+
+test("resolveEngineAuditDir: GBRAIN_HOME set → <GBRAIN_HOME>/.gbrain/audit", () => {
+  const dir = resolveEngineAuditDir({ GBRAIN_HOME: "/srv/thin-gbrain", HOME: "/home/someone" });
+  expect(dir).toBe(join("/srv/thin-gbrain", ".gbrain", "audit"));
+});
+
+test("resolveEngineAuditDir: no GBRAIN_HOME → falls back to <HOME>/.gbrain/audit", () => {
+  const dir = resolveEngineAuditDir({ HOME: "/home/someone" });
+  expect(dir).toBe(join("/home/someone", ".gbrain", "audit"));
+});
+
+test("resolveEngineAuditDir: blank GBRAIN_HOME is treated as unset, falls back to HOME", () => {
+  const dir = resolveEngineAuditDir({ GBRAIN_HOME: "  ", HOME: "/home/someone" });
+  expect(dir).toBe(join("/home/someone", ".gbrain", "audit"));
 });
