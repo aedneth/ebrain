@@ -123,6 +123,14 @@ case "$cmd" in
   sessions)  run_bun "$EBRAIN_HOME/cli/sessions.ts" "$@" ;;
   task-profile) run_bun "$EBRAIN_HOME/cli/task-profile.ts" "$@" ;;
   advise)    run_bun "$EBRAIN_HOME/cli/advise.ts" "$@" ;;
+  dream)     run_bun "$EBRAIN_HOME/cli/dream.ts" "$@" ;;
+  embedder)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      migrate)          run_bun "$EBRAIN_HOME/cli/embedder-migrate.ts" "$@" ;;
+      status|detect|"") run_bun "$EBRAIN_HOME/cli/embedder-detect.ts" "$@" ;;
+      *) echo "ebrain embedder: use 'status' or 'migrate'." >&2; exit 2 ;;
+    esac ;;
   up)         run "$SCRIPTS/ebrain-up" up "$@" ;;
   onboard)    run "$SCRIPTS/ebrain-up" onboard "$@" ;;
   daemon)    run "$SCRIPTS/ebrain-daemon" "$@" ;;
