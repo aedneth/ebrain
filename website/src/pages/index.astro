@@ -13,14 +13,18 @@ import { DOC_SECTIONS, docRoute } from "../lib/navigation";
         <h1 id="home-title">eBrain</h1>
         <p class="home-intro__lede">Shared memory and workspace orchestration for local coding agents.</p>
         <p>One loopback MCP daemon, durable governed memory, persistent tmux sessions, user-owned routing choices, and factual token telemetry.</p>
-        <div class="home-intro__links" aria-label="Start documentation">
-          <a href="/docs/">Open documentation <img src="/icons/arrow-right.svg" alt="" width="16" height="16" /></a>
+        <div class="home-intro__links" aria-label="Start here">
+          <a href="/demo/">Watch the demo <img src="/icons/arrow-right.svg" alt="" width="16" height="16" /></a>
+          <a href="/docs/">Open documentation</a>
           <a href={docRoute("getting-started/quickstart")}>Follow quick start</a>
         </div>
       </div>
       <figure class="terminal-figure">
-        <img src="/assets/ebrain-tui-demo.svg" alt="Sanitized eBrain terminal cockpit showing daemon, fleet, sessions, memory, and factual spend summary." width="1018" height="533" />
-        <figcaption>Generated from the production renderer with a fixed sanitised fixture.</figcaption>
+        <a href="/demo/" aria-label="Watch the live eBrain demo">
+          <img src="/assets/ebrain-tui-demo.svg" alt="Sanitized eBrain terminal cockpit showing daemon, fleet, sessions, memory, and factual spend summary." width="1018" height="533" />
+          <span class="terminal-figure__badge" aria-hidden="true">▶ Watch the demo</span>
+        </a>
+        <figcaption>The real cockpit, animated — rendered from the production renderer, no invented mockups.</figcaption>
       </figure>
     </section>
     <section class="local-proof" aria-labelledby="local-proof-title">

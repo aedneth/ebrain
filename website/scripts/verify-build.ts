@@ -28,7 +28,7 @@ for (const doc of ORDERED_DOCS) {
   const page = join(DIST, "docs", doc.id, "index.html");
   if (!existsSync(page)) throw new Error(`missing static page: ${doc.id}`);
 }
-for (const asset of ["assets/ebrain-wordmark.svg", "assets/ebrain-tui-demo.svg", "icons/github.svg", "icons/x.svg", "icons/search.svg"]) {
+for (const asset of ["assets/ebrain-wordmark.svg", "assets/ebrain-tui-demo.svg", "icons/github.svg", "icons/x.svg", "icons/search.svg", "demo/index.html"]) {
   if (!existsSync(join(DIST, asset))) throw new Error(`missing static asset: ${asset}`);
 }
 for (const file of walk(DIST).filter((path) => path.endsWith(".html") || path.endsWith(".json"))) {

@@ -12,6 +12,8 @@
 </p>
 
 <p align="center">
+  <a href="https://ebrain.vercel.app/demo/">Live demo</a>
+  &middot;
   <a href="https://github.com/aedneth/ebrain">GitHub</a>
   &middot;
   <a href="docs/PUBLIC-DOCUMENTATION.md">Documentation</a>
@@ -23,7 +25,11 @@
   <a href="https://www.linkedin.com/in/eduardo-borjas/">LinkedIn</a>
 </p>
 
-![Sanitized eBrain TUI home frame generated from the production renderer](assets/ebrain-tui-demo.svg)
+[![The real eBrain cockpit — click to watch the animated demo](assets/ebrain-tui-demo.svg)](https://ebrain.vercel.app/demo/)
+
+<p align="center"><a href="https://ebrain.vercel.app/demo/">▶ Watch the animated demo</a> — the real cockpit and a cross-agent memory hand-off, rendered from the production renderer.</p>
+
+**Coding agents start from zero every session, and each one keeps its own context. eBrain gives them a single governed memory that outlives the session and crosses agents — on your own machine.**
 
 eBrain gives local coding agents a shared, governed memory layer and gives developers one terminal cockpit for the work around it. It starts a single authenticated MCP daemon on loopback, onboards supported local agent CLIs, launches persistent workspace-backed sessions, and records bounded memory and factual token telemetry without turning every transcript into context.
 
