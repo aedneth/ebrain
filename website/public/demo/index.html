@@ -6,7 +6,7 @@
      back to system-ui/ui-monospace). No remote font host, so this page renders offline and
      under a strict same-origin content-security-policy. -->
 <style>
-  :root{--canvas:#101317;--teal:#2dd4bf;--ink:#d9e1e8;--dim:#566068;--sans:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;--ease:cubic-bezier(.22,.61,.36,1);--easez:cubic-bezier(.6,0,.25,1)}
+  :root{--pace:1.8;--canvas:#101317;--teal:#2dd4bf;--ink:#d9e1e8;--dim:#566068;--sans:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;--ease:cubic-bezier(.22,.61,.36,1);--easez:cubic-bezier(.6,0,.25,1)}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:#000;overflow:hidden}
   body{display:flex;align-items:center;justify-content:center}
@@ -16,8 +16,8 @@
   .grain{position:absolute;inset:0;pointer-events:none;z-index:29;opacity:.04;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>")}
 
   /* camera: pushes ONLY on selection + typing. Dramatic, eased. */
-  #camera{position:relative;width:1560px;height:940px;transform-origin:50% 50%;transition:transform 1.0s var(--easez);will-change:transform}
-  .win{position:absolute;inset:0;background:#0c0f13;border:1px solid #202932;border-radius:14px;overflow:hidden;box-shadow:0 60px 160px -40px rgba(0,0,0,.9),0 0 0 1px rgba(45,212,191,.06);opacity:0;transform:translateY(22px) scale(.99);transition:opacity .7s var(--ease),transform .7s var(--ease)}
+  #camera{position:relative;width:1560px;height:940px;transform-origin:50% 50%;transition:transform calc(1.0s / var(--pace)) var(--easez);will-change:transform}
+  .win{position:absolute;inset:0;background:#0c0f13;border:1px solid #202932;border-radius:14px;overflow:hidden;box-shadow:0 60px 160px -40px rgba(0,0,0,.9),0 0 0 1px rgba(45,212,191,.06);opacity:0;transform:translateY(22px) scale(.99);transition:opacity calc(.7s / var(--pace)) var(--ease),transform calc(.7s / var(--pace)) var(--ease)}
   .win.in{opacity:1;transform:none}
   .titlebar{display:flex;align-items:center;gap:9px;padding:15px 22px;border-bottom:1px solid #1a222a;background:linear-gradient(#0f1418,#0d1115)}
   .titlebar i{width:13px;height:13px;border-radius:50%;background:#2b333b}
@@ -25,7 +25,7 @@
   .titlebar .t{margin-left:14px;font-family:var(--mono);font-size:16px;color:var(--dim)}
   .screen{position:relative;padding:24px 30px;background:var(--canvas);height:calc(100% - 52px)}
   pre.tui{margin:0;font-family:var(--mono);font-size:20px;line-height:1.34;color:var(--ink);white-space:pre;letter-spacing:0}
-  pre.tui .ln{display:block;opacity:0;transform:translateY(3px);transition:opacity .12s linear,transform .12s var(--ease)}
+  pre.tui .ln{display:block;opacity:0;transform:translateY(3px);transition:opacity calc(.12s / var(--pace)) linear,transform calc(.12s / var(--pace)) var(--ease)}
   pre.tui .ln.on{opacity:1;transform:none}
 
   /* real agent CLI window — the actual captured Claude Code / Codex CLI frame */
@@ -48,7 +48,7 @@
   .agout .cc-dot{color:#61c454}
 
   /* two-CLI cross-agent memory hero */
-  #cliwrap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:1500px;display:grid;grid-template-columns:1fr 1fr;gap:40px;opacity:0;transition:opacity .55s var(--ease);z-index:6}
+  #cliwrap{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:1500px;display:grid;grid-template-columns:1fr 1fr;gap:40px;opacity:0;transition:opacity calc(.55s / var(--pace)) var(--ease);z-index:6}
   #cliwrap.on{opacity:1}
   .cli{background:#0b0e12;border:1px solid #202932;border-radius:14px;box-shadow:0 50px 130px -40px rgba(0,0,0,.9)}
   .cli .bar{display:flex;align-items:center;gap:9px;padding:15px 20px;border-bottom:1px solid #1a222a;background:#0e1216}
@@ -58,19 +58,19 @@
   .cli .pr{color:var(--teal)} .cli .arg{color:var(--dim)} .cli .ok{color:#86efac} .cli .rc{color:var(--teal)} .cli .mut{color:var(--dim)}
   .caret{display:inline-block;width:11px;height:26px;background:var(--teal);vertical-align:-5px;margin-left:2px;animation:bl 1s steps(1) infinite}
   @keyframes bl{50%{opacity:0}}
-  .arrow{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:var(--mono);font-size:34px;color:var(--teal);opacity:0;z-index:10;transition:opacity .5s ease}
+  .arrow{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-family:var(--mono);font-size:34px;color:var(--teal);opacity:0;z-index:10;transition:opacity calc(.5s / var(--pace)) ease}
   .arrow.on{opacity:1;animation:apulse 1.4s ease infinite}
   @keyframes apulse{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.12)}}
 
   /* toast: keypress / attach / detach — OUTSIDE the camera so it never gets zoomed/blurred */
   #toast{position:absolute;left:50%;bottom:78px;transform:translate(-50%,120%);font-family:var(--mono);font-size:19px;color:var(--canvas);background:var(--teal);padding:9px 20px;border-radius:9px;opacity:0;z-index:25;letter-spacing:.04em;font-weight:600}
-  #toast.on{animation:toast 1.5s var(--ease)}
+  #toast.on{animation:toast calc(1.5s / var(--pace)) var(--ease)}
   @keyframes toast{0%{opacity:0;transform:translate(-50%,120%) scale(.92)}16%{opacity:1;transform:translate(-50%,0) scale(1)}80%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,0) scale(1)}}
 
   /* intro / outro cards */
-  .card{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;opacity:0;transition:opacity .8s var(--ease);pointer-events:none;z-index:15}
+  .card{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;opacity:0;transition:opacity calc(.8s / var(--pace)) var(--ease);pointer-events:none;z-index:15}
   .card.on{opacity:1}
-  .wm{transform:scale(.9);transition:transform 1.6s var(--ease)} .card.on .wm{transform:scale(1)}
+  .wm{transform:scale(.9);transition:transform calc(1.6s / var(--pace)) var(--ease)} .card.on .wm{transform:scale(1)}
   .wm svg{display:block}
   .tagline{margin-top:42px;font-family:var(--mono);font-size:31px;letter-spacing:.05em;color:var(--teal)}
   .sub{margin-top:18px;font-size:22px;color:#8a99a3}
@@ -140,7 +140,21 @@
   window.addEventListener('resize', fit); fit();
 
   var timers=[];
-  function at(ms,fn){timers.push(setTimeout(fn,ms))}
+  /* ---- TIMELINE PACING (EBRAIN_PACING) --------------------------------------
+     The beats below are authored at the film's original, slower timing so the
+     ACT comments stay readable. Playback is retimed through T(): the two title
+     cards compress hard (they carry no product), while product beats speed up
+     uniformly so every panel keeps proportional read time. Retune the whole
+     film from this one object - --pace in the stylesheet mirrors PACE.BODY so
+     transitions stay in step with the beats. */
+  var PACE={INTRO_SRC:6200,INTRO_DST:2600,BODY:1.8,OUTRO_SRC:105000,SRC_END:114000,OUTRO_DST:3900};
+  PACE.BODY_DST=(PACE.OUTRO_SRC-PACE.INTRO_SRC)/PACE.BODY;
+  function T(ms){
+    if(ms<=PACE.INTRO_SRC) return ms*(PACE.INTRO_DST/PACE.INTRO_SRC);
+    if(ms<=PACE.OUTRO_SRC) return PACE.INTRO_DST+(ms-PACE.INTRO_SRC)/PACE.BODY;
+    return PACE.INTRO_DST+PACE.BODY_DST+(ms-PACE.OUTRO_SRC)*(PACE.OUTRO_DST/(PACE.SRC_END-PACE.OUTRO_SRC));
+  }
+  function at(ms,fn){timers.push(setTimeout(fn,T(ms)))}
   function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
   // ---- camera ----
@@ -151,7 +165,7 @@
   function pushTo(el,scale,xOverride){ if(!el) return; var o=originOf(el); cameraTo(xOverride!=null?xOverride:o.x, o.y, scale); }
   function pushFocus(name,scale,xOverride){ var idx=FOCUS[name]; var els=tui.querySelectorAll('.ln'); pushTo(els[idx], scale, xOverride); }
   // fast/linear transition while tracking a caret, eased otherwise
-  function camFast(on){ cam.style.transition = on ? 'transform .16s linear' : 'transform 1.0s cubic-bezier(.6,0,.25,1)'; }
+  function camFast(on){ cam.style.transition = on ? 'transform .16s linear' : 'transform 0.56s cubic-bezier(.6,0,.25,1)'; }
 
   // Play the REAL task-prompt overlay as the user types — camera follows the caret line, panning right.
   function playPrompt(startMs, stepMs, scale, doneCb){
@@ -169,7 +183,7 @@
     var lines=FRAMES[name];
     tui.innerHTML=lines.map(function(h){return '<span class="ln">'+h+'</span>'}).join('');
     var els=tui.querySelectorAll('.ln');
-    if(!reduced && reveal){ var i=0;(function step(){ if(i<els.length){ els[i].classList.add('on'); i++; timers.push(setTimeout(step, 8)); } else if(doneCb) doneCb(); })(); }
+    if(!reduced && reveal){ var i=0;(function step(){ if(i<els.length){ els[i].classList.add('on'); i++; timers.push(setTimeout(step, 8/PACE.BODY)); } else if(doneCb) doneCb(); })(); }
     else { els.forEach(function(e){e.classList.add('on')}); if(doneCb) doneCb(); }
   }
   function toast(label){ toastEl.textContent=label; toastEl.classList.remove('on'); void toastEl.offsetWidth; toastEl.classList.add('on'); }
@@ -183,7 +197,7 @@
     var flat=[]; segs.forEach(function(s){ for(var i=0;i<s.t.length;i++) flat.push({ch:s.t[i], c:s.c}); });
     at(startMs, function(){ var el=(typeof sel==='string')?$(sel):sel; if(!el) return; var i=0;
       (function step(){
-        if(i<flat.length){ i++; el.innerHTML=renderTyped(flat.slice(0,i))+'<span class="caret"></span>'; timers.push(setTimeout(step, speed||30)); }
+        if(i<flat.length){ i++; el.innerHTML=renderTyped(flat.slice(0,i))+'<span class="caret"></span>'; timers.push(setTimeout(step,(speed||30)/PACE.BODY)); }
         else { el.innerHTML=renderTyped(flat)+'<span class="caret"></span>'; if(doneCb) doneCb(); }
       })();
     });
@@ -194,7 +208,7 @@
     at(startMs, function(){ var el=$(sel); if(!el) return; camFast(true); var i=0;
       (function step(){
         if(i<text.length){ i++; el.innerHTML=esc(text.slice(0,i))+'<span class="caret" id="lc"></span>';
-          var c=$('#lc'); if(c) pushTo(c, scale, null); timers.push(setTimeout(step, speed||40)); }
+          var c=$('#lc'); if(c) pushTo(c, scale, null); timers.push(setTimeout(step,(speed||40)/PACE.BODY)); }
         else { el.innerHTML=esc(text)+'<span class="caret"></span>'; camFast(false); if(doneCb) doneCb(); }
       })();
     });
@@ -305,7 +319,7 @@
     // ============ ACT 9 · outro (105–114) ============
     at(105000,function(){ $('#win').classList.remove('in'); $('#outro').classList.add('on'); });
     at(112500,function(){ $('#outro').classList.remove('on'); });
-    window.DEMO_DURATION=114000;
+    window.DEMO_DURATION=T(114000);
     at(114000,function(){ reset(); timers.push(setTimeout(cycle,300)); });
   }
   // Debug jumps for QA: #agent=claude / #agent=codex render the real agent + type; #frame=NAME renders a frame.
