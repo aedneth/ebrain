@@ -6,7 +6,7 @@
      back to system-ui/ui-monospace). No remote font host, so this page renders offline and
      under a strict same-origin content-security-policy. -->
 <style>
-  :root{--pace:1.8;--canvas:#101317;--teal:#2dd4bf;--ink:#d9e1e8;--dim:#566068;--sans:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;--ease:cubic-bezier(.22,.61,.36,1);--easez:cubic-bezier(.6,0,.25,1)}
+  :root{--pace:1.0;--canvas:#101317;--teal:#2dd4bf;--ink:#d9e1e8;--dim:#566068;--sans:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;--ease:cubic-bezier(.22,.61,.36,1);--easez:cubic-bezier(.6,0,.25,1)}
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:#000;overflow:hidden}
   body{display:flex;align-items:center;justify-content:center}
@@ -140,19 +140,24 @@
   window.addEventListener('resize', fit); fit();
 
   var timers=[];
-  /* ---- TIMELINE PACING (EBRAIN_PACING) --------------------------------------
-     The beats below are authored at the film's original, slower timing so the
-     ACT comments stay readable. Playback is retimed through T(): the two title
-     cards compress hard (they carry no product), while product beats speed up
-     uniformly so every panel keeps proportional read time. Retune the whole
-     film from this one object - --pace in the stylesheet mirrors PACE.BODY so
-     transitions stay in step with the beats. */
-  var PACE={INTRO_SRC:6200,INTRO_DST:2600,BODY:1.8,OUTRO_SRC:105000,SRC_END:114000,OUTRO_DST:3900};
-  PACE.BODY_DST=(PACE.OUTRO_SRC-PACE.INTRO_SRC)/PACE.BODY;
+  /* ---- TIMELINE PACING (EBRAIN_PACING) ----------------------------------------
+     Two clocks, kept apart on purpose. MOTION is how long a movement takes - the
+     camera push, the panel fade, the line reveal, the typing cadence - and it is
+     left exactly as authored, because shortening a movement is what makes a film
+     look dropped and juddery. TMAP only shortens the HOLDS: the time the picture
+     sits still after a movement has finished. Quick beats and the two title cards
+     pass through untouched. Regenerate with pipeline/retime_demo.py. */
+  var PACE={MOTION:1.0};
+  var TMAP={0:0,200:0,5800:5600,6200:6000,13500:9669,15600:11338,18600:13354,19100:13854,19800:14554,22400:16415,22900:16915,23700:17715,26800:19769,27500:20469,29300:22023,31300:23654,31900:24254,37800:27954,38400:28554,39200:29354,41000:30908,41500:31408,45600:34856,46200:35456,46700:35956,47600:38586,49900:40332,50400:40832,51200:42972,53600:44756,59800:48003,60500:48703,62600:50372,68000:53310,68500:53810,70500:55441,71200:56141,77000:59233,78000:60233,80000:61864,86000:65033,87000:66033,89000:67664,89700:68364,95500:71456,96000:71956,98200:73664,100600:75449,103000:77233,105000:78864,112500:86364,114000:87864};
+  var TKEYS=Object.keys(TMAP).map(Number).sort(function(a,b){return a-b;});
   function T(ms){
-    if(ms<=PACE.INTRO_SRC) return ms*(PACE.INTRO_DST/PACE.INTRO_SRC);
-    if(ms<=PACE.OUTRO_SRC) return PACE.INTRO_DST+(ms-PACE.INTRO_SRC)/PACE.BODY;
-    return PACE.INTRO_DST+PACE.BODY_DST+(ms-PACE.OUTRO_SRC)*(PACE.OUTRO_DST/(PACE.SRC_END-PACE.OUTRO_SRC));
+    if(TMAP[ms]!==undefined) return TMAP[ms];
+    var lo=TKEYS[0], hi=TKEYS[TKEYS.length-1];
+    for(var i=0;i<TKEYS.length-1;i++){ if(ms>=TKEYS[i]&&ms<=TKEYS[i+1]){ lo=TKEYS[i]; hi=TKEYS[i+1]; break; } }
+    if(ms<TKEYS[0]) return ms;
+    if(ms>hi) return TMAP[hi]+(ms-hi);
+    var span=hi-lo; if(!span) return TMAP[lo];
+    return TMAP[lo]+(TMAP[hi]-TMAP[lo])*((ms-lo)/span);
   }
   function at(ms,fn){timers.push(setTimeout(fn,T(ms)))}
   function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -165,7 +170,7 @@
   function pushTo(el,scale,xOverride){ if(!el) return; var o=originOf(el); cameraTo(xOverride!=null?xOverride:o.x, o.y, scale); }
   function pushFocus(name,scale,xOverride){ var idx=FOCUS[name]; var els=tui.querySelectorAll('.ln'); pushTo(els[idx], scale, xOverride); }
   // fast/linear transition while tracking a caret, eased otherwise
-  function camFast(on){ cam.style.transition = on ? 'transform .16s linear' : 'transform 0.56s cubic-bezier(.6,0,.25,1)'; }
+  function camFast(on){ cam.style.transition = on ? 'transform .16s linear' : 'transform 1.0s cubic-bezier(.6,0,.25,1)'; }
 
   // Play the REAL task-prompt overlay as the user types — camera follows the caret line, panning right.
   function playPrompt(startMs, stepMs, scale, doneCb){
@@ -183,7 +188,7 @@
     var lines=FRAMES[name];
     tui.innerHTML=lines.map(function(h){return '<span class="ln">'+h+'</span>'}).join('');
     var els=tui.querySelectorAll('.ln');
-    if(!reduced && reveal){ var i=0;(function step(){ if(i<els.length){ els[i].classList.add('on'); i++; timers.push(setTimeout(step, 8/PACE.BODY)); } else if(doneCb) doneCb(); })(); }
+    if(!reduced && reveal){ var i=0;(function step(){ if(i<els.length){ els[i].classList.add('on'); i++; timers.push(setTimeout(step, 8/PACE.MOTION)); } else if(doneCb) doneCb(); })(); }
     else { els.forEach(function(e){e.classList.add('on')}); if(doneCb) doneCb(); }
   }
   function toast(label){ toastEl.textContent=label; toastEl.classList.remove('on'); void toastEl.offsetWidth; toastEl.classList.add('on'); }
@@ -197,7 +202,7 @@
     var flat=[]; segs.forEach(function(s){ for(var i=0;i<s.t.length;i++) flat.push({ch:s.t[i], c:s.c}); });
     at(startMs, function(){ var el=(typeof sel==='string')?$(sel):sel; if(!el) return; var i=0;
       (function step(){
-        if(i<flat.length){ i++; el.innerHTML=renderTyped(flat.slice(0,i))+'<span class="caret"></span>'; timers.push(setTimeout(step,(speed||30)/PACE.BODY)); }
+        if(i<flat.length){ i++; el.innerHTML=renderTyped(flat.slice(0,i))+'<span class="caret"></span>'; timers.push(setTimeout(step,(speed||30)/PACE.MOTION)); }
         else { el.innerHTML=renderTyped(flat)+'<span class="caret"></span>'; if(doneCb) doneCb(); }
       })();
     });
@@ -208,7 +213,7 @@
     at(startMs, function(){ var el=$(sel); if(!el) return; camFast(true); var i=0;
       (function step(){
         if(i<text.length){ i++; el.innerHTML=esc(text.slice(0,i))+'<span class="caret" id="lc"></span>';
-          var c=$('#lc'); if(c) pushTo(c, scale, null); timers.push(setTimeout(step,(speed||40)/PACE.BODY)); }
+          var c=$('#lc'); if(c) pushTo(c, scale, null); timers.push(setTimeout(step,(speed||40)/PACE.MOTION)); }
         else { el.innerHTML=esc(text)+'<span class="caret"></span>'; camFast(false); if(doneCb) doneCb(); }
       })();
     });
