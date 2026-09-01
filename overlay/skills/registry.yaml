@@ -1,6 +1,6 @@
 # registry.yaml — catálogo federado de skills canónicas (generado por skills-federate)
 # fuente de verdad para el skillpack que ebrain publica vía list_skills (MCP).
-generated: 2026-07-12T05:48:59Z
+generated: 2026-09-01T22:23:30Z
 skills:
   - name: remember
     source: harness
@@ -99,17 +99,6 @@ skills:
     source: ckis
     one_line: "Extract a YouTube transcript via the youtube-transcript CLI, distill it into a literature note (key concepts, frameworks"
     optional: true
-  # (dup) ckis-context-handoff también en company — omitido (gana ckis)
-  # (dup) claude-project-architect también en company — omitido (gana ckis)
-  # (dup) client-onboarding también en company — omitido (gana ckis)
-  # (dup) convert-to-md también en company — omitido (gana ckis)
-  # (dup) korvex-design también en company — omitido (gana ckis)
-  # (dup) process-inbox también en company — omitido (gana ckis)
-  # (dup) project-context también en company — omitido (gana ckis)
-  # (dup) sync-overviews también en company — omitido (gana ckis)
-  # (dup) ultraplan-bootstrap también en company — omitido (gana ckis)
-  # (dup) url-processor también en company — omitido (gana ckis)
-  # (dup) youtube-processor también en company — omitido (gana ckis)
   - name: autoplan
     source: gstack
     one_line: "|"
@@ -157,6 +146,11 @@ skills:
   - name: cso
     source: gstack
     one_line: "|"
+    optional: true
+  - name: demo-video
+    source: gstack
+    trigger: "/demo-video"
+    one_line: "Produce a narrated product demo video end to end: retime an HTML demo, write the voiceover, generate sound design and a "
     optional: true
   - name: design-consultation
     source: gstack
@@ -211,6 +205,10 @@ skills:
     source: gstack
     one_line: "|"
     optional: true
+  - name: hf-cli
+    source: gstack
+    one_line: "Hugging Face Hub CLI (`hf`) for downloading, uploading, and managing models, datasets, spaces, buckets, repos, papers, j"
+    optional: true
   - name: investigate
     source: gstack
     one_line: "|"
@@ -238,6 +236,10 @@ skills:
   - name: open-gstack-browser
     source: gstack
     one_line: "|"
+    optional: true
+  - name: orquestar
+    source: gstack
+    one_line: "Disena y lanza orquestaciones de agentes con presupuesto de RAM, frontera de contexto y bucle evaluador-ejecutor. Usala "
     optional: true
   - name: pair-agent
     source: gstack
