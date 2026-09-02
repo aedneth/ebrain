@@ -93,12 +93,16 @@ const SESSION_HINTS: HintEntry[] = [
   { k: "ctrl+b d", label: "detach" },
 ];
 
-/** Home is multi-box: Tab moves focus between active-sessions / memories / system. */
+/** Home is multi-box: Tab moves focus between active-sessions / memories / system. `l` is
+ * the launch shortcut the empty sessions box teaches, so the bar advertises the same key
+ * instead of leaving the box and the footer pointing at two different routes. Six entries
+ * is the bar's ceiling, and this set measures 77 columns at the 80-column minimum. */
 const HOME_HINTS: HintEntry[] = [
   { k: "1-7", label: "views" },
   { k: "tab", label: "focus box" },
   { k: "↑↓", label: "select" },
   { k: "enter", label: "open" },
+  { k: "l", label: "launch" },
   { k: "?", label: "help" },
 ];
 

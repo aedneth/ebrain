@@ -6,7 +6,8 @@ in tmux and the data views consume the same contract-tested ebrain CLI commands.
 
 ## Navigation
 
-- `1`-`6`: Home, Launch, Sessions, Memory, Routing, Doctor.
+- `1`-`7`: Home, Launch, Sessions, Workspaces, Memory, Routing, Doctor. On an 80-column
+  terminal the tab bar tightens its spacing so every view label stays whole.
 - `Tab` / `Shift+Tab`: move focus between boxes in the current view.
 - Arrow keys: move the focused selection. `Enter`: open or act on it.
 - `/` or `Ctrl+P`: command palette. `?`: actions for the current view. `q`, `Ctrl+D`, or `Ctrl+C` twice: exit.
@@ -37,9 +38,9 @@ in tmux and the data views consume the same contract-tested ebrain CLI commands.
   existing ebrain routing. Only `y` writes it; no provider call or credential is stored. Then
   select target, profile, capability, and workspace in a centered modal before previewing the
   exact launch plan. `Tab` cycles fields, arrows choose values, and `c` opens the picker.
-- **Memory (`4`):** `s` searches shared memory through `ebrain q --json`; `a` attaches a materialized workflow to Launch; `r` stores a durable learning.
-- **Routing (`5`):** `c` switches to the factual token/USD ledger. It never allocates subscription cost.
-- **Doctor (`6`):** `r` refreshes health checks.
+- **Memory (`5`):** `s` searches shared memory through `ebrain q --json`; `a` attaches a materialized workflow to Launch; `r` stores a durable learning.
+- **Routing (`6`):** `c` switches to the factual token/USD ledger. It never allocates subscription cost.
+- **Doctor (`7`):** `r` refreshes health checks.
 
 Execution profiles are user-owned local model orderings with provenance. Task Setup provides a
 user-selected capability preset only; it does not recommend a provider, benchmark winner, or model.

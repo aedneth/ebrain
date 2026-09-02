@@ -1587,7 +1587,7 @@ export function buildFrame(state: AppState, size: FrameSize, theme: Theme): stri
 
   const frame: string[] = [];
   frame.push(buildStatusRow(overviewOf(state), theme, cols));
-  frame.push(padTo(tabBar({ tabs: [...TABS], active: TABS.indexOf(state.tab) }, theme), cols));
+  frame.push(padTo(tabBar({ tabs: [...TABS], active: TABS.indexOf(state.tab) }, theme, cols), cols));
   frame.push(buildHairlineRow(theme, cols));
   frame.push(...buildMiddle(state, middleRect, theme));
   frame.push(hintBar({ hints: hintsForState(state) }, theme, cols));
