@@ -28,14 +28,28 @@ import {
 } from "./mcp-token.ts";
 import { ensure as ensureDaemon, stop as stopDaemon, logLocation as daemonLogLocation } from "./daemon-control.ts";
 import { materialiseDefaults } from "./config-bootstrap.ts";
+import { fillArgs, findAgentSpec, mcpEntryFor, onboardableAgents, readAgentMcpSpecs, type AgentMcpSpec } from "./mcp-manifest.ts";
 
 const HOME = homedir();
 const EBRAIN_HOME = resolveEbrainHome();
 const CFG = join(HOME, ".config", "ebrain");
-const DEFAULT_AGENTS = ["claude", "codex", "gemini", "cursor", "opencode"] as const;
 const MCP_SERVER_NAME = "ebrain";
 
-export type OnboardAgent = typeof DEFAULT_AGENTS[number] | "generic";
+/**
+ * Which agents `ebrain up` onboards is now a property of the adapters on disk, not a list in this
+ * file. Dropping in `harness/adapters/pi/manifest.yaml` is enough for `ebrain onboard pi` to work,
+ * which is what every other consumer of the manifests already assumed.
+ */
+function onboardableAgentNames(): string[] {
+  return onboardableAgents(readAgentMcpSpecs()).map((spec) => spec.agent);
+}
+
+/** Every adapter, including those with no MCP surface — the set a user may legitimately name. */
+function allAgentNames(): string[] {
+  return readAgentMcpSpecs().map((spec) => spec.agent);
+}
+
+export type OnboardAgent = string;
 export type OnboardStatus = "registered" | "skipped" | "failed";
 
 export interface OnboardResult {
@@ -64,15 +78,14 @@ function ensureDirs(): void {
   mkdirSync(join(CFG, "wd"), { recursive: true, mode: 0o700 });
 }
 
-export function parseOnboardTarget(args: string[]): OnboardAgent[] {
-  if (args.length === 0 || args.includes("--all")) return [...DEFAULT_AGENTS];
+export function parseOnboardTarget(args: string[], known = allAgentNames(), onboardable = onboardableAgentNames()): OnboardAgent[] {
+  if (args.length === 0 || args.includes("--all")) return [...onboardable];
   const target = args.find((a) => !a.startsWith("--"));
-  if (!target) return [...DEFAULT_AGENTS];
-  if (target === "all") return [...DEFAULT_AGENTS];
-  if (![...DEFAULT_AGENTS, "generic"].includes(target as OnboardAgent)) {
-    throw new Error(`unknown agent '${target}'. Use --all or one of: ${[...DEFAULT_AGENTS, "generic"].join(", ")}`);
+  if (!target || target === "all") return [...onboardable];
+  if (!known.includes(target)) {
+    throw new Error(`unknown agent '${target}'. Use --all or one of: ${known.join(", ")}`);
   }
-  return [target as OnboardAgent];
+  return [target];
 }
 
 export async function which(binary: string, pathValue = process.env.PATH || ""): Promise<string | null> {
@@ -87,46 +100,41 @@ export async function which(binary: string, pathValue = process.env.PATH || ""):
   return null;
 }
 
-export function commandForAgent(agent: OnboardAgent, token: string, url = mcpUrl(port()), bridge = bridgeCommandPath(EBRAIN_HOME)): CommandSpec | null {
+/**
+ * The registration command for an agent that owns its own MCP registry, built from its manifest.
+ *
+ * eBrain runs `<binary> mcp add …` rather than writing into a file the agent manages, so the agent
+ * stays the authority on its own config format. The token never appears in argv — the bridge reads
+ * it from the 0600 store at call time — which is why `tokenInArgv` is false for every spec here.
+ */
+export function commandForAgent(
+  agent: OnboardAgent,
+  token: string,
+  url = mcpUrl(port()),
+  bridge = bridgeCommandPath(EBRAIN_HOME),
+  spec = findAgentSpec(agent),
+): CommandSpec | null {
   void token;
   void url;
-  switch (agent) {
-    case "claude":
-      return {
-        binary: "claude",
-        tokenInArgv: false,
-        args: ["mcp", "add", "--scope", "user", MCP_SERVER_NAME, "--", bridge],
-      };
-    case "codex":
-      return {
-        binary: "codex",
-        tokenInArgv: false,
-        args: ["mcp", "add", MCP_SERVER_NAME, "--", bridge],
-      };
-    case "gemini":
-      return {
-        binary: "gemini",
-        tokenInArgv: false,
-        args: ["mcp", "add", "--scope", "user", "--transport", "stdio", MCP_SERVER_NAME, bridge],
-      };
-    case "opencode":
-    case "cursor":
-    case "generic":
-      return null;
-  }
+  if (!spec || spec.method !== "cli" || !spec.binary || spec.addArgs.length === 0) return null;
+  return {
+    binary: spec.binary,
+    tokenInArgv: false,
+    args: fillArgs(spec.addArgs, { name: MCP_SERVER_NAME, bridge }),
+  };
 }
 
-export function removalCommandForAgent(agent: OnboardAgent): CommandSpec | null {
-  switch (agent) {
-    case "claude":
-      return { binary: "claude", args: ["mcp", "remove", MCP_SERVER_NAME], tokenInArgv: false };
-    case "codex":
-      return { binary: "codex", args: ["mcp", "remove", MCP_SERVER_NAME], tokenInArgv: false };
-    case "gemini":
-      return { binary: "gemini", args: ["mcp", "remove", MCP_SERVER_NAME], tokenInArgv: false };
-    default:
-      return null;
-  }
+export function removalCommandForAgent(
+  agent: OnboardAgent,
+  spec = findAgentSpec(agent),
+  bridge = bridgeCommandPath(EBRAIN_HOME),
+): CommandSpec | null {
+  if (!spec || spec.method !== "cli" || !spec.binary || spec.removeArgs.length === 0) return null;
+  return {
+    binary: spec.binary,
+    tokenInArgv: false,
+    args: fillArgs(spec.removeArgs, { name: MCP_SERVER_NAME, bridge }),
+  };
 }
 
 export function commandDisplay(spec: CommandSpec, token: string): string {
@@ -211,101 +219,82 @@ function chmodIfExists(path: string, mode: number): void {
   chmodSync(path, mode);
 }
 
-function hardenAgentConfig(agent: OnboardAgent): void {
-  const files: string[] = [];
-  switch (agent) {
-    case "claude":
-      files.push(join(HOME, ".claude.json"));
-      break;
-    case "codex":
-      files.push(join(HOME, ".codex", "config.toml"));
-      break;
-    case "gemini":
-      files.push(join(HOME, ".gemini", "settings.json"));
-      break;
-    case "cursor":
-      files.push(join(HOME, ".cursor", "mcp.json"));
-      break;
-    case "opencode":
-      files.push(join(HOME, ".config", "opencode", "opencode.json"));
-      break;
-  }
-  for (const file of files) {
-    try { chmodIfExists(file, 0o600); } catch { /* best-effort hardening */ }
-  }
+function hardenAgentConfig(agent: OnboardAgent, spec = findAgentSpec(agent)): void {
+  if (!spec?.configPath) return;
+  try { chmodIfExists(spec.configPath, 0o600); } catch { /* best-effort hardening */ }
 }
 
+/**
+ * Merge eBrain's entry into an agent's JSON config, leaving every neighbouring server untouched.
+ *
+ * The shape and the key come from the agent's manifest, so this one function replaced a
+ * per-agent pair of near-identical merges. `repairs` covers the schema quirks a specific agent
+ * has — declared in its manifest rather than inferred here, because a repair applied to the wrong
+ * config would be eBrain silently rewriting a file it does not own.
+ */
+export function mergeMcpConfig(
+  current: Record<string, unknown>,
+  spec: Pick<AgentMcpSpec, "keys" | "entryShape" | "repairs">,
+  bridge = bridgeCommandConfig(bridgeCommandPath(EBRAIN_HOME)),
+): Record<string, unknown> {
+  const key = spec.keys[0] ?? "mcpServers";
+  const existing = current[key] && typeof current[key] === "object" && !Array.isArray(current[key])
+    ? current[key] as Record<string, unknown>
+    : {};
+
+  let rest: Record<string, unknown> = { ...current };
+  const extra: Record<string, unknown> = {};
+
+  // OpenCode's schema requires `instructions` to be an array; a string there makes it reject the
+  // whole file, including the server we just added. Normalising it is a repair, not a preference.
+  if (spec.repairs.includes("instructions-array")) {
+    const { instructions: raw, ...withoutInstructions } = rest;
+    rest = withoutInstructions;
+    const instructions = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : undefined;
+    if (instructions !== undefined) extra.instructions = instructions;
+  }
+
+  return {
+    ...rest,
+    [key]: { ...existing, [MCP_SERVER_NAME]: mcpEntryFor(spec.entryShape, bridge) },
+    ...extra,
+  };
+}
+
+/** Retained for callers and tests that name the agent rather than pass its spec. */
 export function mergeCursorMcpConfig(current: Record<string, unknown>, token: string, url = mcpUrl(port())): Record<string, unknown> {
   void token;
   void url;
-  const bridge = bridgeCommandConfig(bridgeCommandPath(EBRAIN_HOME));
-  const mcpServers = current.mcpServers && typeof current.mcpServers === "object" && !Array.isArray(current.mcpServers)
-    ? current.mcpServers as Record<string, unknown>
-    : {};
-  return {
-    ...current,
-    mcpServers: {
-      ...mcpServers,
-      [MCP_SERVER_NAME]: bridge,
-    },
-  };
+  return mergeMcpConfig(current, { keys: ["mcpServers"], entryShape: "command-args", repairs: [] });
 }
 
 export function mergeOpenCodeMcpConfig(current: Record<string, unknown>, token: string): Record<string, unknown> {
   void token;
-  const mcp = current.mcp && typeof current.mcp === "object" && !Array.isArray(current.mcp)
-    ? current.mcp as Record<string, unknown>
-    : {};
-  const bridge = bridgeCommandConfig(bridgeCommandPath(EBRAIN_HOME));
-  const { instructions: rawInstructions, ...rest } = current;
-  const instructions = Array.isArray(rawInstructions)
-    ? rawInstructions
-    : typeof rawInstructions === "string"
-      ? [rawInstructions]
-      : undefined;
-  return {
-    ...rest,
-    mcp: {
-      ...mcp,
-      [MCP_SERVER_NAME]: {
-        type: "local",
-        command: [bridge.command, ...bridge.args],
-      },
-    },
-    ...(instructions === undefined ? {} : { instructions }),
-  };
+  return mergeMcpConfig(current, { keys: ["mcp"], entryShape: "local-command", repairs: ["instructions-array"] });
 }
 
-async function registerCursor(token: string): Promise<OnboardResult> {
-  if (!(await which("agent"))) return { agent: "cursor", status: "skipped", detail: "agent not installed" };
-  const file = join(HOME, ".cursor", "mcp.json");
+/** Register an agent that has no `mcp add` command, by editing the config its manifest names. */
+async function registerViaJsonConfig(spec: AgentMcpSpec, token: string): Promise<OnboardResult> {
+  const agent = spec.agent;
+  if (!spec.configPath) return { agent, status: "skipped", detail: "manifest declares no config path" };
+  if (spec.binary && !(await which(spec.binary))) return { agent, status: "skipped", detail: `${spec.binary} not installed` };
   try {
-    const next = mergeCursorMcpConfig(readJsonObject(file), token);
-    writeJsonObject(file, next);
-    return { agent: "cursor", status: "registered", detail: "~/.cursor/mcp.json -> daemon bridge" };
+    const next = mergeMcpConfig(readJsonObject(spec.configPath), spec);
+    writeJsonObject(spec.configPath, next);
+    hardenAgentConfig(agent, spec);
+    return { agent, status: "registered", detail: `${spec.configPath} -> daemon bridge` };
   } catch (e) {
-    return { agent: "cursor", status: "failed", detail: redactSecrets(e instanceof Error ? e.message : String(e), [token]) };
-  }
-}
-
-async function registerOpenCode(token: string): Promise<OnboardResult> {
-  if (!(await which("opencode"))) return { agent: "opencode", status: "skipped", detail: "opencode not installed" };
-  const file = join(HOME, ".config", "opencode", "opencode.json");
-  try {
-    const next = mergeOpenCodeMcpConfig(readJsonObject(file), token);
-    writeJsonObject(file, next);
-    return { agent: "opencode", status: "registered", detail: "~/.config/opencode/opencode.json -> daemon bridge" };
-  } catch (e) {
-    return { agent: "opencode", status: "failed", detail: redactSecrets(e instanceof Error ? e.message : String(e), [token]) };
+    return { agent, status: "failed", detail: redactSecrets(e instanceof Error ? e.message : String(e), [token]) };
   }
 }
 
 async function onboardOne(agent: OnboardAgent, token: string): Promise<OnboardResult> {
-  if (agent === "generic") return { agent, status: "skipped", detail: "generic has no native MCP client" };
-  if (agent === "cursor") return registerCursor(token);
-  if (agent === "opencode") return registerOpenCode(token);
+  const manifest = findAgentSpec(agent);
+  if (!manifest) return { agent, status: "skipped", detail: "no adapter manifest for this agent" };
+  if (manifest.method === "none") return { agent, status: "skipped", detail: "this adapter has no native MCP client" };
+  if (manifest.method === "json") return registerViaJsonConfig(manifest, token);
 
-  const spec = commandForAgent(agent, token);
+  const spec = commandForAgent(agent, token, undefined, undefined, manifest);
   if (!spec) return { agent, status: "skipped", detail: "no registration command" };
   if (!(await which(spec.binary))) return { agent, status: "skipped", detail: `${spec.binary} not installed` };
 
@@ -435,7 +424,7 @@ async function cmdUp(args: string[]): Promise<void> {
     }
   }
   const smoke = await smokeWithRetry(token);
-  const results = await onboardAgents([...DEFAULT_AGENTS], token);
+  const results = await onboardAgents(onboardableAgentNames(), token);
   const payload = {
     daemon: { state: "up", url: mcpUrl(port()), already_running: wasHealthy },
     token: { store: tokenStorePaths(CFG).tokenFile, env: EBRAIN_MCP_TOKEN_ENV },

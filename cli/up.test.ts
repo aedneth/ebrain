@@ -13,13 +13,27 @@ const URL = "http://127.0.0.1:8541/mcp";
 const BRIDGE = "/home/test/eBrain/scripts/ebrain-mcp-bridge";
 
 describe("ebrain onboard plan", () => {
-  test("defaults to all concrete agents", () => {
-    expect(parseOnboardTarget([])).toEqual(["claude", "codex", "gemini", "cursor", "opencode"]);
-    expect(parseOnboardTarget(["--all"])).toEqual(["claude", "codex", "gemini", "cursor", "opencode"]);
+  // The set is now discovered by scanning the adapter manifests, so the order is the scan's:
+  // alphabetical and stable. It was a hand-written list before, which is exactly the coupling
+  // that made adding a sixth agent an edit in four files.
+  test("defaults to every adapter that declares an MCP mechanism", () => {
+    expect(parseOnboardTarget([])).toEqual(["claude", "codex", "cursor", "gemini", "opencode"]);
+    expect(parseOnboardTarget(["--all"])).toEqual(["claude", "codex", "cursor", "gemini", "opencode"]);
+    // `generic` declares `method: none`, so it is a valid target but never onboarded by default.
+    expect(parseOnboardTarget([])).not.toContain("generic");
+    expect(parseOnboardTarget(["generic"])).toEqual(["generic"]);
   });
 
   test("rejects unknown agents", () => {
     expect(() => parseOnboardTarget(["unknown-agent"])).toThrow("unknown agent");
+  });
+
+  test("a new adapter needs no code change to become onboardable", () => {
+    // The whole point of U3: supporting a new CLI is a YAML file, not an edit here.
+    const known = ["claude", "pi"];
+    const onboardable = ["claude", "pi"];
+    expect(parseOnboardTarget(["pi"], known, onboardable)).toEqual(["pi"]);
+    expect(parseOnboardTarget([], known, onboardable)).toEqual(["claude", "pi"]);
   });
 
   test("CLI registrations use the daemon bridge and never include bearer material", () => {

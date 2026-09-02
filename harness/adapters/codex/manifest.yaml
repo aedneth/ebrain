@@ -10,6 +10,7 @@ norms:
 hooks:
   config: ~/.codex/hooks/hooks.json
   format: claude-json
+  root: null                      # events sit at the root of this config
   dir: ~/.codex/hooks
   events:
     pre_tool_use: pre_tool_use
@@ -21,6 +22,13 @@ hooks:
     - { file: log-session.sh,       core: log-session.sh,    event: stop }
 mcp:
   register: "ebrain onboard codex"
+  method: cli
+  binary: codex
+  add: ["mcp", "add", "{name}", "--", "{bridge}"]
+  remove: ["mcp", "remove", "{name}"]
+  config: ~/.codex/config.toml
+  format: toml
+  keys: [mcp_servers]
 env:
   AGENT_NAME: codex
 doctor: "codex doctor"

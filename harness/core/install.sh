@@ -92,6 +92,15 @@ EOF
     done < <(wrapper_files)
   fi
 
+  # 1b) cablear esos wrappers en el config del runtime.
+  # Antes esto solo se VERIFICABA y, si faltaba, se le pedía al usuario que editara el JSON a mano.
+  # Para los hooks de contexto eso es fricción; para el guard de secretos es el control de seguridad
+  # del producto instalado en disco pero inerte, detrás de una edición manual que hay que acertar.
+  # El merge es aditivo, idempotente y atómico: no toca ningún otro hook del usuario.
+  if [ -f "$EBRAIN_HOME/cli/hooks-wire.ts" ]; then
+    "$BUN" run "$EBRAIN_HOME/cli/hooks-wire.ts" "$AGENT" --apply || true
+  fi
+
   # 2) normas (bloque gestionado)
   if [ "$NORMS_MODE" = "managed-block" ] && [ -n "$NORMS_TARGET" ] && [ "$NORMS_TARGET" != "null" ]; then
     mkdir -p "$(dirname "$NORMS_TARGET")" 2>/dev/null || true
@@ -112,20 +121,15 @@ fi
 echo "── doctor ──"
 rc=0
 
-# a) cableado de hooks en el config del runtime
-if [ -n "$HOOKS_CONFIG" ] && [ "$HOOKS_CONFIG" != "null" ]; then
-  if [ -f "$HOOKS_CONFIG" ]; then
-    while IFS=$'\t' read -r file core event; do
-      [ -z "$file" ] && continue
-      if grep -q "$file" "$HOOKS_CONFIG" 2>/dev/null; then
-        echo "  hook ✓ '$file' cableado en $HOOKS_CONFIG [$event]"
-      else
-        echo "  hook ⚠ '$file' NO cableado en $HOOKS_CONFIG — agregá un entry \"$event\" con command: $HOOKS_DIR/$file"; rc=1
-      fi
-    done < <(wrapper_files)
-  else
-    echo "  hook ⚠ config $HOOKS_CONFIG no existe todavía (crealo con los entries del manifest)"; rc=1
-  fi
+# a) cableado de hooks en el config del runtime.
+# El grep que había acá respondía "¿aparece este nombre de archivo en el config?", que es una
+# pregunta parecida pero no la misma: un nombre mencionado en un comentario, o cableado bajo un
+# evento que el runtime no dispara, contaba como cableado. Ahora lo responde el mismo módulo que
+# lo escribe, así el chequeo y la instalación no pueden divergir.
+if [ -f "$EBRAIN_HOME/cli/hooks-wire.ts" ] && [ "$HOOKS_FORMAT" != "none" ]; then
+  hw_out="$("$BUN" run "$EBRAIN_HOME/cli/hooks-wire.ts" "$AGENT" 2>&1)"; hw_rc=$?
+  [ -n "$hw_out" ] && printf '%s\n' "$hw_out"
+  [ "$hw_rc" -eq 0 ] || rc=1
 elif [ "$HOOKS_FORMAT" = "none" ]; then
   GUARD_MODE="$(mget guard)"; [ -z "$GUARD_MODE" ] && GUARD_MODE="n/a"
   echo "  hooks: clase no-hook (sin intercepción de runtime). Guard = ${GUARD_MODE} (norma + aislamiento, NO técnico)."

@@ -10,16 +10,25 @@ norms:
 hooks:
   config: ~/.claude/settings.json
   format: claude-json
+  root: hooks                     # Claude nests its events under a top-level "hooks" key
   dir: ~/.claude/hooks
   events:
     pre_tool_use: PreToolUse
   wrappers:
-    - { file: block-env-read.sh, core: guard-secrets.sh, event: pre_tool_use }
+    - { file: block-env-read.sh, core: guard-secrets.sh, event: pre_tool_use, matcher: Bash }
   external:                       # gestionado por CKIS, el harness no interviene
     - "SessionStart: banner de contexto CKIS"
     - "session logging: hooks del vault CKIS"
 mcp:
+  # How this agent is wired to the brain. Read by cli/mcp-manifest.ts — the only place that knows.
   register: "ebrain onboard claude"
+  method: cli                     # Claude Code owns its MCP registry; let it write, don't edit its file
+  binary: claude
+  add: ["mcp", "add", "--scope", "user", "{name}", "--", "{bridge}"]
+  remove: ["mcp", "remove", "{name}"]
+  config: ~/.claude.json          # where a real registration can be verified
+  format: json
+  keys: [mcpServers]
 env:
   AGENT_NAME: claude
 doctor: null

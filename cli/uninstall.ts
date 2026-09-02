@@ -19,6 +19,7 @@ import { join, dirname } from "path";
 import { homedir } from "os";
 import { redactSecrets } from "./mcp-token.ts";
 import { serviceManager, uninstallService, stop as stopDaemon, SERVICE_LABEL, LAUNCHD_LABEL } from "./daemon-control.ts";
+import { fillArgs, readAgentMcpSpecs, type AgentMcpSpec } from "./mcp-manifest.ts";
 
 const HOME = homedir();
 const CFG = join(HOME, ".config", "ebrain");
@@ -36,14 +37,20 @@ export interface PlanItem {
   purgeOnly?: boolean;
 }
 
-/** Agent CLIs that own their own MCP registry and must be asked to remove the entry. */
-const CLI_AGENTS = ["claude", "codex", "gemini"] as const;
+/**
+ * Which agents to undo, read from the same manifests that decided how to register them.
+ *
+ * An uninstall that knows less than the install is an uninstall that leaves things behind, so
+ * these are derived rather than restated: an agent onboarded because its manifest said so is
+ * removed for exactly the same reason.
+ */
+function cliAgents(): AgentMcpSpec[] {
+  return readAgentMcpSpecs().filter((spec) => spec.method === "cli" && spec.binary !== null && spec.removeArgs.length > 0);
+}
 
-/** Agent configs eBrain edits directly, and the JSON key holding the server map. */
-const CONFIG_AGENTS: Array<{ agent: string; file: string; key: "mcpServers" | "mcp" }> = [
-  { agent: "cursor", file: join(HOME, ".cursor", "mcp.json"), key: "mcpServers" },
-  { agent: "opencode", file: join(HOME, ".config", "opencode", "opencode.json"), key: "mcp" },
-];
+function configAgents(): AgentMcpSpec[] {
+  return readAgentMcpSpecs().filter((spec) => spec.method === "json" && spec.configPath !== null);
+}
 
 function binDir(): string {
   return process.env.EBRAIN_BIN_DIR || join(HOME, ".local", "bin");
@@ -66,21 +73,21 @@ export function uninstallPlan(): PlanItem[] {
     present: mgr !== "none",
   });
 
-  for (const agent of CLI_AGENTS) {
+  for (const spec of cliAgents()) {
     items.push({
       kind: "agent-cli",
-      label: `unregister the MCP server from ${agent}`,
-      target: `${agent} mcp remove ${MCP_SERVER_NAME}`,
+      label: `unregister the MCP server from ${spec.agent}`,
+      target: [spec.binary, ...fillArgs(spec.removeArgs, { name: MCP_SERVER_NAME, bridge: "" })].join(" "),
       present: true,
     });
   }
 
-  for (const { agent, file } of CONFIG_AGENTS) {
+  for (const spec of configAgents()) {
     items.push({
       kind: "agent-config",
-      label: `remove the '${MCP_SERVER_NAME}' entry from ${agent}'s config`,
-      target: file,
-      present: existsSync(file),
+      label: `remove the '${MCP_SERVER_NAME}' entry from ${spec.agent}'s config`,
+      target: spec.configPath!,
+      present: existsSync(spec.configPath!),
     });
   }
 
@@ -103,11 +110,11 @@ export function uninstallPlan(): PlanItem[] {
     present: existsSync(CFG),
   });
 
-  for (const { agent, file } of CONFIG_AGENTS) {
-    const backup = `${file}.ebrain-backup`;
+  for (const spec of configAgents()) {
+    const backup = `${spec.configPath}.ebrain-backup`;
     items.push({
       kind: "agent-config",
-      label: `remove the pre-eBrain backup of ${agent}'s config`,
+      label: `remove the pre-eBrain backup of ${spec.agent}'s config`,
       target: backup,
       present: existsSync(backup),
     });
@@ -126,14 +133,20 @@ export function uninstallPlan(): PlanItem[] {
 }
 
 /** Drop eBrain's server from an agent config without disturbing the servers around it. */
-export function removeServerFromConfig(current: Record<string, unknown>, key: "mcpServers" | "mcp"): Record<string, unknown> {
-  const map = current[key];
-  if (!map || typeof map !== "object" || Array.isArray(map)) return current;
-  const { [MCP_SERVER_NAME]: _removed, ...rest } = map as Record<string, unknown>;
-  return { ...current, [key]: rest };
+export function removeServerFromConfig(current: Record<string, unknown>, keys: string | readonly string[]): Record<string, unknown> {
+  // An agent may hold its servers under more than one key across versions; drop ours from each
+  // one that is actually present, so an upgrade does not leave a stale entry behind.
+  let next = current;
+  for (const key of typeof keys === "string" ? [keys] : keys) {
+    const map = next[key];
+    if (!map || typeof map !== "object" || Array.isArray(map)) continue;
+    const { [MCP_SERVER_NAME]: _removed, ...rest } = map as Record<string, unknown>;
+    next = { ...next, [key]: rest };
+  }
+  return next;
 }
 
-function rewriteJson(file: string, key: "mcpServers" | "mcp"): boolean {
+function rewriteJson(file: string, keys: readonly string[]): boolean {
   if (!existsSync(file)) return false;
   let parsed: Record<string, unknown>;
   try {
@@ -144,7 +157,7 @@ function rewriteJson(file: string, key: "mcpServers" | "mcp"): boolean {
     // A config we cannot parse is a config we must not rewrite.
     return false;
   }
-  const next = removeServerFromConfig(parsed, key);
+  const next = removeServerFromConfig(parsed, keys);
   const tmp = `${file}.ebrain-tmp-${process.pid}`;
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
@@ -185,15 +198,17 @@ export async function performUninstall(opts: { purge: boolean }): Promise<Uninst
     skipped.push("could not stop the host; it may already be down");
   }
 
-  for (const agent of CLI_AGENTS) {
-    if (!onPath(agent)) { skipped.push(`${agent} is not installed`); continue; }
-    if (run([agent, "mcp", "remove", MCP_SERVER_NAME])) done.push(`unregistered from ${agent}`);
-    else skipped.push(`${agent} had no '${MCP_SERVER_NAME}' entry to remove`);
+  for (const spec of cliAgents()) {
+    if (!onPath(spec.binary!)) { skipped.push(`${spec.agent} is not installed`); continue; }
+    const argv = [spec.binary!, ...fillArgs(spec.removeArgs, { name: MCP_SERVER_NAME, bridge: "" })];
+    if (run(argv)) done.push(`unregistered from ${spec.agent}`);
+    else skipped.push(`${spec.agent} had no '${MCP_SERVER_NAME}' entry to remove`);
   }
 
-  for (const { agent, file, key } of CONFIG_AGENTS) {
-    if (rewriteJson(file, key)) done.push(`removed the '${MCP_SERVER_NAME}' entry from ${agent} (${file})`);
-    else skipped.push(`${agent}: nothing to change`);
+  for (const spec of configAgents()) {
+    const file = spec.configPath!;
+    if (rewriteJson(file, spec.keys)) done.push(`removed the '${MCP_SERVER_NAME}' entry from ${spec.agent} (${file})`);
+    else skipped.push(`${spec.agent}: nothing to change`);
     // The backups eBrain made of these files are eBrain's litter, so uninstall clears them too.
     const backup = `${file}.ebrain-backup`;
     if (existsSync(backup)) {

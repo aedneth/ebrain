@@ -12,11 +12,11 @@
  * how the previous check went wrong.
  */
 import { existsSync, readFileSync } from "fs";
-import { join } from "path";
 import { homedir } from "os";
+import { readAgentMcpSpecs, MCP_SERVER_NAME } from "./mcp-manifest.ts";
 
 const HOME = homedir();
-export const MCP_SERVER_NAME = "ebrain";
+export { MCP_SERVER_NAME };
 
 export type RegistrationState = "registered" | "absent" | "unknown";
 
@@ -30,14 +30,19 @@ export interface AgentConfig {
   keys: string[];
 }
 
+/**
+ * Where each agent's registration can be verified — read from the adapter manifests rather than
+ * restated here. This table used to be the fourth place that knew the same five facts; a sixth
+ * agent now needs no edit to this file.
+ *
+ * An adapter with no config path declared is omitted, not invented: `main` already treats an
+ * unmodelled adapter as "unknown" rather than red, and guessing a path would produce exactly the
+ * kind of verdict-that-cannot-fail this module exists to remove.
+ */
 export function agentConfigs(home = HOME): AgentConfig[] {
-  return [
-    { agent: "claude", file: join(home, ".claude.json"), format: "json", keys: ["mcpServers"] },
-    { agent: "codex", file: join(home, ".codex", "config.toml"), format: "toml", keys: ["mcp_servers"] },
-    { agent: "gemini", file: join(home, ".gemini", "settings.json"), format: "json", keys: ["mcpServers"] },
-    { agent: "cursor", file: join(home, ".cursor", "mcp.json"), format: "json", keys: ["mcpServers"] },
-    { agent: "opencode", file: join(home, ".config", "opencode", "opencode.json"), format: "json", keys: ["mcp", "mcpServers"] },
-  ];
+  return readAgentMcpSpecs(undefined, home)
+    .filter((spec) => spec.method !== "none" && spec.configPath !== null)
+    .map((spec) => ({ agent: spec.agent, file: spec.configPath!, format: spec.format, keys: spec.keys }));
 }
 
 /**

@@ -18,6 +18,13 @@ hooks:
   wrappers: []
 mcp:
   register: "ebrain onboard opencode"
+  method: json
+  binary: opencode
+  config: ~/.config/opencode/opencode.json
+  format: json
+  keys: [mcp, mcpServers]
+  entry: local-command
+  repairs: [instructions-array]   # its schema rejects a string `instructions`, taking the server with it
 env:
   AGENT_NAME: opencode
 doctor: "opencode --version"

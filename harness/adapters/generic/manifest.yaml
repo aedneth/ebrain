@@ -18,7 +18,9 @@ hooks:
     - { file: inject-context.sh, core: inject-context.sh, event: manual }
     - { file: log-session.sh,    core: log-session.sh,    event: git-post-commit }
 mcp:
+  # No MCP surface to register. A real answer, not a gap.
   register: null
+  method: none
 env:
   AGENT_NAME: generic
 doctor: null

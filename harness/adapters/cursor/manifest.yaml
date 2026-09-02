@@ -17,6 +17,12 @@ hooks:
   wrappers: []
 mcp:
   register: "ebrain onboard cursor"
+  method: json                    # no `mcp add` subcommand — eBrain merges its own entry in
+  binary: agent
+  config: ~/.cursor/mcp.json
+  format: json
+  keys: [mcpServers]
+  entry: command-args
 env:
   AGENT_NAME: cursor
 doctor: "agent --version"
