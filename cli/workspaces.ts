@@ -19,7 +19,16 @@ const SAFE_ID = /^[a-z][a-z0-9-]{0,63}$/;
 export interface Workspace { id: string; label: string; cwd: string }
 export interface WorkspaceStore { schema_version: 1; workspaces: Workspace[] }
 
+/**
+ * Fail loudly on stderr AND legibly on stdout.
+ *
+ * The TUI runs this command as a subprocess and parses stdout. With the reason on stderr only, a
+ * rejected directory reached the user as "Workspace could not be added. Check the directory and
+ * label." - two things to check, neither of them named, for a failure this process could describe
+ * exactly. Emitting `{ok:false,error}` costs nothing and is what a caller can actually show.
+ */
 function die(message: string, code = 1): never {
+  console.log(JSON.stringify({ ok: false, error: message }, null, 2));
   console.error(`error: ${message}`);
   process.exit(code);
 }
@@ -41,8 +50,27 @@ function hasOnly(value: Record<string, unknown>, keys: string[]): boolean {
  */
 export class WorkspaceMissingError extends Error {}
 
+/**
+ * Expand a leading `~`, because the product spells directories that way everywhere else.
+ *
+ * The status bar says `Current directory - ~/Documents/Second Brain`, the workspace panel says
+ * `~/eBrain`, and the add-workspace field was the one place that spelling was rejected: `resolve()`
+ * treats `~` as an ordinary path segment, so `~/eBrain` resolved to `<cwd>/~/eBrain`, which does not
+ * exist. The interface taught a notation it then refused.
+ *
+ * Only a leading `~` or `~/` expands. `~user` is NOT resolved - looking up another account's home
+ * is a different question from "spell my own home the way the UI does", and this value is a path,
+ * never shell input. Expansion happens before every guard, so the client-repository check still
+ * sees the real directory.
+ */
+export function expandHome(input: string, home = HOME): string {
+  if (input === "~") return home;
+  if (input.startsWith("~/")) return join(home, input.slice(2));
+  return input;
+}
+
 export async function canonicalWorkspacePath(input: string): Promise<string> {
-  const submitted = resolve(input);
+  const submitted = resolve(expandHome(input));
   if (isClientPath(submitted)) throw new Error("client repository paths are not allowed as workspaces");
   let canonical: string;
   try {

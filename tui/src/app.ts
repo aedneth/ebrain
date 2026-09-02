@@ -2305,6 +2305,29 @@ function oneLine(s: string): string {
 }
 
 /**
+ * Seat a body that is shorter than its viewport.
+ *
+ * Two wrong answers were already tried. Boxes sized by layout slot gave a one-line panel the same
+ * eighteen rows as a thirty-line one, so the interface was mostly borders around nothing. Boxes
+ * sized by content fixed that and produced the opposite failure: the content clings to the top and
+ * the rest of the screen is a void, which is what Launch looks like with three short boxes on a
+ * 34-row terminal.
+ *
+ * Neither the boxes nor the page should absorb the slack. The body keeps the height its content
+ * earns and is centred in the viewport, so a screen that genuinely has less to show than it has
+ * room for looks composed instead of unfinished. Launch is the honest case: three short boxes are
+ * everything that screen has to say, and centring them is the difference between a card cluster
+ * and a page whose bottom half failed to load.
+ */
+function seatBand(body: string[], height: number, width: number): string[] {
+  const blank = " ".repeat(width);
+  if (body.length >= height) return body.slice(0, height);
+  const slack = height - body.length;
+  const above = Math.floor(slack / 2);
+  return [...Array(above).fill(blank), ...body, ...Array(slack - above).fill(blank)];
+}
+
+/**
  * Home. Top to bottom: the block wordmark when there is room for it; the first-run cue when
  * there is nothing yet; a band with active sessions (what you came to check) beside the system
  * detail, each claiming the height its content needs; and the latest memories taking every row
@@ -2352,14 +2375,38 @@ function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, focused: s
   const memoriesMin = 5; // two borders + three rows
   const systemH = systemBody.length + 2;
   const sessionsWant = Math.max(1, sessions.rows.length) + 2;
-  const bandH = Math.max(systemH, Math.min(sessionsWant, Math.max(systemH, available - memoriesMin)));
+  // How the body is split between the band and the memories strip.
+  //
+  // "Whatever is left goes to the memories" was the rule that made `latest memories` sixteen
+  // truncated lines filling most of Home: the panel carrying the least actionable content became
+  // the largest thing on the screen. The panel that grows as you actually use the product is the
+  // sessions band, so:
+  //
+  //   - both fit    -> the band absorbs the slack, up to half again its own content height, and
+  //                    anything past that is seated rather than poured into a box that cannot
+  //                    fill it;
+  //   - contended   -> the body is split down the middle, unless the band alone needs more (real
+  //                    sessions outrank a recall list), and each side ellipsizes its own rows.
+  const bandWant = Math.max(systemH, sessionsWant);
+  const memoriesWant = Math.max(memoriesMin, (o.memory?.learnings?.length ?? 0) + 2);
+  const bandMax = Math.max(systemH, available - memoriesMin); // memories never starve
+  const bandH =
+    bandWant + memoriesWant <= available
+      ? Math.min(available - memoriesWant, Math.max(systemH, Math.round(bandWant * 1.5)))
+      : Math.max(Math.min(bandWant, bandMax), Math.min(bandMax, Math.round(available / 2)));
+  const memoriesH = Math.max(memoriesMin, available - bandH);
   const bandRoom = bandH - 2;
 
   const rowW = Math.max(8, sessionsRect.width - 4);
   const sSel = clampIndex(sessions.selected, Math.max(1, sessions.rows.length));
   let sessionBody: string[];
   if (sessions.rows.length === 0) {
-    sessionBody = [teachLine(theme, "none · press ", { key: "l" }, " to launch")];
+    // A roomy box holding one line in its top-left corner reads as unfinished; the same box with
+    // the line in the middle of it reads as an empty state. The band is sized for the sessions
+    // that will appear here, so the empty case has to look deliberate rather than unpopulated.
+    const cueLine = centerLine(teachLine(theme, "none · press ", { key: "l" }, " to launch"), rowW);
+    const above = Math.max(0, Math.floor((bandRoom - 1) / 2));
+    sessionBody = [...Array(above).fill(""), cueLine];
   } else {
     const shown = sessions.rows.length > bandRoom ? Math.max(1, bandRoom - 1) : sessions.rows.length;
     sessionBody = sessions.rows.slice(0, shown).map((r, i) => {
@@ -2374,16 +2421,21 @@ function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, focused: s
     { title: `active sessions · ${sessions.rows.length}`, focus: focused === "sessions", width: sessionsRect.width, height: bandH, body: sessionBody },
     theme,
   );
+  // Both halves of the band share its height. Letting `system` shrink to its own five facts was
+  // tried and looked worse than the stretch it avoided: it leaves an L-shaped hole down the right
+  // of the screen, which reads as a missing panel rather than as a box with nothing more to say.
   const systemPanel = panel(
     { title: "system", focus: focused === "system", width: systemRect.width, height: bandH, body: systemBody },
     theme,
   );
+  const systemBlank = " ".repeat(systemRect.width);
 
   out.push(...wmBlock, ...cue);
-  for (let i = 0; i < bandH; i++) out.push((sessionsPanel[i] ?? "") + " " + (systemPanel[i] ?? ""));
+  for (let i = 0; i < bandH; i++) out.push((sessionsPanel[i] ?? "") + " " + (systemPanel[i] ?? systemBlank));
 
-  // Memories take the rest: as many learnings as fit, ellipsized rather than cut mid-word.
-  const memH = rect.height - out.length;
+  // Memories: as many learnings as their share of the body holds, ellipsized rather than cut
+  // mid-word.
+  const memH = Math.min(memoriesH, rect.height - out.length);
   if (memH >= 3) {
     const learnings = o.memory?.learnings ?? [];
     const mSel = clampIndex(o.memSelected, Math.max(1, learnings.length));
@@ -2403,8 +2455,7 @@ function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, focused: s
     );
   }
 
-  while (out.length < rect.height) out.push(blank);
-  return out.slice(0, rect.height);
+  return seatBand(out, rect.height, cols);
 }
 
 // ---------------------------------------------------------------------------
@@ -2862,20 +2913,25 @@ function buildLaunchView(launch: LaunchSlice, workspace: WorkspaceSelection, cal
     ];
     const out: string[] = [];
     for (let i = 0; i < bandH; i++) out.push((left[i] ?? " ".repeat(agentsW)) + " " + (right[i] ?? " ".repeat(rightW)));
-    while (out.length < rect.height) out.push(" ".repeat(rect.width));
-    return out.slice(0, rect.height);
+    return seatBand(out, rect.height, rect.width);
   }
 
   // Compact: stacked, with the full six-agent grid first. Guided keeps two summary rows and task
   // setup takes what is left, which at 80x24 is exactly its three rows.
-  const [agentsRect, guidedRect, taskRect] = splitV(rect, [8, 4, { flex: 1 }], 1);
-  return [
-    ...box("1 · manual agents", "agents", rect.width, agentsRect!.height, manualBody(rect.width - 4, false)),
-    " ".repeat(rect.width),
-    ...box("2 · guided launch", "guided", rect.width, guidedRect!.height, guidedBody(rect.width - 4, guidedRect!.height - 2)),
-    " ".repeat(rect.width),
-    ...box("3 · task setup", "task", rect.width, taskRect!.height, taskBody(rect.width - 4)),
-  ];
+  const agents = manualBody(rect.width - 4, false);
+  const guided = guidedBody(rect.width - 4, 4);
+  const task = taskBody(rect.width - 4);
+  return seatBand(
+    [
+      ...box("1 · manual agents", "agents", rect.width, agents.length + 2, agents),
+      " ".repeat(rect.width),
+      ...box("2 · guided launch", "guided", rect.width, guided.length + 2, guided),
+      " ".repeat(rect.width),
+      ...box("3 · task setup", "task", rect.width, task.length + 2, task),
+    ],
+    rect.height,
+    rect.width,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -3926,12 +3982,21 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       await refreshWorkspaceRegistry(returnToWizard);
     }
 
+    /** Prefix the CLI's reason so the row reads as a sentence about the action the user just took. */
+    function workspaceAddError(reason: string): string {
+      return reason ? `Not added: ${reason}.` : "Workspace could not be added.";
+    }
+
     async function addWorkspaceFromUi(cwd: string, label: string, returnToWizard: boolean, origin: "picker" | "cockpit"): Promise<void> {
       ++workspaceRequest; // invalidate a concurrent list/validation response before mutation
       const result = await createWorkspace({ cwd, label });
       if (!result.ok) {
         const workspace = workspaceOf(state);
-        state = { ...state, workspace: { ...workspace, status: "error", error: "Workspace could not be added. Check the directory and label." } };
+        // The reason travels all the way from the CLI that refused. "Check the directory and label"
+        // named two candidates and confirmed neither, which is the same as saying nothing - and it
+        // hid the one rejection a user must be able to tell apart from a typo: a client repository
+        // turned away by the isolation guard.
+        state = { ...state, workspace: { ...workspace, status: "error", error: workspaceAddError(result.error) } };
         render();
         return;
       }

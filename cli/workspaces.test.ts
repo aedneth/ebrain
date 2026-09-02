@@ -2,13 +2,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 // Deny policy is operator configuration; this suite declares its own neutral fixture policy.
 process.env.EBRAIN_DENIED_REPOS = "denied-alpha,denied-beta";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import {
   addWorkspace,
   canonicalWorkspacePath,
+  expandHome,
   nextWorkspaceId,
   parseWorkspaceStore,
   readWorkspaceStore,
@@ -204,5 +205,35 @@ describe("a workspace directory that no longer exists", () => {
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
+  });
+});
+
+// The interface spells every directory with a tilde. The field that accepts one has to as well.
+describe("expandHome", () => {
+  test("accepts the spelling the rest of the product uses", async () => {
+    // `~/eBrain` used to resolve to `<cwd>/~/eBrain` and come back as "directory does not exist",
+    // while the panel two rows above displayed that exact string as the workspace path.
+    expect(expandHome("~", "/home/dev")).toBe("/home/dev");
+    expect(expandHome("~/projects/app", "/home/dev")).toBe("/home/dev/projects/app");
+    // And the resolver itself expands, not just the helper: this is the exact call the add-workspace
+    // field makes.
+    expect(await canonicalWorkspacePath("~")).toBe(realpathSync(homedir()));
+  });
+
+  test("leaves every other path untouched", () => {
+    // A tilde that is not the first character is an ordinary character in a filename, and `~user`
+    // asks a question about somebody else's account that this field does not answer.
+    expect(expandHome("/srv/app", "/home/dev")).toBe("/srv/app");
+    expect(expandHome("./relative", "/home/dev")).toBe("./relative");
+    expect(expandHome("~other/app", "/home/dev")).toBe("~other/app");
+    expect(expandHome("/srv/~/app", "/home/dev")).toBe("/srv/~/app");
+  });
+
+  test("expansion happens before the guards, not after them", async () => {
+    // Expanding after the client-repository check would turn the tilde into a way to smuggle a
+    // denied directory past isolation.
+    const dir = root();
+    mkdirSync(join(dir, "denied-alpha"));
+    await expect(canonicalWorkspacePath(expandHome("~/denied-alpha", dir))).rejects.toThrow(/client repository/);
   });
 });
