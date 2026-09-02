@@ -117,7 +117,8 @@ export function ellipsize(s: string, width: number, ellipsis = "…"): string {
   if (width <= 0) return "";
   if (displayWidth(s) <= width) return s;
   const mark = displayWidth(ellipsis) <= width ? ellipsis : "";
-  const head = truncate(s, width - displayWidth(mark));
+  // Trim whitespace left at the cut so the mark hugs the last word (`plan …` reads as a gap).
+  const head = truncate(s, width - displayWidth(mark)).replace(/\s+(\x1b\[0m)?$/, "$1");
   return head + mark;
 }
 

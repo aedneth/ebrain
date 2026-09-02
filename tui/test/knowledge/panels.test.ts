@@ -48,10 +48,12 @@ describe("Overview panel (6.5.1) + lock banner (6.5.5)", () => {
     },
   });
 
-  it("raises the lock banner with server + cached timestamp when the brain read was cached", () => {
+  it("names the lock holder + cached timestamp in the system box when the brain read was cached", () => {
+    // The notice lives as a fifth system row rather than a centred banner that restated the
+    // status bar's `brain UP` a third time.
     const t = frameText(cached);
-    expect(t).toContain("brain served by mcp:8541 (lock)");
-    expect(t).toContain("cached 14:31");
+    expect(t).toContain("mcp:8541");
+    expect(t).toContain("cached  14:31 · lock held by mcp:8541");
   });
 
   it("shows real spend/fleet/memory in the sistema panel + last learning", () => {

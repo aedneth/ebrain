@@ -29,7 +29,7 @@ import { CAPABILITIES, type Capability } from "../../cli/task-profile.ts";
 import { makeTheme, type Theme, type AgentName } from "./theme.js";
 import { Screen } from "./kit/screen.js";
 import { splitV, splitH, type Rect } from "./kit/layout.js";
-import { padTo, truncate, displayWidth, stripAnsi } from "./kit/draw.js";
+import { padTo, truncate, displayWidth, stripAnsi, ellipsize } from "./kit/draw.js";
 import { startNavReader, type Key } from "./kit/input.js";
 import { composerApplyKey, composerFrom, composerViewport, type ComposerGeometry, type ComposerState, type ComposerVisualRow } from "./kit/composer.js";
 
@@ -2183,38 +2183,44 @@ function buildMiddle(state: AppState, rect: Rect, theme: Theme): string[] {
 // ---------------------------------------------------------------------------
 
 function labelCell(text: string, theme: Theme): string {
-  return theme.fg("text.secondary") + padTo(text, 12) + theme.reset;
+  return theme.fg("text.secondary") + padTo(text, 8) + theme.reset;
 }
 
-/** Lock-awareness banner (6.5.5): one row when the brain read came back cached (the
- * PGLite lock was held by an MCP server). Empty array otherwise. */
-function overviewBanner(o: OverviewSlice, cols: number, theme: Theme): string[] {
-  if (!o.data?.brain.cached) return [];
-  const warn = theme.fg("semantic.warn");
+/** A key the user can press right now, named inside a box: teal, like the focus border and the
+ * selection marker. The footer's keys stay quiet because they are always there; these are not. */
+function keyName(k: string, theme: Theme): string {
+  return theme.fg("accent.teal") + BOLD + k + theme.reset;
+}
+
+/** An empty-state or teaching line: dim prose around teal key names. `parts` alternate freely. */
+function teachLine(theme: Theme, ...parts: Array<string | { key: string }>): string {
   const dim = theme.fg("text.secondary");
-  const reset = theme.reset;
-  const served = o.data.brain.servedBy || "mcp";
-  const stamp = o.atLabel ? dim + " · cached " + o.atLabel + reset : "";
-  const glyph = theme.glyph("badgeDot");
-  const text = `${glyph} brain served by ${served} (lock)`;
-  return [warn + text + reset + stamp];
+  return parts.map((part) => (typeof part === "string" ? dim + part + theme.reset : keyName(part.key, theme))).join("");
 }
 
-function buildSistemaBody(d: OverviewData, theme: Theme): string[] {
+/** System box body: the status bar's three facts with the detail the bar has no room for — who
+ * serves the brain, the spend gauge with what is left, the fleet count, the memory size — plus one
+ * warn row when the brain read was a cached snapshot because an MCP server held the lock (6.5.5).
+ * Four rows, five when cached; the box claims exactly that. */
+function buildSistemaBody(d: OverviewData, atLabel: string | null, contentW: number, theme: Theme): string[] {
   const ok = theme.fg("semantic.ok");
   const warnC = theme.fg("semantic.warn");
   const dim = theme.fg("text.secondary");
+  const muted = theme.fg("text.muted");
   const primary = theme.fg("text.primary");
   const reset = theme.reset;
 
   const up = d.brain.state === "up";
   const brainState = (up ? BOLD + ok : warnC) + d.brain.state.toUpperCase() + reset;
-  const served = d.brain.servedBy ? dim + "  " + d.brain.servedBy + reset : "";
+  const served = d.brain.servedBy ? muted + "  " + d.brain.servedBy + reset : "";
   const brainLine = labelCell("brain", theme) + brainState + served;
 
-  const spendLine =
-    labelCell("spend", theme) +
-    gauge({ value: d.spend.mtd, max: d.spend.cap, width: 16, suffix: `$${d.spend.mtd.toFixed(2)}/$${d.spend.cap}` }, theme);
+  // Zero spend is a state, not a missing number: say so instead of drawing $0.00 beside an empty bar.
+  const suffix = d.spend.mtd > 0
+    ? `$${d.spend.mtd.toFixed(2)} · $${d.spend.remaining.toFixed(2)} left`
+    : `none · $${d.spend.cap} cap`;
+  const gaugeW = Math.max(8, contentW - 8 - 1 - displayWidth(suffix));
+  const spendLine = labelCell("spend", theme) + gauge({ value: d.spend.mtd, max: d.spend.cap, width: gaugeW, suffix }, theme);
 
   const online = d.fleet.online === d.fleet.total ? ok : warnC;
   const fleetLine =
@@ -2225,11 +2231,16 @@ function buildSistemaBody(d: OverviewData, theme: Theme): string[] {
     theme.fg("memory.violet") + `${d.memory.learnings} ` + reset + dim + "learnings · " + reset +
     primary + `${d.memory.sessions} ` + reset + dim + "sessions" + reset;
 
-  return [brainLine, "", spendLine, "", fleetLine, memLine];
+  const rows = [brainLine, spendLine, fleetLine, memLine];
+  if (d.brain.cached) {
+    rows.push(labelCell("cached", theme) + warnC + (atLabel ?? "now") + reset + muted + ` · lock held by ${d.brain.servedBy || "mcp"}` + reset);
+  }
+  return rows;
 }
 
-/** One home "ultimas memorias" row from a real learning: violet bullet + text + dim
- * source (project). No fabricated score — `memory recent` carries none. */
+/** One home "latest memories" row from a real learning: violet bullet + text + dim source
+ * (project). No fabricated score — `memory recent` carries none. Text that does not fit ends in
+ * an ellipsis rather than mid-word. */
 function formatOverviewMemoryRow(l: MemoryLearning, contentW: number, theme: Theme): string {
   const violet = theme.fg("memory.violet");
   const primary = theme.fg("text.primary");
@@ -2243,7 +2254,7 @@ function formatOverviewMemoryRow(l: MemoryLearning, contentW: number, theme: The
   const textW = Math.max(0, contentW - bulletW - gapW - sourceW);
   const src = l.project || l.date || "";
 
-  const textCell = padTo(truncate(oneLine(l.text), textW), textW);
+  const textCell = padTo(ellipsize(oneLine(l.text), textW), textW);
   const sourceCell = " ".repeat(gapW) + padTo(truncate(src, sourceW), sourceW, "right");
   return violet + glyph + " " + reset + primary + textCell + reset + dim + sourceCell + reset;
 }
@@ -2253,114 +2264,106 @@ function oneLine(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Home. Top to bottom: the block wordmark when there is room for it; the first-run cue when
+ * there is nothing yet; a band with active sessions (what you came to check) beside the system
+ * detail, each claiming the height its content needs; and the latest memories taking every row
+ * that is left, because they are the one thing here you cannot read off a shell prompt.
+ */
 function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, focused: string, rect: Rect, theme: Theme): string[] {
   const cols = rect.width;
-  const wm = wordmark({ variant: "block" }, theme);
+  const blank = " ".repeat(cols);
   const out: string[] = [];
 
-  const wmBlock: string[] = [];
-  for (const line of wm) wmBlock.push(centerLine(line, cols));
-  wmBlock.push(" ".repeat(cols));
+  // The wordmark is the right thing to show once, on a screen with room for it. On a compact
+  // terminal it would take a fifth of the view from the content; the compact wordmark in the
+  // status bar carries the identity there.
+  const wmBlock = rect.height >= 24
+    ? [...wordmark({ variant: "block" }, theme).map((line) => centerLine(line, cols)), blank]
+    : [];
 
-  // Wordmark always shows; the banner (if any) sits just under it.
-  const banner = overviewBanner(o, cols, theme);
-
-  // No data yet → a single status line where the panels would be (never a spinner-forever).
+  // No data yet: a single status line where the panels would be (never a spinner-forever).
   if (!o.data) {
-    for (const l of wmBlock) out.push(l);
-    for (const b of banner) out.push(centerLine(b, cols));
+    out.push(...wmBlock);
     const msg =
       o.status === "error"
         ? theme.fg("semantic.error") + `error: ${o.error ?? "querying ebrain status"}` + theme.reset
         : theme.fg("text.secondary") + "loading system status…" + theme.reset;
-    while (out.length < Math.floor(rect.height / 2)) out.push(" ".repeat(cols));
+    while (out.length < Math.floor(rect.height / 2)) out.push(blank);
     out.push(centerLine(msg, cols));
-    while (out.length < rect.height) out.push(" ".repeat(cols));
+    while (out.length < rect.height) out.push(blank);
     return out.slice(0, rect.height);
   }
 
-  // First-run "start here" cue: brain is up but there is nothing to show yet (no live
-  // sessions, no saved memories). One understated line under the wordmark names the first
-  // keys to try, so a brand-new user is never staring at three empty boxes with no next step.
-  // It occupies the same one-row banner slot as the lock notice, so geometry stays intact.
+  // First-run "start here" cue: brain is up but there is nothing to show yet (no live sessions,
+  // no saved memories). One understated line names the first keys to try, so a brand-new user is
+  // never staring at empty boxes with no next step.
   const firstRun = o.data.brain.state === "up" && sessions.rows.length === 0 && (o.memory?.learnings?.length ?? 0) === 0;
-  const startHere = firstRun
-    ? [theme.fg("text.secondary") + "start here · l launch · 4 then a add workspace · 5 then r save memory" + theme.reset]
+  const cue = firstRun
+    ? [centerLine(teachLine(theme, "start here · ", { key: "l" }, " launch · ", { key: "4" }, " then ", { key: "a" }, " add workspace · ", { key: "5" }, " then ", { key: "r" }, " save memory"), cols)]
     : [];
-  const fullBanner = [...banner, ...startHere];
 
-  const memoriesPanelHeight = 5; // 2 borders + 3 data rows
-  const memBlockHeight = memoriesPanelHeight + 1;
-  const bannerH = fullBanner.length;
-  const wmH = wmBlock.length;
-  const [wmRect, panelsRect, memRect] = splitV(rect, [
-    wmH + bannerH,
-    { flex: 1 },
-    memBlockHeight,
-  ]);
+  // The band. The system box is as tall as its rows; the sessions box grows with its list up to
+  // the point where the memories below would fall under three rows.
+  const systemW = cols >= 100 ? 48 : 44;
+  const [sessionsRect, systemRect] = splitH({ top: 0, left: 0, width: cols, height: 1 }, [{ flex: 1 }, systemW], 1);
+  const systemBody = buildSistemaBody(o.data, o.atLabel, Math.max(0, systemRect.width - 4), theme);
+  const available = rect.height - wmBlock.length - cue.length;
+  const memoriesMin = 5; // two borders + three rows
+  const systemH = systemBody.length + 2;
+  const sessionsWant = Math.max(1, sessions.rows.length) + 2;
+  const bandH = Math.max(systemH, Math.min(sessionsWant, Math.max(systemH, available - memoriesMin)));
+  const bandRoom = bandH - 2;
 
-  if (wmRect.height > 0) {
-    for (const l of wmBlock) out.push(l);
-    for (const b of fullBanner) out.push(centerLine(b, cols));
-  }
-
-  if (panelsRect.height > 0) {
-    const [sistemaRect, sesionesRect] = splitH(
-      { top: 0, left: 0, width: panelsRect.width, height: panelsRect.height },
-      [46, { flex: 1 }],
-      2,
-    );
-    const sistemaPanel = panel(
-      { title: "system", focus: focused === "system", width: sistemaRect.width, height: panelsRect.height, body: buildSistemaBody(o.data, theme) },
-      theme,
-    );
-
-    const rowW = Math.max(8, sesionesRect.width - 4);
-    const sSel = clampIndex(sessions.selected, Math.max(1, sessions.rows.length));
-    const sessionBody =
-      sessions.rows.length > 0
-        ? sessions.rows.slice(0, Math.max(0, panelsRect.height - 2)).map((r, i) => {
-            const row = renderFleetRow(r, rowW, i === sSel, theme);
-            return focused === "sessions" && i === sSel ? highlightRow(padTo(row, rowW), theme) : row;
-          })
-        : [theme.fg("text.secondary") + "none · press l to launch" + theme.reset];
-    const sesionesPanel = panel(
-      {
-        title: `active sessions · ${sessions.rows.length}`,
-        focus: focused === "sessions",
-        width: sesionesRect.width,
-        height: panelsRect.height,
-        body: sessionBody,
-      },
-      theme,
-    );
-    const gap = " ".repeat(Math.max(0, panelsRect.width - sistemaRect.width - sesionesRect.width));
-    for (let i = 0; i < panelsRect.height; i++) {
-      out.push((sistemaPanel[i] ?? "") + gap + (sesionesPanel[i] ?? ""));
+  const rowW = Math.max(8, sessionsRect.width - 4);
+  const sSel = clampIndex(sessions.selected, Math.max(1, sessions.rows.length));
+  let sessionBody: string[];
+  if (sessions.rows.length === 0) {
+    sessionBody = [teachLine(theme, "none · press ", { key: "l" }, " to launch")];
+  } else {
+    const shown = sessions.rows.length > bandRoom ? Math.max(1, bandRoom - 1) : sessions.rows.length;
+    sessionBody = sessions.rows.slice(0, shown).map((r, i) => {
+      const row = renderFleetRow(r, rowW, i === sSel, theme);
+      return focused === "sessions" && i === sSel ? highlightRow(padTo(row, rowW), theme) : row;
+    });
+    if (shown < sessions.rows.length) {
+      sessionBody.push(teachLine(theme, `+${sessions.rows.length - shown} more · `, { key: "3" }, " for every session"));
     }
   }
+  const sessionsPanel = panel(
+    { title: `active sessions · ${sessions.rows.length}`, focus: focused === "sessions", width: sessionsRect.width, height: bandH, body: sessionBody },
+    theme,
+  );
+  const systemPanel = panel(
+    { title: "system", focus: focused === "system", width: systemRect.width, height: bandH, body: systemBody },
+    theme,
+  );
 
-  if (memRect.height > 0) {
-    out.push(" ".repeat(cols));
+  out.push(...wmBlock, ...cue);
+  for (let i = 0; i < bandH; i++) out.push((sessionsPanel[i] ?? "") + " " + (systemPanel[i] ?? ""));
+
+  // Memories take the rest: as many learnings as fit, ellipsized rather than cut mid-word.
+  const memH = rect.height - out.length;
+  if (memH >= 3) {
     const learnings = o.memory?.learnings ?? [];
     const mSel = clampIndex(o.memSelected, Math.max(1, learnings.length));
     const memW = Math.max(0, cols - 4);
     const memoriesBody =
       learnings.length > 0
-        ? learnings.slice(0, 3).map((l, i) => {
+        ? learnings.slice(0, memH - 2).map((l, i) => {
             const row = formatOverviewMemoryRow(l, memW, theme);
             return focused === "memories" && i === mSel ? highlightRow(padTo(row, memW), theme) : row;
           })
-        : [theme.fg("text.secondary") + "no recent memories · press 5 then r to save one" + theme.reset];
+        : [teachLine(theme, "no recent memories · press ", { key: "5" }, " then ", { key: "r" }, " to save one")];
     out.push(
       ...panel(
-        { title: "latest memories", focus: focused === "memories", width: cols, height: memoriesPanelHeight, body: memoriesBody },
+        { title: "latest memories", focus: focused === "memories", width: cols, height: memH, body: memoriesBody },
         theme,
       ),
     );
   }
 
-  while (out.length < rect.height) out.push(" ".repeat(cols));
+  while (out.length < rect.height) out.push(blank);
   return out.slice(0, rect.height);
 }
 
@@ -3643,7 +3646,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       state = { ...state, overview: { ...cur, status: cur.data ? cur.status : "loading" } };
       if (state.tab === "home") render();
 
-      const [st, mem] = await Promise.all([fetchStatus(), fetchMemory(3)]);
+      const [st, mem] = await Promise.all([fetchStatus(), fetchMemory(20)]);
       const o = overviewOf(state);
       if (st.ok) {
         state = {
