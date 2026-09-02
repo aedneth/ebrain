@@ -2314,15 +2314,16 @@ function oneLine(s: string): string {
  * 34-row terminal.
  *
  * Neither the boxes nor the page should absorb the slack. The body keeps the height its content
- * earns and is seated in the viewport, a third of the leftover above it. A third rather than a half
- * because a cockpit reads top-down: the first box should still be in the upper part of the screen,
- * just not pinned to its edge with a void underneath.
+ * earns and is centred in the viewport, so a screen that genuinely has less to show than it has
+ * room for looks composed instead of unfinished. Launch is the honest case: three short boxes are
+ * everything that screen has to say, and centring them is the difference between a card cluster
+ * and a page whose bottom half failed to load.
  */
 function seatBand(body: string[], height: number, width: number): string[] {
   const blank = " ".repeat(width);
   if (body.length >= height) return body.slice(0, height);
   const slack = height - body.length;
-  const above = Math.floor(slack / 3);
+  const above = Math.floor(slack / 2);
   return [...Array(above).fill(blank), ...body, ...Array(slack - above).fill(blank)];
 }
 

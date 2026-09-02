@@ -106,6 +106,23 @@ describe("pidfile claims", () => {
 describe("supervision units", () => {
   const LAUNCHER = "/home/u/.config/ebrain/ebrain-brain";
 
+  /** A HOME with nothing installed in it — the state every one of these questions is asked about. */
+  function bareHome(): string {
+    const home = mkdtempSync(join(tmpdir(), "ebrain-bare-"));
+    SANDBOXES.push(home);
+    return home;
+  }
+
+  /** Ask the real control plane about a given HOME, out of process, so module-load constants see it. */
+  function probeSupervision(home: string): { mgr: string; stale: boolean; log: string } {
+    const probe = Bun.spawnSync(
+      ["bun", "-e", 'import {serviceManager, serviceUnitStale, logLocation} from "./cli/daemon-control.ts"; console.log(JSON.stringify({mgr: serviceManager(), stale: serviceUnitStale(), log: logLocation()}))'],
+      { cwd: REPO, env: { ...(process.env as Record<string, string>), HOME: home }, stdout: "pipe", stderr: "pipe" },
+    );
+    expect(probe.exitCode).toBe(0);
+    return JSON.parse(probe.stdout.toString().trim());
+  }
+
   test("the systemd unit restarts a host that dies — the whole point of installing it", () => {
     const unit = systemdUnit(LAUNCHER);
     expect(unit).toContain("Restart=always");
@@ -122,7 +139,11 @@ describe("supervision units", () => {
     const unit = systemdUnit(LAUNCHER);
     expect(unit).not.toContain("StandardOutput=");
     expect(unit).not.toContain("StandardError=");
-    expect(logLocation()).toBe(join(homedir(), ".config", "ebrain", "daemon.log")); // unsupervised here
+    // Asked of a HOME with no unit in it. Reading the suite's own HOME made this assertion a
+    // statement about the developer's machine: it passed until eBrain's supervision was actually
+    // installed there, and would have failed for every user who followed the install docs.
+    const bare = bareHome();
+    expect(probeSupervision(bare).log).toBe(join(bare, ".config", "ebrain", "daemon.log"));
   });
 
   test("the launchd plist keeps the host alive and captures its output", () => {
@@ -134,8 +155,9 @@ describe("supervision units", () => {
   });
 
   test("with no unit installed there is nothing to be stale about", () => {
-    expect(serviceManager()).toBe("none");
-    expect(serviceUnitStale()).toBe(false);
+    const probe = probeSupervision(bareHome());
+    expect(probe.mgr).toBe("none");
+    expect(probe.stale).toBe(false);
   });
 
   // The test above passes for the wrong reason on its own: `existsSync` short-circuits before the
