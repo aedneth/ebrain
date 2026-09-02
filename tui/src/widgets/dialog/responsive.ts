@@ -36,8 +36,9 @@ export type DialogBlock =
   /** A single-line editor rendered as wrapped content so its complete value stays inspectable. */
   | { kind: "input"; value: string; cursor?: number; placeholder: string; tone?: ColorRole }
   /** `key  value  detail`: the value is the fact, the detail its quieter provenance or state.
-   * Both wrap together under the key column so a long detail never reads as a second field. */
-  | { kind: "keyValue"; key: string; value: string; keyTone?: ColorRole; valueTone?: ColorRole; detail?: string; detailTone?: ColorRole }
+   * Both wrap together under the key column so a long detail never reads as a second field.
+   * `keyWidth` pads the key so a run of rows lines its values up in one column. */
+  | { kind: "keyValue"; key: string; value: string; keyTone?: ColorRole; valueTone?: ColorRole; detail?: string; detailTone?: ColorRole; keyWidth?: number }
   | { kind: "actions"; items: DialogAction[] }
   | { kind: "spacer" };
 
@@ -158,35 +159,30 @@ function inputLines(block: Extract<DialogBlock, { kind: "input" }>, width: numbe
   return wrapDialogText(text, width).map((line) => styled(line, theme, tone));
 }
 
-const SPACE = /\s/;
-
 /**
- * Wrap `value` followed by `detail` as one text so they flow together, then colour each wrapped
- * line by where the value ends. The wrapper only ever collapses whitespace, so counting the
- * value's non-space characters locates that boundary exactly on the wrapped output.
+ * Flow `value` then `detail` as one paragraph in two tones. The detail starts two cells after the
+ * value on the same line when at least eight cells remain there, otherwise on the next line, and
+ * continues at full width. The wrapper collapses whitespace, so the gap is added after wrapping.
  */
 function valueDetailLines(value: string, detail: string | undefined, width: number, theme: Theme, valueTone: ColorRole, detailTone: ColorRole): string[] {
-  if (!detail) return wrapDialogText(value, width).map((line) => styled(line, theme, valueTone));
-  const valueInk = [...value].filter((ch) => !SPACE.test(ch)).length;
-  let seen = 0;
-  return wrapDialogText(`${value}  ${detail}`, width).map((line) => {
-    const glyphs = [...line];
-    let cut = 0;
-    let inkHere = 0;
-    for (const ch of glyphs) {
-      if (seen + inkHere >= valueInk) break;
-      if (!SPACE.test(ch)) inkHere++;
-      cut++;
-    }
-    seen += inkHere;
-    const head = glyphs.slice(0, cut).join("");
-    const tail = glyphs.slice(cut).join("");
-    return (head ? styled(head, theme, valueTone) : "") + (tail ? styled(tail, theme, detailTone) : "");
-  });
+  const valueLines = wrapDialogText(value, width);
+  if (!detail) return valueLines.map((line) => styled(line, theme, valueTone));
+  const flat = detail.replace(/\s+/g, " ").trim();
+  const head = valueLines.slice(0, -1).map((line) => styled(line, theme, valueTone));
+  const last = valueLines[valueLines.length - 1] ?? "";
+  const room = width - displayWidth(last) - 2;
+  if (room < 8) {
+    return [...head, styled(last, theme, valueTone), ...wrapDialogText(flat, width).map((line) => styled(line, theme, detailTone))];
+  }
+  const first = wrapDialogText(flat, room)[0] ?? "";
+  const rest = flat.slice(first.length).trim();
+  const lines = [...head, styled(last, theme, valueTone) + "  " + styled(first, theme, detailTone)];
+  if (rest) lines.push(...wrapDialogText(rest, width).map((line) => styled(line, theme, detailTone)));
+  return lines;
 }
 
 function keyValueLines(block: Extract<DialogBlock, { kind: "keyValue" }>, width: number, theme: Theme): string[] {
-  const prefix = `${block.key}  `;
+  const prefix = padTo(block.key, Math.max(block.keyWidth ?? 0, displayWidth(block.key))) + "  ";
   const valueTone = block.valueTone ?? "text.primary";
   const detailTone = block.detailTone ?? "text.muted";
   if (displayWidth(prefix) >= width) {

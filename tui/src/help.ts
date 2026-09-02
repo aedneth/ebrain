@@ -9,6 +9,7 @@
  * centers + composites it over the frame. All color via theme (zero hardcoded hex).
  */
 import type { Theme } from "./theme.js";
+import { displayWidth } from "./kit/draw.js";
 import { COMMANDS, type Command } from "./commands.js";
 import { responsiveDialog, type DialogBlock, type ResponsiveDialogResult } from "./widgets/dialog/responsive.js";
 
@@ -42,22 +43,24 @@ export function renderHelpLayout(
   const body: DialogBlock[] = [];
 
   if (context) {
+    const keyWidth = Math.max(0, ...context.actions.map((action) => displayWidth(action.key)));
     body.push({ kind: "paragraph", text: context.title, tone: "text.muted" });
     for (const action of context.actions) {
-      body.push({ kind: "keyValue", key: action.key, value: `${action.title} -- ${action.summary}`, keyTone: "accent.teal", valueTone: "text.secondary" });
+      body.push({ kind: "keyValue", key: action.key, value: action.title, detail: action.summary || undefined, keyTone: "accent.teal", valueTone: "text.primary", keyWidth });
     }
     body.push({ kind: "spacer" });
     body.push({ kind: "line", text: "/ command palette · esc close", tone: "text.muted" });
     return responsiveDialog({ title: "actions", focus: true, width, maxHeight, scroll, blocks: body }, theme);
   }
 
+  const keyWidth = Math.max(0, ...commands.map((c) => displayWidth(c.key ?? "")));
   for (const grp of GROUP_ORDER) {
     const cmds = commands.filter((c) => (c.group ?? "global") === grp);
     if (cmds.length === 0) continue;
     if (body.length > 0) body.push({ kind: "spacer" });
     body.push({ kind: "line", text: GROUP_LABEL[grp] ?? grp, tone: "text.muted" });
     for (const c of cmds) {
-      body.push({ kind: "keyValue", key: c.key ?? "", value: `${c.title} -- ${c.summary}`, keyTone: "accent.teal", valueTone: "text.secondary" });
+      body.push({ kind: "keyValue", key: c.key ?? "", value: c.title, detail: c.summary, keyTone: "accent.teal", valueTone: "text.primary", keyWidth });
     }
   }
 

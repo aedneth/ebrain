@@ -1154,9 +1154,40 @@ function actionReferenceFor(state: AppState): HelpContext {
       ],
     };
   }
+  if (state.tab === "home") {
+    return {
+      title: "home actions",
+      actions: [
+        { key: "tab", title: "focus box", summary: "move between active sessions, latest memories, and system" },
+        { key: "↑↓", title: "select", summary: "move within the focused box" },
+        { key: "enter", title: "open", summary: "attach the selected session, open the memory, or go to routing from system" },
+        { key: "l", title: "launch", summary: "go to Launch and start an agent" },
+        { key: "1-7", title: "views", summary: "jump to a view by its number" },
+      ],
+    };
+  }
+  if (state.tab === "routing") {
+    return {
+      title: "routing actions",
+      actions: [
+        { key: "↑↓", title: "select capability", summary: "show that capability's winner, fallback, and floor chain" },
+        { key: "c", title: "cost ledger", summary: "switch to the factual token and USD ledger; it never allocates subscription cost" },
+      ],
+    };
+  }
+  if (state.tab === "doctor") {
+    return {
+      title: "doctor actions",
+      actions: [
+        { key: "r", title: "re-run", summary: "run the diagnostics again without leaving the view" },
+        { key: "tab", title: "focus box", summary: "move between diagnostics and fleet" },
+        { key: "↑↓", title: "select", summary: "move within the focused box" },
+      ],
+    };
+  }
   return {
     title: `${state.tab} actions`,
-    actions: hintsForTab(state.tab).map((hint) => ({ key: hint.k, title: hint.label, summary: "available in this view" })),
+    actions: hintsForTab(state.tab).map((hint) => ({ key: hint.k, title: hint.label, summary: "" })),
   };
 }
 
@@ -1888,10 +1919,12 @@ function buildTaskSetupBox(overlay: Extract<Overlay, { kind: "taskSetup" }>, wid
     { kind: "paragraph", text: "Choose the type of work you want to launch. This is a reversible capability preset, not a model or profile recommendation.", tone: "text.muted" },
     { kind: "spacer" },
     ...TASK_SETUP_OPTIONS.map((option, index) => ({
-      kind: "line" as const,
-      text: `${index === selected ? "▸" : " "} ${option.label} -- ${option.description}`,
-      tone: index === selected ? "text.primary" as const : "text.secondary" as const,
-      bold: index === selected,
+      kind: "keyValue" as const,
+      key: index === selected ? "▸" : " ",
+      value: option.label,
+      detail: option.description,
+      keyTone: "accent.teal" as const,
+      valueTone: index === selected ? "text.primary" as const : "text.secondary" as const,
     })),
     { kind: "spacer" },
     { kind: "actions", items: [{ key: "↑↓", label: "choose type" }, { key: "enter", label: "add optional task" }, { key: "esc", label: "cancel", labelTone: "text.muted" }] },
@@ -1908,7 +1941,7 @@ function buildTaskPromptBox(overlay: Extract<Overlay, { kind: "taskPrompt" }>, w
     maxHeight,
     scroll: overlay.scroll,
     blocks: [
-      { kind: "keyValue", key: "type", value: `${option.label} -- ${option.description}`, keyTone: "accent.teal", valueTone: "text.secondary" },
+      { kind: "keyValue", key: "type", value: option.label, detail: option.description, keyTone: "accent.teal", valueTone: "text.primary" },
       { kind: "paragraph", text: "Add an optional task for the new session. It is delivered exactly as reviewed and never infers a provider or model.", tone: "text.muted" },
       { kind: "spacer" },
       { kind: "input", value: overlay.line.text, cursor: overlay.line.cursor, placeholder: "optional task prompt" },
@@ -1958,11 +1991,11 @@ function buildWorkspacePickerBox(state: AppState, overlay: Extract<Overlay, { ki
     blocks.push({ kind: "line", text: "No validated workspace matches. Add one or clear the filter.", tone: "text.secondary" });
   } else {
     if (window.start > 0) blocks.push({ kind: "line", text: `↑ ${window.start} earlier workspace${window.start === 1 ? "" : "s"}`, tone: "text.muted" });
+    const labelOf = (candidate: WorkspaceSelection): string => `${candidate.label}${candidate.cwd === workspace.active.cwd ? " (active)" : ""}`;
+    const keyWidth = Math.max(0, ...window.items.map((candidate) => displayWidth(labelOf(candidate)) + 2));
     window.items.forEach((candidate, index) => {
-      const absoluteIndex = window.start + index;
-      const active = absoluteIndex === selected;
-      const current = candidate.cwd === workspace.active.cwd;
-      blocks.push({ kind: "keyValue", key: `${active ? "▸" : " "} ${candidate.label}${current ? " (active)" : ""}`, value: candidate.cwd, keyTone: active ? "accent.teal" : "text.secondary", valueTone: active ? "text.primary" : "text.muted" });
+      const active = window.start + index === selected;
+      blocks.push({ kind: "keyValue", key: `${active ? "▸" : " "} ${labelOf(candidate)}`, value: collapseHome(candidate.cwd), keyTone: active ? "accent.teal" : "text.secondary", valueTone: active ? "text.primary" : "text.muted", keyWidth });
     });
     const after = all.length - (window.start + window.items.length);
     if (after > 0) blocks.push({ kind: "line", text: `↓ ${after} more workspace${after === 1 ? "" : "s"}`, tone: "text.muted" });
@@ -2005,7 +2038,7 @@ function buildWorkspaceRenameBox(state: AppState, overlay: Extract<Overlay, { ki
   const blocks: DialogBlock[] = [
     { kind: "paragraph", text: "Change only the display label. The canonical directory, active sessions, and launch-time validation remain unchanged.", tone: "text.muted" },
     { kind: "spacer" },
-    { kind: "keyValue", key: "directory", value: current?.cwd ?? "workspace no longer available", keyTone: "text.secondary", valueTone: "text.muted" },
+    { kind: "keyValue", key: "directory", value: current ? collapseHome(current.cwd) : "workspace no longer available", keyTone: "text.secondary", valueTone: "text.muted" },
     { kind: "spacer" },
     { kind: "input", value: overlay.label.text, cursor: overlay.label.cursor, placeholder: "workspace label" },
   ];
@@ -2014,20 +2047,23 @@ function buildWorkspaceRenameBox(state: AppState, overlay: Extract<Overlay, { ki
   return responsiveDialog({ title: "rename workspace", focus: true, width, maxHeight, blocks }, theme).rows;
 }
 
-function wizardChoiceLabel(value: string, count: number, noun: string): string {
-  if (count === 0) return `${value || "Unavailable"} -- no ${noun} available`;
-  if (count === 1) return `${value} -- 1 ${noun}; locked`;
+/** What the arrows can do with a field, in words: a singleton says it is the only choice instead of
+ * faking an arrow affordance; a real choice says how many and which keys. Provenance comes first. */
+function wizardChoiceDetail(count: number, noun: string, provenance?: string): string {
   const plural = noun.endsWith("y") ? noun.slice(0, -1) + "ies" : noun + "s";
-  return `${value} -- ${count} ${plural}; arrows change selection`;
+  const choice = count === 0 ? `no ${plural}` : count === 1 ? `the only ${noun}` : `${count} ${plural} · ↑↓ change`;
+  return provenance ? `${provenance} · ${choice}` : choice;
 }
 
-function wizardBlock(label: string, value: string, focused: boolean, count?: number, noun?: string): DialogBlock {
+function wizardBlock(label: string, value: string, focused: boolean, detail?: string): DialogBlock {
   return {
     kind: "keyValue",
     key: `${focused ? "▸" : " "} ${label}`,
-    value: count === undefined ? value : wizardChoiceLabel(value, count, noun ?? "choices"),
+    value,
+    detail,
     keyTone: focused ? "accent.teal" : "text.secondary",
     valueTone: focused ? "text.primary" : "text.secondary",
+    keyWidth: 12, // marker + space + "capability", the longest label
   };
 }
 
@@ -2046,15 +2082,13 @@ function buildLaunchWizardBox(launch: LaunchSlice, width: number, maxHeight: num
   const blocks: DialogBlock[] = [
     { kind: "paragraph", text: "Choose a declared target and an execution profile you control. This wizard does not recommend a provider or model.", tone: "text.muted" },
     { kind: "spacer" },
-    wizardBlock("target", target ? `${target.id} -- ${target.provider} / ${target.agent}` : "Unavailable", wizard.focus === "target", wizard.targets.length, "declared target"),
-    wizardBlock("profile", profile ? `${profile.label} -- ${profile.provider} / ${profile.models} models` : "Unavailable", wizard.focus === "profile", wizard.profiles.profiles.length, "execution profile"),
-    wizardBlock("capability", wizard.capability, wizard.focus === "capability", capabilities.length, "capability"),
-    wizardBlock("workspace", wizard.cwd, wizard.focus === "cwd"),
+    wizardBlock("target", target?.id ?? "Unavailable", wizard.focus === "target", wizardChoiceDetail(wizard.targets.length, "declared target", target ? `${target.provider} · ${target.agent}` : undefined)),
+    wizardBlock("profile", profile?.label ?? "Unavailable", wizard.focus === "profile", wizardChoiceDetail(wizard.profiles.profiles.length, "execution profile", profile ? `${profile.provider} · ${profile.models} models` : undefined)),
+    wizardBlock("capability", wizard.capability, wizard.focus === "capability", wizardChoiceDetail(capabilities.length, "capability")),
+    // Paths are spelled the one way the rest of the screen spells them.
+    wizardBlock("workspace", collapseHome(wizard.cwd), wizard.focus === "cwd"),
   ];
-  if (wizard.plan) blocks.push({ kind: "line", text: `Preview ready -- ${wizard.plan.model} -- ${wizard.plan.costStatus}`, tone: "semantic.ok" });
-  if (wizard.focus !== "cwd" && choices <= 1) {
-    blocks.push({ kind: "line", text: "This field has no alternative selection. Use Tab to continue.", tone: "text.muted" });
-  }
+  if (wizard.plan) blocks.push({ kind: "line", text: `Preview ready · ${wizard.plan.model} · ${wizard.plan.costStatus}`, tone: "semantic.ok" });
   blocks.push({ kind: "spacer" }, { kind: "actions", items: [
     { key: "tab", label: "field" },
     ...(choices > 1 ? [{ key: "↑↓", label: "choose" }] : []),
@@ -2681,6 +2715,11 @@ function resetTaskSetup(launch: LaunchSlice): LaunchSlice {
   return applyTaskSetup(launch, "general", "");
 }
 
+/** Twelve-cell label column for the launch boxes' key/value rows. */
+function fieldLabel(text: string, theme: Theme): string {
+  return theme.fg("text.secondary") + padTo(text, 12) + theme.reset;
+}
+
 function buildLaunchView(launch: LaunchSlice, workspace: WorkspaceSelection, callerDisplayCwd: string, focused: string, rect: Rect, theme: Theme): string[] {
   const reset = theme.reset;
   const wizard = launch.wizard;
@@ -2700,8 +2739,9 @@ function buildLaunchView(launch: LaunchSlice, workspace: WorkspaceSelection, cal
         ? "context  no reviewed packs"
         : `context  ${contextPacks.map((pack) => `${pack.id} v${pack.version}`).join(" · ")}`;
 
-  const manualPanel = (panelRect: Rect): string[] => {
-    const contentW = Math.max(0, panelRect.width - 4);
+  /** Manual agents: workspace, context, the agent grid, and what Enter will do. `airy` puts a
+   * blank row on either side of the grid when the box has the height for it. */
+  const manualBody = (contentW: number, airy: boolean): string[] => {
     const colGap = 2;
     const cellW = Math.max(10, Math.floor((contentW - colGap) / LAUNCH_COLS));
     const grid: string[] = [];
@@ -2718,69 +2758,106 @@ function buildLaunchView(launch: LaunchSlice, workspace: WorkspaceSelection, cal
         const active = index === selected;
         const marker = active ? theme.fg("accent.teal") + "▸ " + reset : "  ";
         const clsColor = agent.cls === "heavy" ? theme.fg("semantic.warn") : theme.fg("text.muted");
-        line += padTo(truncate(marker + badge({ agent: agent.agent }, theme) + "  " + clsColor + agent.cls + reset, cellW), cellW);
+        const cell = padTo(truncate(marker + badge({ agent: agent.agent }, theme) + "  " + clsColor + agent.cls + reset, cellW), cellW);
+        // The selected agent carries the raised cursor while this box has focus, like every other list.
+        line += active && focused === "agents" ? highlightRow(cell, theme) : cell;
       }
       grid.push(line);
     }
     const selectedAgent = LAUNCHABLE[selected]!.agent;
-    const body = [
-      keyHint({ k: "g", label: "workspace" }, theme) + "  " + theme.fg("text.secondary") + truncate(workspaceDisplay(workspace, callerDisplayCwd), Math.max(0, contentW - 14)) + reset,
-      theme.fg(launch.contextStatus === "error" ? "semantic.warn" : "text.muted") + truncate(contextLine, contentW) + reset,
+    const intent =
+      theme.fg("text.muted") + (launch.task ? "Task will be sent to " : "New session with ") + reset +
+      theme.agent(selectedAgent) + BOLD + selectedAgent + reset;
+    return [
+      keyHint({ k: "g", label: "workspace" }, theme) + "  " + theme.fg("text.secondary") + ellipsize(workspaceDisplay(workspace, callerDisplayCwd), Math.max(0, contentW - 15)) + reset,
+      theme.fg(launch.contextStatus === "error" ? "semantic.warn" : "text.muted") + ellipsize(contextLine, contentW) + reset,
+      ...(airy ? [""] : []),
       ...grid,
-      theme.fg("text.muted") + (launch.task ? "Task will be sent to " : "New session with ") + reset + theme.fg("text.primary") + selectedAgent + reset,
+      ...(airy ? [""] : []),
+      intent,
     ];
-    return panel({ title: "1 · manual agents", focus: focused === "agents", width: panelRect.width, height: panelRect.height, body }, theme);
   };
 
-  const guidedPanel = (panelRect: Rect): string[] => {
-    const contentW = Math.max(0, panelRect.width - 4);
+  /** Guided launch: its key, then the current target / profile / capability once they are known.
+   * With fewer than four body rows the three fields collapse into one summary line. */
+  const guidedBody = (contentW: number, room: number): string[] => {
     const body: string[] = [keyHint({ k: "w", label: "open guided launch" }, theme)];
     if (wizard) {
-      body.push(theme.fg("text.secondary") + "target  " + reset + theme.fg("text.primary") + truncate(target?.id ?? "Unavailable", contentW - 8) + reset);
-      body.push(theme.fg("text.secondary") + "profile " + reset + theme.fg("text.primary") + truncate(selectedProfile?.label ?? "Unavailable", contentW - 9) + reset + theme.fg("text.muted") + ` · ${wizard.capability}` + reset);
-      if (wizard.plan) body.push(theme.fg("semantic.ok") + "Preview ready" + reset + theme.fg("text.muted") + ` · ${truncate(`${wizard.plan.model} · ${wizard.plan.costStatus}`, Math.max(0, contentW - 17))}` + reset);
-      else body.push(theme.fg("text.muted") + "Open to review or change this configuration." + reset);
+      const targetId = target?.id ?? "Unavailable";
+      const profileLabel = selectedProfile?.label ?? "Unavailable";
+      const valueW = Math.max(0, contentW - 12);
+      if (room >= 4) {
+        body.push(fieldLabel("target", theme) + theme.fg("text.primary") + ellipsize(targetId, valueW) + reset);
+        body.push(fieldLabel("profile", theme) + theme.fg("text.primary") + ellipsize(profileLabel, valueW) + reset);
+        body.push(fieldLabel("capability", theme) + theme.fg("text.primary") + ellipsize(wizard.capability, valueW) + reset);
+      } else {
+        body.push(theme.fg("text.secondary") + ellipsize(`${targetId} · ${profileLabel} · ${wizard.capability}`, contentW) + reset);
+      }
+      if (wizard.plan) {
+        body.push(theme.fg("semantic.ok") + "Preview ready" + reset + theme.fg("text.muted") + ellipsize(` · ${wizard.plan.model} · ${wizard.plan.costStatus}`, Math.max(0, contentW - 13)) + reset);
+      } else if (room >= 5) {
+        body.push(theme.fg("text.muted") + ellipsize("Open to review or change this configuration.", contentW) + reset);
+      }
     } else if (launch.status === "loading") {
       body.push(spinner({ label: "loading launch options", active: true, frame: 1 }, theme));
     } else {
-      body.push(theme.fg("text.muted") + "Choose target, profile, capability, and workspace." + reset);
+      body.push(theme.fg("text.muted") + ellipsize("Target · profile · capability · workspace.", contentW) + reset);
     }
-    if (launch.status === "error") body.push(theme.fg("semantic.error") + truncate(launch.error ?? "guided launch unavailable", contentW) + reset);
-    return panel({ title: "2 · guided launch", focus: focused === "guided", width: panelRect.width, height: panelRect.height, body }, theme);
+    if (launch.status === "error") body.push(theme.fg("semantic.error") + ellipsize(launch.error ?? "guided launch unavailable", contentW) + reset);
+    return body;
   };
 
-  const taskPanel = (panelRect: Rect): string[] => {
-    const contentW = Math.max(0, panelRect.width - 4);
+  const taskBody = (contentW: number): string[] => {
     const option = TASK_SETUP_OPTIONS[taskSetupIndex(taskCapabilityOf(launch))]!;
+    const valueW = Math.max(0, contentW - 12);
     const body: string[] = [
       keyHint({ k: "t", label: "task setup" }, theme) + "  " + keyHint({ k: "r", label: "reset" }, theme),
-      theme.fg("text.secondary") + "type  " + reset + theme.fg("text.primary") + option.label + reset,
+      fieldLabel("type", theme) + theme.fg("text.primary") + option.label + reset,
       launch.task
-        ? theme.fg("text.secondary") + "task  " + reset + theme.fg("text.primary") + truncate(launch.task, contentW - 6) + reset
-        : theme.fg("text.muted") + "Choose a type, then add an optional task prompt." + reset,
+        ? fieldLabel("task", theme) + theme.fg("text.primary") + ellipsize(oneLine(launch.task), valueW) + reset
+        : theme.fg("text.muted") + ellipsize("Pick a type, then an optional prompt.", contentW) + reset,
     ];
-    if (launch.workflowId) body.push(theme.fg("text.muted") + `workflow  ${truncate(launch.workflowId, contentW - 10)}` + reset);
-    return panel({ title: "3 · task setup", focus: focused === "task", width: panelRect.width, height: panelRect.height, body }, theme);
+    if (launch.workflowId) body.push(fieldLabel("workflow", theme) + theme.fg("text.muted") + ellipsize(launch.workflowId, valueW) + reset);
+    return body;
   };
 
-  // The priority changes at wide widths: manual launch gets the dominant left region. At the
-  // supported compact minimum, panels stack but keep the full six-agent grid visible first.
+  const box = (title: string, region: string, width: number, height: number, body: string[]): string[] =>
+    panel({ title, focus: focused === region, width, height, body }, theme);
+
+  // Wide: manual agents take the large left region; guided launch and task setup stack on the
+  // right. Every box claims the height its rows need, the band is as tall as the taller column,
+  // and the rows beneath stay empty rather than being drawn into boxes with nothing to show.
   if (rect.width >= 100 && rect.height >= 18) {
-    const [agentsRect, rightRect] = splitH(rect, [{ flex: 2 }, { flex: 1 }], 1);
-    const [guidedRect, taskRect] = splitV(rightRect!, [{ flex: 1 }, { flex: 1 }], 1);
-    const left = manualPanel(agentsRect!);
-    const right = [...guidedPanel(guidedRect!), " ".repeat(rightRect!.width), ...taskPanel(taskRect!)];
-    const gap = " ";
-    return Array.from({ length: rect.height }, (_, index) => (left[index] ?? " ".repeat(agentsRect!.width)) + gap + (right[index] ?? " ".repeat(rightRect!.width)));
+    const [agentsRect, rightRect] = splitH(rect, [{ flex: 3 }, { flex: 2 }], 1);
+    const agentsW = agentsRect!.width;
+    const rightW = rightRect!.width;
+    const guided = guidedBody(rightW - 4, 6);
+    const task = taskBody(rightW - 4);
+    const rightH = guided.length + 2 + 1 + task.length + 2;
+    const plainAgentsH = manualBody(agentsW - 4, false).length + 2;
+    const airyAgentsH = manualBody(agentsW - 4, true).length + 2;
+    const bandH = Math.min(rect.height, Math.max(plainAgentsH, rightH));
+    const left = box("1 · manual agents", "agents", agentsW, bandH, manualBody(agentsW - 4, airyAgentsH <= bandH));
+    const right = [
+      ...box("2 · guided launch", "guided", rightW, guided.length + 2, guided),
+      " ".repeat(rightW),
+      ...box("3 · task setup", "task", rightW, task.length + 2, task),
+    ];
+    const out: string[] = [];
+    for (let i = 0; i < bandH; i++) out.push((left[i] ?? " ".repeat(agentsW)) + " " + (right[i] ?? " ".repeat(rightW)));
+    while (out.length < rect.height) out.push(" ".repeat(rect.width));
+    return out.slice(0, rect.height);
   }
 
+  // Compact: stacked, with the full six-agent grid first. Guided keeps two summary rows and task
+  // setup takes what is left, which at 80x24 is exactly its three rows.
   const [agentsRect, guidedRect, taskRect] = splitV(rect, [8, 4, { flex: 1 }], 1);
   return [
-    ...manualPanel(agentsRect!),
+    ...box("1 · manual agents", "agents", rect.width, agentsRect!.height, manualBody(rect.width - 4, false)),
     " ".repeat(rect.width),
-    ...guidedPanel(guidedRect!),
+    ...box("2 · guided launch", "guided", rect.width, guidedRect!.height, guidedBody(rect.width - 4, guidedRect!.height - 2)),
     " ".repeat(rect.width),
-    ...taskPanel(taskRect!),
+    ...box("3 · task setup", "task", rect.width, taskRect!.height, taskBody(rect.width - 4)),
   ];
 }
 
