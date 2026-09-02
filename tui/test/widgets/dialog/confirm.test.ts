@@ -42,9 +42,10 @@ describe("confirm (truecolor/unicode)", () => {
     for (const row of out) expect(displayWidth(row)).toBe(30);
   });
 
-  it("non-danger uses text.muted border + accent confirm key; defaults applied", () => {
+  it("non-danger uses the accent border + accent confirm key; defaults applied", () => {
     const out = confirm({ title: "t", message: "m", width: 44 }, t);
-    expect(out[0]).toContain(t.fg("text.muted"));
+    // The accent border is what marks the lit modal over a dimmed view (see confirm.ts).
+    expect(out[0]).toContain(t.fg("accent.teal"));
     expect(out[4]).toContain(t.fg("accent.teal")); // confirm key accent
     expect(strip(out[4])).toContain("[y] confirm");
     expect(strip(out[4])).toContain("[n] cancel");

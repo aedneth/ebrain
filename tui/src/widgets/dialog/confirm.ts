@@ -5,6 +5,12 @@
  * in the top border, a message body, and an actions row of keys
  * (e.g. `[y] kill   [esc] cancel`). `danger` → border + [confirmKey] in semantic.error.
  * Returns the box rows ONLY (caller centers + draws the scrim; key handling is later).
+ *
+ * TERMINAL ADAPTATION (diverges from the .jsx on purpose): the mockup gives a non-danger
+ * confirm a text.muted border and lets its raised surface fill set it apart. A terminal has
+ * no fill, and the view behind a modal is drawn in text.muted, so a muted border made the
+ * one dialog asking for a decision the one box on screen that did not look lit. Non-danger
+ * confirms take the accent border every other modal has; danger keeps semantic.error.
  */
 import type { Theme } from "../../theme.js";
 import { responsiveDialog, type ResponsiveDialogResult } from "./responsive.js";
@@ -44,7 +50,7 @@ export function confirmLayout(props: ConfirmProps, theme: Theme): ResponsiveDial
     width,
     maxHeight: props.maxHeight,
     scroll: props.scroll,
-    borderColor: danger ? "semantic.error" : "text.muted",
+    borderColor: danger ? "semantic.error" : "accent.teal",
     titleColor: "text.primary",
     blocks: [
       { kind: "spacer" },

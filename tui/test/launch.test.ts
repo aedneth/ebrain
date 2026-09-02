@@ -290,7 +290,9 @@ describe("reduce — launch nav + enter → governor (pure, no tmux)", () => {
     expect(frame).toContain("guided launch");
     expect(frame).toContain("opencode-openrouter");
     expect(frame).toContain("My stack");
-    expect(frame).toContain("locked");
+    // A singleton field says so in words rather than 'locked' behind two other separators.
+    expect(frame).toContain("the only declared target");
+    expect(frame).toContain("the only execution profile");
     expect(reduce(st, { name: "enter" }).effect).toEqual({ type: "planLaunchWizard" });
   });
 

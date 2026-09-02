@@ -13,9 +13,14 @@ describe("gauge (truecolor/unicode)", () => {
   it("lays out label + bar + suffix; bar is `width` cells; auto tone neutral <75%", () => {
     const out = gauge({ label: "spend", value: 2.1, max: 10, width: 24, suffix: "$2.1/$10" }, t);
     const dim = t.fg("text.secondary");
-    // ratio 0.21 → 5 full, 0 part, 19 empty; auto tone < 75% → neutral (text.secondary)
-    const bar = full.repeat(5) + part.repeat(0) + empty.repeat(19);
-    const expected = dim + "spend " + t.reset + dim + bar + t.reset + dim + " $2.1/$10" + t.reset;
+    const track = t.fg("text.muted");
+    // ratio 0.21 → 5 full, 0 part, 19 empty; auto tone < 75% → neutral (text.secondary) on the
+    // filled cells, while the empty track is always muted so a low bar reads as a track, not dots.
+    const expected =
+      dim + "spend " + t.reset +
+      dim + full.repeat(5) + part.repeat(0) + t.reset +
+      track + empty.repeat(19) + t.reset +
+      dim + " $2.1/$10" + t.reset;
     expect(out).toEqual(expected);
     expect(strip(out)).toBe("spend " + full.repeat(5) + empty.repeat(19) + " $2.1/$10");
     expect(displayWidth(out)).toBe("spend ".length + 24 + " $2.1/$10".length); // 6 + 24 + 9

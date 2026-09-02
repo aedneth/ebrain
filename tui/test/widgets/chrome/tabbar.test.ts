@@ -34,3 +34,28 @@ describe("tabBar", () => {
     expect(row).toContain(raised + " 3:c ");
   });
 });
+
+describe("tabBar — fits the row it is given", () => {
+  const theme = makeTheme({ trueColor: true, ascii: false });
+  const strip = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
+  const SEVEN = ["home", "launch", "sessions", "workspaces", "memory", "routing", "doctor"];
+
+  it("keeps the natural spacing when it fits (120 columns)", () => {
+    expect(tabBar({ tabs: SEVEN, active: 0 }, theme, 120)).toBe(tabBar({ tabs: SEVEN, active: 0 }, theme));
+  });
+
+  it("at the 80-column minimum every label survives whole — the last view is never clipped", () => {
+    const row = tabBar({ tabs: SEVEN, active: 0 }, theme, 80);
+    expect(displayWidth(row)).toBeLessThanOrEqual(80);
+    for (const t of SEVEN) expect(strip(row)).toContain(`:${t} `);
+    // The active cell keeps its full raised treatment in the compact tier.
+    expect(row).toContain(theme.bg("background.raised") + BOLD + theme.fg("text.primary") + " 1:home " + theme.reset);
+  });
+
+  it("falls back to bare numbers only when even the tight tier cannot fit", () => {
+    const row = tabBar({ tabs: SEVEN, active: 6 }, theme, 40);
+    expect(displayWidth(row)).toBeLessThanOrEqual(40);
+    expect(strip(row)).not.toContain("home");
+    expect(strip(row)).toContain(" 7 ");
+  });
+});

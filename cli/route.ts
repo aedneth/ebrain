@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 /**
- * ebrain route — Tier 1 router sobre OpenRouter (spec: docs/ROUTING.md §3.4, model-registry.md).
+ * ebrain route — capability router over any OpenAI-compatible provider.
+ * See docs/reference/providers.md for provider selection and docs/guides/routing.md for the flow.
  *
  * Clasifica una tarea por CAPACIDAD y la llama con el array [ganador, fallback, floor]
  * (el failover lo ejecuta OpenRouter, no un loop local). Loguea gasto real a spend.jsonl

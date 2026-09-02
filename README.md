@@ -39,16 +39,16 @@ The result is a local control plane for work that otherwise gets scattered acros
 
 Platform: **Linux**. That is where eBrain is developed, tested and run in CI, and it is the only platform claimed. It is written to degrade honestly elsewhere rather than pretend — the shell layer avoids GNU-only spellings and the daemon supervision has a launchd path — but macOS and WSL are untested, so treat them as unsupported until a CI job says otherwise. `ebrain doctor` reports the platform it is running on.
 
-Requirements: [Bun](https://bun.sh), git, tmux for persistent sessions, and at least one supported local agent CLI. The source install retrieves the pinned upstream knowledge engine separately; see [third-party notices](THIRD_PARTY_NOTICES.md) for the attribution boundary.
+Requirements: git, tmux for persistent sessions, and at least one supported local agent CLI. [Bun](https://bun.sh) and the pinned upstream knowledge engine are installed for you; see [third-party notices](THIRD_PARTY_NOTICES.md) for the attribution boundary.
 
 ```bash
-git clone https://github.com/aedneth/ebrain.git ebrain
-cd ebrain
-bun install
-./scripts/install.sh --from-source
+curl -fsSL https://raw.githubusercontent.com/aedneth/ebrain/main/scripts/install.sh | sh
+```
 
-# One idempotent boot: local credential, loopback daemon, and detected adapters.
-ebrain up
+That installs Bun if it is missing, pins the upstream engine, links `ebrain` onto your PATH, and boots the daemon. It is idempotent, so re-running it is how you update. It never reads a dotenv, never prints a secret, and never installs an agent CLI or calls a provider on your behalf. Prefer to see what you are running first — a reasonable thing to want from a `curl | sh` — then clone and run the same script with `--from-source`.
+
+```bash
+# Verify what the installer just did.
 ebrain doctor
 
 # Retain one reviewable decision, then retrieve it through approved sources.
@@ -59,7 +59,7 @@ ebrain q "what must happen before a database migration merges?"
 ebrain
 ```
 
-`ebrain up` owns local MCP credential creation before the daemon binds, starts the shared daemon, and attempts adapter onboarding. You do not paste a token, hand-manage a writer lock, or configure an OAuth flow to take this path. A missing local CLI remains visible as unavailable instead of being reported as connected.
+The installer ends by running `ebrain up`, which owns local MCP credential creation before the daemon binds, starts the shared daemon, and attempts adapter onboarding. You do not paste a token, hand-manage a writer lock, or configure an OAuth flow to take this path. A missing local CLI remains visible as unavailable instead of being reported as connected.
 
 ## What you can do
 
@@ -133,31 +133,15 @@ eBrain is not a claim that every past message should be injected into every futu
 | Workflow and procedure | Reusable process content plus explicit-use and review metadata. | A workflow materializes a prompt or checklist; review controls lifecycle state. |
 | Federated knowledge | Compatible sources the developer deliberately approves. | The daemon searches configured sources subject to local isolation policy. |
 
-The practical loop is simple:
-
-1. Capture a decision that will matter after the terminal closes with `ebrain remember` or an approved MCP action.
-2. Put stable, reusable operating context in a versioned context pack instead of a hidden prompt.
-3. Search approved sources with `ebrain q` or bounded episode recall when a task needs history.
-4. Turn a repeatable process into a workflow or procedure, then materialize it for review in the next session.
-5. Review context and procedure changes explicitly so a speculative agent response never silently becomes your long-term operating policy.
-
-This gives agents a shared place to retrieve governed knowledge while preserving a developer's ability to inspect what was retained and why. It does not automatically scrape conversations, train a model, mutate preferences, or convert raw terminal output into durable memory.
+This gives agents a shared place to retrieve governed knowledge while preserving a developer's ability to inspect what was retained and why. It does not scrape conversations, train a model, mutate preferences, or turn raw terminal output into durable memory.
 
 Explore the [memory model](docs/concepts/memory.md), [context packs](docs/memory/context-packs.md), [episodes](docs/memory/episodes.md), and [procedures and workflows](docs/memory/procedures-and-workflows.md).
 
 ## From CKIS to eBrain
 
-eBrain grew from the practical knowledge-infrastructure work behind [CKIS](https://github.com/aedneth/ckis). CKIS focuses on organizing knowledge sources, authoring, graph tooling, and optional federated workflows. eBrain is the developer runtime built on the next question: once knowledge exists, how do multiple local coding agents safely retrieve it, retain useful new decisions, and work across projects without lock choreography?
+eBrain grew out of [CKIS](https://github.com/aedneth/ckis), which organizes knowledge sources, authoring and graph tooling. eBrain is the runtime built on the next question: once that knowledge exists, how do several local coding agents retrieve it, retain new decisions, and work across projects without fighting over a lock?
 
-That relationship is deliberate rather than mandatory:
-
-| CKIS | eBrain |
-| --- | --- |
-| Knowledge infrastructure and optional federation | Runtime control plane for agents, workspaces, sessions, routing, and telemetry |
-| Source organization and graph-oriented workflows | Loopback MCP daemon, agent onboarding, and terminal cockpit |
-| Can hold structured knowledge sources | Can start clean with local eBrain stores and add compatible sources later |
-
-A new developer does not need a pre-existing vault, another person's procedures, or private CKIS data to use eBrain. Start locally, add approved sources when their boundaries are understood, and keep the resulting context portable and reviewable. See the [CKIS relationship](docs/architecture/ckis.md) and [daemon and federation architecture](docs/architecture/daemon-federation.md) for the technical separation.
+The relationship is deliberate rather than mandatory. A new developer needs no pre-existing vault and no one else's procedures: start with local eBrain stores, add compatible sources once their boundaries are understood. See the [CKIS relationship](docs/architecture/ckis.md) and [daemon and federation architecture](docs/architecture/daemon-federation.md).
 
 ## Launch work where it belongs
 
@@ -177,17 +161,7 @@ Inside the TUI, the daily flow is intentionally direct:
 4. The cockpit switches to **Sessions** automatically so the new process is immediately visible.
 5. Attach, inspect a scrubbed peek, compose a multiline prompt, or stop the session through the confirmed control path.
 
-Manual and guided launch are separate on purpose.
-
-| Launch path | Use it when | What it does not change |
-| --- | --- | --- |
-| Manual agent | You know the locally installed CLI you want to start. | It does not modify a routing profile or infer a model. |
-| Guided launch | You want a reviewable target, profile, capability, workspace, and task preview. | It does not recommend a provider, rank models, or launch on preview. |
-| Task setup | You want an explained work category plus an optional exact task. | It does not classify a prompt into a hidden provider decision. |
-
-The TUI has seven connected views: **Home**, **Launch**, **Sessions**, **Workspaces**, **Memory**, **Routing**, and **Doctor**. Every visible control is keyboard-driven, responsive at supported terminal sizes, and presented with its valid action keys. `ebrain ui` remains a compatible explicit alias, while bare `ebrain` opens the cockpit from a real interactive terminal.
-
-Read [manual launch](docs/launch/manual-launch.md), [guided launch](docs/launch/guided-launch.md), [workspaces and sessions](docs/concepts/workspaces-sessions.md), and the [TUI reference](docs/reference/tui.md).
+Manual and guided launch stay separate on purpose: manual starts the agent you already chose, guided previews a target, profile, capability, workspace and task before it creates anything. Neither recommends a provider or ranks models. See the [launch guide](docs/launch/manual-launch.md).
 
 ## Token and provider telemetry
 
@@ -248,13 +222,7 @@ Developers should still keep credentials out of prompts and source documents int
 
 The canonical public documentation is Markdown in this repository and powers a static documentation site. It is written for a clean installation first and separates available behavior, optional configuration, and planned work.
 
-| Start here | Learn the model | Operate safely |
-| --- | --- | --- |
-| [Install](docs/getting-started/install.md) | [Memory layers](docs/concepts/memory.md) | [Privacy and isolation](docs/guides/privacy.md) |
-| [Quick start](docs/getting-started/quickstart.md) | [Workspaces and sessions](docs/concepts/workspaces-sessions.md) | [Diagnostics](docs/reference/diagnostics.md) |
-| [Boot and onboarding](docs/getting-started/onboarding.md) | [Procedures and skills](docs/concepts/procedures.md) | [Safe migration](docs/guides/migration.md) |
-| [First memory](docs/getting-started/first-memory.md) | [Daemon and federation](docs/architecture/daemon-federation.md) | [Configuration](docs/reference/configuration.md) |
-| [Workspace and session](docs/getting-started/workspace-session.md) | [CKIS relationship](docs/architecture/ckis.md) | [Troubleshooting](docs/guides/troubleshooting.md) |
+Start at the [documentation root](docs/PUBLIC-DOCUMENTATION.md) — [install](docs/getting-started/install.md) and [quick start](docs/getting-started/quickstart.md) to get running, [memory layers](docs/concepts/memory.md) and [daemon and federation](docs/architecture/daemon-federation.md) for the model, [privacy and isolation](docs/guides/privacy.md) and [troubleshooting](docs/guides/troubleshooting.md) to operate it.
 
 The same documentation is published at **https://ebrain.vercel.app**. Build it locally with:
 
@@ -289,12 +257,6 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md
 The current product focuses on reliable local foundations: a shared daemon, supported-agent onboarding, governed memory layers, workspace-backed sessions, user-owned routing choices, and factual token telemetry. Near-term work continues to improve distribution, embedding-provider choice, and reviewed workflow reuse without weakening explicit approval and isolation boundaries.
 
 Exploratory work such as an autonomous runtime, team memory, or native shell capability remains separate from the shipped control plane until its security and lifecycle contracts are proven.
-
-## How this was built with Codex and GPT-5.6
-
-**Codex was the builder.** It implemented the harness, the CLI surface, the seven-view TUI, the shared MCP daemon and command-only bridge, the deny policy in both TypeScript and shell, and the test suites — feature by feature, each behind its own contract. The majority of the implementation work was done in Codex sessions, and the `/feedback` session for the bulk of that work is recorded in the submission.
-
-**GPT-5.6 was the reasoning partner.** The load-bearing design decisions were worked through with GPT-5.6: the daemon-and-federation architecture and its loopback authentication model; the security boundaries (fail-closed source isolation, secret scrubbing, confirmation gates); the deny-policy grammar that must mean the same thing when read by the CLI and by the shell harness; and the governed-memory design that records bounded, reviewable memory instead of dumping every transcript into context.
 
 ## Acknowledgements
 

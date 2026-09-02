@@ -93,12 +93,16 @@ const SESSION_HINTS: HintEntry[] = [
   { k: "ctrl+b d", label: "detach" },
 ];
 
-/** Home is multi-box: Tab moves focus between active-sessions / memories / system. */
+/** Home is multi-box: Tab moves focus between active-sessions / memories / system. `l` is
+ * the launch shortcut the empty sessions box teaches, so the bar advertises the same key
+ * instead of leaving the box and the footer pointing at two different routes. Six entries
+ * is the bar's ceiling, and this set measures 77 columns at the 80-column minimum. */
 const HOME_HINTS: HintEntry[] = [
   { k: "1-7", label: "views" },
   { k: "tab", label: "focus box" },
   { k: "↑↓", label: "select" },
   { k: "enter", label: "open" },
+  { k: "l", label: "launch" },
   { k: "?", label: "help" },
 ];
 
@@ -121,13 +125,15 @@ const WORKSPACE_HINTS: HintEntry[] = [
 
 /** Per-view hints for the F6.5 knowledge panels — each matches the keys reduce()
  * actually handles for that tab (screens-b.jsx MemoryScreen / DoctorScreen). */
+// Ordered by importance: the bar drops trailing hints when a row does not fit, and at 80
+// columns that is `attach procedure`, never `remember`.
 const MEMORY_HINTS: HintEntry[] = [
   { k: "s", label: "search" },
-  { k: "tab", label: "focus box" },
-  { k: "↑↓", label: "navigate" },
-  { k: "enter", label: "open/run" },
-  { k: "a", label: "attach procedure" },
   { k: "r", label: "remember" },
+  { k: "enter", label: "open/run" },
+  { k: "↑↓", label: "navigate" },
+  { k: "tab", label: "focus box" },
+  { k: "a", label: "attach procedure" },
 ];
 const ROUTING_HINTS: HintEntry[] = [
   { k: "↑↓", label: "navigate" },

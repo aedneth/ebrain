@@ -29,7 +29,7 @@ import { CAPABILITIES, type Capability } from "../../cli/task-profile.ts";
 import { makeTheme, type Theme, type AgentName } from "./theme.js";
 import { Screen } from "./kit/screen.js";
 import { splitV, splitH, type Rect } from "./kit/layout.js";
-import { padTo, truncate, displayWidth } from "./kit/draw.js";
+import { padTo, truncate, displayWidth, stripAnsi, ellipsize } from "./kit/draw.js";
 import { startNavReader, type Key } from "./kit/input.js";
 import { composerApplyKey, composerFrom, composerViewport, type ComposerGeometry, type ComposerState, type ComposerVisualRow } from "./kit/composer.js";
 
@@ -585,6 +585,12 @@ function collapseHome(p: string): string {
   return p;
 }
 
+/** collapseHome for prose: a home path anywhere in the text, not only at its start. */
+function collapseHomeIn(text: string): string {
+  const home = process.env.HOME;
+  return home ? text.split(home).join("~") : text;
+}
+
 /** Best-effort branch name from `.git/HEAD` — no subprocess spawn (cheap, safe to
  * call once at startup). Returns undefined on any failure (not a git dir, detached
  * with an unreadable HEAD, etc.) — the footer just omits the branch segment then. */
@@ -1077,6 +1083,16 @@ export function hintsForState(state: AppState): HintEntry[] {
         ? [{ k: "↑↓", label: "select activity" }, { k: "enter", label: "show workspace" }, { k: "r", label: "refresh" }, { k: "tab", label: "next box" }, { k: "?", label: "actions" }]
         : [{ k: "enter", label: "use in launch" }, { k: "g", label: "open launch" }, { k: "tab", label: "next box" }, { k: "?", label: "actions" }];
   }
+  if (state.tab === "memory" && memoryOf(state).search) {
+    return [
+      { k: "s", label: "search" },
+      { k: "esc", label: "back to recent" },
+      { k: "enter", label: "open" },
+      { k: "↑↓", label: "navigate" },
+      { k: "tab", label: "focus box" },
+      { k: "r", label: "remember" },
+    ];
+  }
   return hintsForTab(state.tab).slice(0, 6);
 }
 
@@ -1144,9 +1160,40 @@ function actionReferenceFor(state: AppState): HelpContext {
       ],
     };
   }
+  if (state.tab === "home") {
+    return {
+      title: "home actions",
+      actions: [
+        { key: "tab", title: "focus box", summary: "move between active sessions, latest memories, and system" },
+        { key: "↑↓", title: "select", summary: "move within the focused box" },
+        { key: "enter", title: "open", summary: "attach the selected session, open the memory, or go to routing from system" },
+        { key: "l", title: "launch", summary: "go to Launch and start an agent" },
+        { key: "1-7", title: "views", summary: "jump to a view by its number" },
+      ],
+    };
+  }
+  if (state.tab === "routing") {
+    return {
+      title: "routing actions",
+      actions: [
+        { key: "↑↓", title: "select capability", summary: "show that capability's winner, fallback, and floor chain" },
+        { key: "c", title: "cost ledger", summary: "switch to the factual token and USD ledger; it never allocates subscription cost" },
+      ],
+    };
+  }
+  if (state.tab === "doctor") {
+    return {
+      title: "doctor actions",
+      actions: [
+        { key: "r", title: "re-run", summary: "run the diagnostics again without leaving the view" },
+        { key: "tab", title: "focus box", summary: "move between diagnostics and fleet" },
+        { key: "↑↓", title: "select", summary: "move within the focused box" },
+      ],
+    };
+  }
   return {
     title: `${state.tab} actions`,
-    actions: hintsForTab(state.tab).map((hint) => ({ key: hint.k, title: hint.label, summary: "available in this view" })),
+    actions: hintsForTab(state.tab).map((hint) => ({ key: hint.k, title: hint.label, summary: "" })),
   };
 }
 
@@ -1587,10 +1634,12 @@ export function buildFrame(state: AppState, size: FrameSize, theme: Theme): stri
 
   const frame: string[] = [];
   frame.push(buildStatusRow(overviewOf(state), theme, cols));
-  frame.push(padTo(tabBar({ tabs: [...TABS], active: TABS.indexOf(state.tab) }, theme), cols));
+  frame.push(padTo(tabBar({ tabs: [...TABS], active: TABS.indexOf(state.tab) }, theme, cols), cols));
   frame.push(buildHairlineRow(theme, cols));
   frame.push(...buildMiddle(state, middleRect, theme));
-  frame.push(hintBar({ hints: hintsForState(state) }, theme, cols));
+  // While a modal owns the keyboard its own actions row is the one place that lists the keys; the
+  // bar goes quiet rather than echoing the same four hints ten rows lower.
+  frame.push(state.overlay ? " ".repeat(cols) : hintBar({ hints: hintsForState(state) }, theme, cols));
   // The footer names the selected workspace, never the incidental shell cwd from which the
   // TUI happened to start. A registered workspace can be different from the caller project.
   const workspace = workspaceOf(state);
@@ -1613,22 +1662,54 @@ export function buildFrame(state: AppState, size: FrameSize, theme: Theme): stri
 // see the tab context behind the modal). Exact width/height preserved.
 // ---------------------------------------------------------------------------
 
-function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: number, theme: Theme): { box: string[]; top: number; left: number } {
-  const maxDialogHeight = Math.max(6, rows - 4);
+/** Where an overlay sits inside the view region: confirmations and read-only references centre;
+ * anything with a cursor or a selection (composers, pickers, forms) anchors near the top so it
+ * holds still while its content grows instead of re-centring under the user's hands. */
+type OverlayAnchor = "center" | "upper";
+
+interface BuiltOverlay {
+  box: string[];
+  anchor: OverlayAnchor;
+}
+
+/** The rows an overlay may occupy: the view region between the hairline and the hint bar. The
+ * status bar, tabs and footer stay in place (dimmed) around every modal and no modal can paint
+ * over them; placed against the whole frame, the palette used to cover both at 80x24. */
+function overlayRegion(rows: number): { top: number; height: number } {
+  return { top: 3, height: Math.max(1, rows - 5) };
+}
+
+function placeOverlay(built: BuiltOverlay, cols: number, rows: number): { box: string[]; top: number; left: number } {
+  const region = overlayRegion(rows);
+  const box = built.box.slice(0, region.height);
+  const width = box.reduce((w, row) => Math.max(w, displayWidth(row)), 0);
+  const left = Math.max(0, Math.floor((cols - width) / 2));
+  const free = Math.max(0, region.height - box.length);
+  const offset = built.anchor === "center" ? Math.floor(free / 2) : Math.min(Math.floor(region.height / 5), free);
+  return { box, top: region.top + offset, left };
+}
+
+/**
+ * Build the box for `overlay`, or null when the overlay edits the view in place rather than
+ * opening a second surface (the memory search types into the view's own search bar).
+ */
+function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: number, theme: Theme): BuiltOverlay | null {
+  const maxDialogHeight = overlayRegion(rows).height;
+  const centered = (box: string[]): BuiltOverlay => ({ box, anchor: "center" });
+  const upper = (box: string[]): BuiltOverlay => ({ box, anchor: "upper" });
+
   if (overlay.kind === "palette") {
     const width = Math.min(64, Math.max(20, cols - 4));
-    const maxItems = Math.max(1, rows - 8);
+    // The list shares the box with the prompt row, its hairline, the footer hint and two borders.
+    const maxItems = Math.max(1, maxDialogHeight - 5);
     const items = toItems(filterCommands(overlay.palette.query)).slice(0, maxItems);
     const selected = Math.min(Math.max(0, overlay.palette.selected), Math.max(0, items.length - 1));
-    const box = commandPalette({ query: overlay.palette.query, items, selected, width }, theme);
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.min(Math.floor(rows * 0.3), rows - box.length));
-    return { box, top, left };
+    return upper(commandPalette({ query: overlay.palette.query, items, selected, width }, theme));
   }
 
   if (overlay.kind === "confirmKill") {
     const width = Math.min(52, Math.max(30, cols - 8));
-    const box = confirmLayout(
+    return centered(confirmLayout(
       {
         title: "kill session",
         message: `kill ${overlay.name}? this cannot be undone.`,
@@ -1642,15 +1723,12 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
         scroll: overlay.scroll,
       },
       theme,
-    ).rows;
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.floor((rows - box.length) / 2));
-    return { box, top, left };
+    ).rows);
   }
 
   if (overlay.kind === "confirmLaunch") {
     const width = Math.min(80, Math.max(40, cols - 6));
-    const box = confirmLayout(
+    return centered(confirmLayout(
       {
         title: "RAM governor",
         message: overlay.reason,
@@ -1664,64 +1742,49 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
         scroll: overlay.scroll,
       },
       theme,
-    ).rows;
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.floor((rows - box.length) / 2));
-    return { box, top, left };
+    ).rows);
   }
 
   if (overlay.kind === "prompt") {
     const width = Math.min(64, Math.max(30, cols - 6));
-    const box = buildPromptBox(overlay, width, maxDialogHeight, theme);
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.min(Math.floor(rows * 0.4), rows - box.length));
-    return { box, top, left };
+    return upper(buildPromptBox(overlay, width, maxDialogHeight, theme));
   }
 
   if (overlay.kind === "confirmSend") {
     const width = Math.min(84, Math.max(44, cols - 6));
-    const box = buildSendPreviewBox(overlay, width, maxDialogHeight, theme);
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return centered(buildSendPreviewBox(overlay, width, maxDialogHeight, theme));
   }
 
   if (overlay.kind === "taskSetup") {
     const width = Math.min(88, Math.max(48, cols - 6));
-    const box = buildTaskSetupBox(overlay, width, maxDialogHeight, theme);
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return upper(buildTaskSetupBox(overlay, width, maxDialogHeight, theme));
   }
 
   if (overlay.kind === "taskPrompt") {
     const width = Math.min(88, Math.max(48, cols - 6));
-    const box = buildTaskPromptBox(overlay, width, maxDialogHeight, theme);
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.min(Math.floor(rows * 0.34), rows - box.length));
-    return { box, top, left };
+    return upper(buildTaskPromptBox(overlay, width, maxDialogHeight, theme));
   }
 
   if (overlay.kind === "launchWizard") {
     const width = Math.min(88, Math.max(48, cols - 6));
-    const box = buildLaunchWizardBox(launchOf(state), width, maxDialogHeight, theme);
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return upper(buildLaunchWizardBox(launchOf(state), width, maxDialogHeight, theme));
   }
 
   if (overlay.kind === "workspacePicker") {
     const width = Math.min(88, Math.max(48, cols - 6));
-    const box = buildWorkspacePickerBox(state, overlay, width, maxDialogHeight, theme);
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return upper(buildWorkspacePickerBox(state, overlay, width, maxDialogHeight, theme));
   }
   if (overlay.kind === "workspaceAdd") {
     const width = Math.min(88, Math.max(48, cols - 6));
-    const box = buildWorkspaceAddBox(state, overlay, width, maxDialogHeight, theme);
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return upper(buildWorkspaceAddBox(state, overlay, width, maxDialogHeight, theme));
   }
   if (overlay.kind === "workspaceRename") {
     const width = Math.min(72, Math.max(36, cols - 6));
-    const box = buildWorkspaceRenameBox(state, overlay, width, maxDialogHeight, theme);
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return upper(buildWorkspaceRenameBox(state, overlay, width, maxDialogHeight, theme));
   }
   if (overlay.kind === "confirmWorkspaceRemove") {
     const width = Math.min(72, Math.max(36, cols - 6));
-    const box = confirmLayout({
+    return centered(confirmLayout({
       title: "remove workspace",
       message: `Remove ${overlay.label} from the local workspace registry? The directory and existing sessions are unchanged.`,
       danger: true,
@@ -1732,8 +1795,7 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
       width,
       maxHeight: maxDialogHeight,
       scroll: overlay.scroll,
-    }, theme).rows;
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    }, theme).rows);
   }
   if (overlay.kind === "confirmTargetLaunch" || overlay.kind === "confirmTargetGovernor") {
     const plan = overlay.plan;
@@ -1750,45 +1812,30 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
     const wfLine = overlay.intent.workflowId ? `workflow: ${overlay.intent.workflowId}` : "";
     const head = governor ? overlay.reason : `${plan.target} · ${plan.profile} · ${plan.model} · ${plan.costStatus}`;
     const message = [head, taskLine, wfLine].filter(Boolean).join("\n");
-    const box = confirmLayout({ title: governor ? "RAM governor" : "launch target", message, danger: governor, confirmKey: "y", confirmLabel: governor ? "launch anyway" : "launch", cancelKey: "n", cancelLabel: "cancel", width, maxHeight: maxDialogHeight, scroll: overlay.scroll }, theme).rows;
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return centered(confirmLayout({ title: governor ? "RAM governor" : "launch target", message, danger: governor, confirmKey: "y", confirmLabel: governor ? "launch anyway" : "launch", cancelKey: "n", cancelLabel: "cancel", width, maxHeight: maxDialogHeight, scroll: overlay.scroll }, theme).rows);
   }
   if (overlay.kind === "confirmProfilesInit") {
     const width = Math.min(84, Math.max(44, cols - 6));
-    const box = confirmLayout({ title: "Initialize execution profile", message: "Create a local profile from existing ebrain routing? No provider call or credential is stored.", danger: false, confirmKey: "y", confirmLabel: "initialize", cancelKey: "n", cancelLabel: "cancel", width, maxHeight: maxDialogHeight, scroll: overlay.scroll }, theme).rows;
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return centered(confirmLayout({ title: "Initialize execution profile", message: "Create a local profile from existing ebrain routing? No provider call or credential is stored.", danger: false, confirmKey: "y", confirmLabel: "initialize", cancelKey: "n", cancelLabel: "cancel", width, maxHeight: maxDialogHeight, scroll: overlay.scroll }, theme).rows);
   }
 
   if (overlay.kind === "remember") {
     const width = Math.min(72, Math.max(30, cols - 6));
-    const box = buildRememberBox(overlay, width, theme);
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.min(Math.floor(rows * 0.4), rows - box.length));
-    return { box, top, left };
+    return upper(buildRememberBox(overlay, width, maxDialogHeight, theme));
   }
 
-  if (overlay.kind === "memorySearch") {
-    const width = Math.min(72, Math.max(30, cols - 6));
-    const field = promptBox({ value: overlay.line.text, focus: true, placeholder: "search shared memory", hint: "enter search · esc cancel", width: width - 4 }, theme);
-    const box = panel({ title: "memory search", dialog: true, width, height: 3, body: [field] }, theme);
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
-  }
+  // The memory search edits the view's own search bar (buildMemoryView), so there is no box.
+  if (overlay.kind === "memorySearch") return null;
 
   if (overlay.kind === "detail") {
     const width = Math.min(76, Math.max(36, cols - 8));
-    const box = buildDetailBox(overlay, width, maxDialogHeight, theme);
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.floor((rows - box.length) / 2));
-    return { box, top, left };
+    return centered(buildDetailBox(overlay, width, maxDialogHeight, theme));
   }
 
   // help (fallthrough): `?` is a focused action reference, while direct unit
   // callers can still render the full command registry without a context.
   const width = Math.min(66, Math.max(20, cols - 4));
-  const box = renderHelpLayout(theme, COMMANDS, width, actionReferenceFor(state), maxDialogHeight, overlay.scroll).rows;
-  const left = Math.max(0, Math.floor((cols - width) / 2));
-  const top = Math.max(0, Math.floor((rows - box.length) / 2));
-  return { box, top, left };
+  return centered(renderHelpLayout(theme, COMMANDS, width, actionReferenceFor(state), maxDialogHeight, overlay.scroll).rows);
 }
 
 /** The prompt bar and cursor consume three cells inside a panel's content area. Keep the
@@ -1804,7 +1851,7 @@ function promptComposerGeometry(width: number, maxDialogHeight: number): Compose
 
 function promptComposerGeometryForFrame(size: FrameSize): ComposerGeometry {
   const width = Math.min(64, Math.max(30, size.cols - 6));
-  return promptComposerGeometry(width, Math.max(6, size.rows - 4));
+  return promptComposerGeometry(width, overlayRegion(size.rows).height);
 }
 
 function composerInputRow(
@@ -1878,10 +1925,12 @@ function buildTaskSetupBox(overlay: Extract<Overlay, { kind: "taskSetup" }>, wid
     { kind: "paragraph", text: "Choose the type of work you want to launch. This is a reversible capability preset, not a model or profile recommendation.", tone: "text.muted" },
     { kind: "spacer" },
     ...TASK_SETUP_OPTIONS.map((option, index) => ({
-      kind: "line" as const,
-      text: `${index === selected ? "▸" : " "} ${option.label} -- ${option.description}`,
-      tone: index === selected ? "text.primary" as const : "text.secondary" as const,
-      bold: index === selected,
+      kind: "keyValue" as const,
+      key: index === selected ? "▸" : " ",
+      value: option.label,
+      detail: option.description,
+      keyTone: "accent.teal" as const,
+      valueTone: index === selected ? "text.primary" as const : "text.secondary" as const,
     })),
     { kind: "spacer" },
     { kind: "actions", items: [{ key: "↑↓", label: "choose type" }, { key: "enter", label: "add optional task" }, { key: "esc", label: "cancel", labelTone: "text.muted" }] },
@@ -1898,7 +1947,7 @@ function buildTaskPromptBox(overlay: Extract<Overlay, { kind: "taskPrompt" }>, w
     maxHeight,
     scroll: overlay.scroll,
     blocks: [
-      { kind: "keyValue", key: "type", value: `${option.label} -- ${option.description}`, keyTone: "accent.teal", valueTone: "text.secondary" },
+      { kind: "keyValue", key: "type", value: option.label, detail: option.description, keyTone: "accent.teal", valueTone: "text.primary" },
       { kind: "paragraph", text: "Add an optional task for the new session. It is delivered exactly as reviewed and never infers a provider or model.", tone: "text.muted" },
       { kind: "spacer" },
       { kind: "input", value: overlay.line.text, cursor: overlay.line.cursor, placeholder: "optional task prompt" },
@@ -1948,11 +1997,11 @@ function buildWorkspacePickerBox(state: AppState, overlay: Extract<Overlay, { ki
     blocks.push({ kind: "line", text: "No validated workspace matches. Add one or clear the filter.", tone: "text.secondary" });
   } else {
     if (window.start > 0) blocks.push({ kind: "line", text: `↑ ${window.start} earlier workspace${window.start === 1 ? "" : "s"}`, tone: "text.muted" });
+    const labelOf = (candidate: WorkspaceSelection): string => `${candidate.label}${candidate.cwd === workspace.active.cwd ? " (active)" : ""}`;
+    const keyWidth = Math.max(0, ...window.items.map((candidate) => displayWidth(labelOf(candidate)) + 2));
     window.items.forEach((candidate, index) => {
-      const absoluteIndex = window.start + index;
-      const active = absoluteIndex === selected;
-      const current = candidate.cwd === workspace.active.cwd;
-      blocks.push({ kind: "keyValue", key: `${active ? "▸" : " "} ${candidate.label}${current ? " (active)" : ""}`, value: candidate.cwd, keyTone: active ? "accent.teal" : "text.secondary", valueTone: active ? "text.primary" : "text.muted" });
+      const active = window.start + index === selected;
+      blocks.push({ kind: "keyValue", key: `${active ? "▸" : " "} ${labelOf(candidate)}`, value: collapseHome(candidate.cwd), keyTone: active ? "accent.teal" : "text.secondary", valueTone: active ? "text.primary" : "text.muted", keyWidth });
     });
     const after = all.length - (window.start + window.items.length);
     if (after > 0) blocks.push({ kind: "line", text: `↓ ${after} more workspace${after === 1 ? "" : "s"}`, tone: "text.muted" });
@@ -1995,7 +2044,7 @@ function buildWorkspaceRenameBox(state: AppState, overlay: Extract<Overlay, { ki
   const blocks: DialogBlock[] = [
     { kind: "paragraph", text: "Change only the display label. The canonical directory, active sessions, and launch-time validation remain unchanged.", tone: "text.muted" },
     { kind: "spacer" },
-    { kind: "keyValue", key: "directory", value: current?.cwd ?? "workspace no longer available", keyTone: "text.secondary", valueTone: "text.muted" },
+    { kind: "keyValue", key: "directory", value: current ? collapseHome(current.cwd) : "workspace no longer available", keyTone: "text.secondary", valueTone: "text.muted" },
     { kind: "spacer" },
     { kind: "input", value: overlay.label.text, cursor: overlay.label.cursor, placeholder: "workspace label" },
   ];
@@ -2004,20 +2053,23 @@ function buildWorkspaceRenameBox(state: AppState, overlay: Extract<Overlay, { ki
   return responsiveDialog({ title: "rename workspace", focus: true, width, maxHeight, blocks }, theme).rows;
 }
 
-function wizardChoiceLabel(value: string, count: number, noun: string): string {
-  if (count === 0) return `${value || "Unavailable"} -- no ${noun} available`;
-  if (count === 1) return `${value} -- 1 ${noun}; locked`;
+/** What the arrows can do with a field, in words: a singleton says it is the only choice instead of
+ * faking an arrow affordance; a real choice says how many and which keys. Provenance comes first. */
+function wizardChoiceDetail(count: number, noun: string, provenance?: string): string {
   const plural = noun.endsWith("y") ? noun.slice(0, -1) + "ies" : noun + "s";
-  return `${value} -- ${count} ${plural}; arrows change selection`;
+  const choice = count === 0 ? `no ${plural}` : count === 1 ? `the only ${noun}` : `${count} ${plural} · ↑↓ change`;
+  return provenance ? `${provenance} · ${choice}` : choice;
 }
 
-function wizardBlock(label: string, value: string, focused: boolean, count?: number, noun?: string): DialogBlock {
+function wizardBlock(label: string, value: string, focused: boolean, detail?: string): DialogBlock {
   return {
     kind: "keyValue",
     key: `${focused ? "▸" : " "} ${label}`,
-    value: count === undefined ? value : wizardChoiceLabel(value, count, noun ?? "choices"),
+    value,
+    detail,
     keyTone: focused ? "accent.teal" : "text.secondary",
     valueTone: focused ? "text.primary" : "text.secondary",
+    keyWidth: 12, // marker + space + "capability", the longest label
   };
 }
 
@@ -2036,15 +2088,13 @@ function buildLaunchWizardBox(launch: LaunchSlice, width: number, maxHeight: num
   const blocks: DialogBlock[] = [
     { kind: "paragraph", text: "Choose a declared target and an execution profile you control. This wizard does not recommend a provider or model.", tone: "text.muted" },
     { kind: "spacer" },
-    wizardBlock("target", target ? `${target.id} -- ${target.provider} / ${target.agent}` : "Unavailable", wizard.focus === "target", wizard.targets.length, "declared target"),
-    wizardBlock("profile", profile ? `${profile.label} -- ${profile.provider} / ${profile.models} models` : "Unavailable", wizard.focus === "profile", wizard.profiles.profiles.length, "execution profile"),
-    wizardBlock("capability", wizard.capability, wizard.focus === "capability", capabilities.length, "capability"),
-    wizardBlock("workspace", wizard.cwd, wizard.focus === "cwd"),
+    wizardBlock("target", target?.id ?? "Unavailable", wizard.focus === "target", wizardChoiceDetail(wizard.targets.length, "declared target", target ? `${target.provider} · ${target.agent}` : undefined)),
+    wizardBlock("profile", profile?.label ?? "Unavailable", wizard.focus === "profile", wizardChoiceDetail(wizard.profiles.profiles.length, "execution profile", profile ? `${profile.provider} · ${profile.models} models` : undefined)),
+    wizardBlock("capability", wizard.capability, wizard.focus === "capability", wizardChoiceDetail(capabilities.length, "capability")),
+    // Paths are spelled the one way the rest of the screen spells them.
+    wizardBlock("workspace", collapseHome(wizard.cwd), wizard.focus === "cwd"),
   ];
-  if (wizard.plan) blocks.push({ kind: "line", text: `Preview ready -- ${wizard.plan.model} -- ${wizard.plan.costStatus}`, tone: "semantic.ok" });
-  if (wizard.focus !== "cwd" && choices <= 1) {
-    blocks.push({ kind: "line", text: "This field has no alternative selection. Use Tab to continue.", tone: "text.muted" });
-  }
+  if (wizard.plan) blocks.push({ kind: "line", text: `Preview ready · ${wizard.plan.model} · ${wizard.plan.costStatus}`, tone: "semantic.ok" });
   blocks.push({ kind: "spacer" }, { kind: "actions", items: [
     { key: "tab", label: "field" },
     ...(choices > 1 ? [{ key: "↑↓", label: "choose" }] : []),
@@ -2072,32 +2122,45 @@ function buildDetailBox(overlay: Extract<Overlay, { kind: "detail" }>, width: nu
   }, theme).rows;
 }
 
-/** Remember overlay box: a PromptBox wrapped in a titled dialog panel. Writes to
- * permanent agentic memory on enter — the composer is single-line here (the multiline
- * RememberForm of the mockup is the composer work in F6.6.3). */
-function buildRememberBox(overlay: Extract<Overlay, { kind: "remember" }>, width: number, theme: Theme): string[] {
-  const field = promptBox(
-    { value: overlay.line.text, focus: true, placeholder: "a durable, self-contained learning", hint: "enter save · esc cancel", width: width - 4 },
-    theme,
-  );
-  return panel(
-    { title: "remember → permanent agentic memory", dialog: true, width, height: 3, body: [field] },
-    theme,
-  );
+/** Remember overlay: a titled composer that explains where the text goes, then takes it. Writes
+ * to permanent agentic memory on enter — single-line here (the multiline RememberForm of the
+ * mockup is the composer work in F6.6.3). */
+function buildRememberBox(overlay: Extract<Overlay, { kind: "remember" }>, width: number, maxHeight: number, theme: Theme): string[] {
+  return responsiveDialog({
+    title: "remember",
+    focus: true,
+    width,
+    maxHeight,
+    blocks: [
+      { kind: "paragraph", text: "One durable, self-contained learning. It is written to permanent agentic memory and shared with every agent.", tone: "text.muted" },
+      { kind: "spacer" },
+      { kind: "input", value: overlay.line.text, cursor: overlay.line.cursor, placeholder: "a durable, self-contained learning" },
+      { kind: "spacer" },
+      { kind: "actions", items: [{ key: "enter", label: "save" }, { key: "esc", label: "cancel", labelTone: "text.muted" }] },
+    ],
+  }, theme).rows;
 }
 
+/**
+ * Draw `overlay` over `base`. Everything behind the modal keeps its text and loses its colour,
+ * so exactly one box on screen is lit and it is the one that owns the keyboard; the modal is
+ * spliced into the dimmed rows rather than clearing a band, so the view stays legible around it.
+ */
 function compositeOverlay(base: string[], overlay: Overlay, size: FrameSize, theme: Theme, state: AppState): string[] {
   const { cols, rows } = size;
-  const { box, top, left } = overlayBox(overlay, state, cols, rows, theme);
-  const out = base.slice();
+  const built = overlayBox(overlay, state, cols, rows, theme);
+  if (!built) return base;
+  const { box, top, left } = placeOverlay(built, cols, rows);
+  const dim = theme.fg("text.muted");
+  const out = base.map((row) => dim + stripAnsi(row) + theme.reset);
   for (let i = 0; i < box.length; i++) {
     const y = top + i;
     if (y < 0 || y >= rows) continue;
     const boxRow = box[i]!;
-    const boxW = displayWidth(boxRow);
-    const leftPad = " ".repeat(Math.max(0, left));
-    const rightPad = " ".repeat(Math.max(0, cols - left - boxW));
-    out[y] = padTo(truncate(leftPad + boxRow + rightPad, cols), cols);
+    const cells = [...stripAnsi(base[y] ?? "")];
+    const before = cells.slice(0, left).join("");
+    const after = cells.slice(left + displayWidth(boxRow)).join("");
+    out[y] = padTo(truncate(dim + before + theme.reset + boxRow + dim + after + theme.reset, cols), cols);
   }
   return out;
 }
@@ -2144,7 +2207,7 @@ function buildMiddle(state: AppState, rect: Rect, theme: Theme): string[] {
   else if (state.tab === "sessions") rows = buildSessionsView(sessionsOf(state), rect, theme);
   else if (state.tab === "launch") rows = buildLaunchView(launchOf(state), workspaceOf(state).active, state.cwd, focused, rect, theme);
   else if (state.tab === "workspaces") rows = buildWorkspacesView(workspaceOf(state), sessionsOf(state), focused, rect, theme);
-  else if (state.tab === "memory") rows = buildMemoryView(memoryOf(state), focused, rect, theme);
+  else if (state.tab === "memory") rows = buildMemoryView(memoryOf(state), focused, rect, theme, state.overlay?.kind === "memorySearch" ? state.overlay.line : undefined);
   else if (state.tab === "routing") rows = buildRoutingView(routingOf(state), rect, theme);
   else rows = buildDoctorView(doctorOf(state), focused, rect, theme);
   return rows.slice(0, rect.height).map((r) => padTo(truncate(r, rect.width), rect.width));
@@ -2160,38 +2223,44 @@ function buildMiddle(state: AppState, rect: Rect, theme: Theme): string[] {
 // ---------------------------------------------------------------------------
 
 function labelCell(text: string, theme: Theme): string {
-  return theme.fg("text.secondary") + padTo(text, 12) + theme.reset;
+  return theme.fg("text.secondary") + padTo(text, 8) + theme.reset;
 }
 
-/** Lock-awareness banner (6.5.5): one row when the brain read came back cached (the
- * PGLite lock was held by an MCP server). Empty array otherwise. */
-function overviewBanner(o: OverviewSlice, cols: number, theme: Theme): string[] {
-  if (!o.data?.brain.cached) return [];
-  const warn = theme.fg("semantic.warn");
+/** A key the user can press right now, named inside a box: teal, like the focus border and the
+ * selection marker. The footer's keys stay quiet because they are always there; these are not. */
+function keyName(k: string, theme: Theme): string {
+  return theme.fg("accent.teal") + BOLD + k + theme.reset;
+}
+
+/** An empty-state or teaching line: dim prose around teal key names. `parts` alternate freely. */
+function teachLine(theme: Theme, ...parts: Array<string | { key: string }>): string {
   const dim = theme.fg("text.secondary");
-  const reset = theme.reset;
-  const served = o.data.brain.servedBy || "mcp";
-  const stamp = o.atLabel ? dim + " · cached " + o.atLabel + reset : "";
-  const glyph = theme.glyph("badgeDot");
-  const text = `${glyph} brain served by ${served} (lock)`;
-  return [warn + text + reset + stamp];
+  return parts.map((part) => (typeof part === "string" ? dim + part + theme.reset : keyName(part.key, theme))).join("");
 }
 
-function buildSistemaBody(d: OverviewData, theme: Theme): string[] {
+/** System box body: the status bar's three facts with the detail the bar has no room for — who
+ * serves the brain, the spend gauge with what is left, the fleet count, the memory size — plus one
+ * warn row when the brain read was a cached snapshot because an MCP server held the lock (6.5.5).
+ * Four rows, five when cached; the box claims exactly that. */
+function buildSistemaBody(d: OverviewData, atLabel: string | null, contentW: number, theme: Theme): string[] {
   const ok = theme.fg("semantic.ok");
   const warnC = theme.fg("semantic.warn");
   const dim = theme.fg("text.secondary");
+  const muted = theme.fg("text.muted");
   const primary = theme.fg("text.primary");
   const reset = theme.reset;
 
   const up = d.brain.state === "up";
   const brainState = (up ? BOLD + ok : warnC) + d.brain.state.toUpperCase() + reset;
-  const served = d.brain.servedBy ? dim + "  " + d.brain.servedBy + reset : "";
+  const served = d.brain.servedBy ? muted + "  " + d.brain.servedBy + reset : "";
   const brainLine = labelCell("brain", theme) + brainState + served;
 
-  const spendLine =
-    labelCell("spend", theme) +
-    gauge({ value: d.spend.mtd, max: d.spend.cap, width: 16, suffix: `$${d.spend.mtd.toFixed(2)}/$${d.spend.cap}` }, theme);
+  // Zero spend is a state, not a missing number: say so instead of drawing $0.00 beside an empty bar.
+  const suffix = d.spend.mtd > 0
+    ? `$${d.spend.mtd.toFixed(2)} · $${d.spend.remaining.toFixed(2)} left`
+    : `none · $${d.spend.cap} cap`;
+  const gaugeW = Math.max(8, contentW - 8 - 1 - displayWidth(suffix));
+  const spendLine = labelCell("spend", theme) + gauge({ value: d.spend.mtd, max: d.spend.cap, width: gaugeW, suffix }, theme);
 
   const online = d.fleet.online === d.fleet.total ? ok : warnC;
   const fleetLine =
@@ -2202,11 +2271,16 @@ function buildSistemaBody(d: OverviewData, theme: Theme): string[] {
     theme.fg("memory.violet") + `${d.memory.learnings} ` + reset + dim + "learnings · " + reset +
     primary + `${d.memory.sessions} ` + reset + dim + "sessions" + reset;
 
-  return [brainLine, "", spendLine, "", fleetLine, memLine];
+  const rows = [brainLine, spendLine, fleetLine, memLine];
+  if (d.brain.cached) {
+    rows.push(labelCell("cached", theme) + warnC + (atLabel ?? "now") + reset + muted + ` · lock held by ${d.brain.servedBy || "mcp"}` + reset);
+  }
+  return rows;
 }
 
-/** One home "ultimas memorias" row from a real learning: violet bullet + text + dim
- * source (project). No fabricated score — `memory recent` carries none. */
+/** One home "latest memories" row from a real learning: violet bullet + text + dim source
+ * (project). No fabricated score — `memory recent` carries none. Text that does not fit ends in
+ * an ellipsis rather than mid-word. */
 function formatOverviewMemoryRow(l: MemoryLearning, contentW: number, theme: Theme): string {
   const violet = theme.fg("memory.violet");
   const primary = theme.fg("text.primary");
@@ -2220,7 +2294,7 @@ function formatOverviewMemoryRow(l: MemoryLearning, contentW: number, theme: The
   const textW = Math.max(0, contentW - bulletW - gapW - sourceW);
   const src = l.project || l.date || "";
 
-  const textCell = padTo(truncate(oneLine(l.text), textW), textW);
+  const textCell = padTo(ellipsize(oneLine(l.text), textW), textW);
   const sourceCell = " ".repeat(gapW) + padTo(truncate(src, sourceW), sourceW, "right");
   return violet + glyph + " " + reset + primary + textCell + reset + dim + sourceCell + reset;
 }
@@ -2230,114 +2304,106 @@ function oneLine(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Home. Top to bottom: the block wordmark when there is room for it; the first-run cue when
+ * there is nothing yet; a band with active sessions (what you came to check) beside the system
+ * detail, each claiming the height its content needs; and the latest memories taking every row
+ * that is left, because they are the one thing here you cannot read off a shell prompt.
+ */
 function buildOverviewView(o: OverviewSlice, sessions: SessionsSlice, focused: string, rect: Rect, theme: Theme): string[] {
   const cols = rect.width;
-  const wm = wordmark({ variant: "block" }, theme);
+  const blank = " ".repeat(cols);
   const out: string[] = [];
 
-  const wmBlock: string[] = [];
-  for (const line of wm) wmBlock.push(centerLine(line, cols));
-  wmBlock.push(" ".repeat(cols));
+  // The wordmark is the right thing to show once, on a screen with room for it. On a compact
+  // terminal it would take a fifth of the view from the content; the compact wordmark in the
+  // status bar carries the identity there.
+  const wmBlock = rect.height >= 24
+    ? [...wordmark({ variant: "block" }, theme).map((line) => centerLine(line, cols)), blank]
+    : [];
 
-  // Wordmark always shows; the banner (if any) sits just under it.
-  const banner = overviewBanner(o, cols, theme);
-
-  // No data yet → a single status line where the panels would be (never a spinner-forever).
+  // No data yet: a single status line where the panels would be (never a spinner-forever).
   if (!o.data) {
-    for (const l of wmBlock) out.push(l);
-    for (const b of banner) out.push(centerLine(b, cols));
+    out.push(...wmBlock);
     const msg =
       o.status === "error"
         ? theme.fg("semantic.error") + `error: ${o.error ?? "querying ebrain status"}` + theme.reset
         : theme.fg("text.secondary") + "loading system status…" + theme.reset;
-    while (out.length < Math.floor(rect.height / 2)) out.push(" ".repeat(cols));
+    while (out.length < Math.floor(rect.height / 2)) out.push(blank);
     out.push(centerLine(msg, cols));
-    while (out.length < rect.height) out.push(" ".repeat(cols));
+    while (out.length < rect.height) out.push(blank);
     return out.slice(0, rect.height);
   }
 
-  // First-run "start here" cue: brain is up but there is nothing to show yet (no live
-  // sessions, no saved memories). One understated line under the wordmark names the first
-  // keys to try, so a brand-new user is never staring at three empty boxes with no next step.
-  // It occupies the same one-row banner slot as the lock notice, so geometry stays intact.
+  // First-run "start here" cue: brain is up but there is nothing to show yet (no live sessions,
+  // no saved memories). One understated line names the first keys to try, so a brand-new user is
+  // never staring at empty boxes with no next step.
   const firstRun = o.data.brain.state === "up" && sessions.rows.length === 0 && (o.memory?.learnings?.length ?? 0) === 0;
-  const startHere = firstRun
-    ? [theme.fg("text.secondary") + "start here · l launch · 4 then a add workspace · 5 then r save memory" + theme.reset]
+  const cue = firstRun
+    ? [centerLine(teachLine(theme, "start here · ", { key: "l" }, " launch · ", { key: "4" }, " then ", { key: "a" }, " add workspace · ", { key: "5" }, " then ", { key: "r" }, " save memory"), cols)]
     : [];
-  const fullBanner = [...banner, ...startHere];
 
-  const memoriesPanelHeight = 5; // 2 borders + 3 data rows
-  const memBlockHeight = memoriesPanelHeight + 1;
-  const bannerH = fullBanner.length;
-  const wmH = wmBlock.length;
-  const [wmRect, panelsRect, memRect] = splitV(rect, [
-    wmH + bannerH,
-    { flex: 1 },
-    memBlockHeight,
-  ]);
+  // The band. The system box is as tall as its rows; the sessions box grows with its list up to
+  // the point where the memories below would fall under three rows.
+  const systemW = cols >= 100 ? 48 : 44;
+  const [sessionsRect, systemRect] = splitH({ top: 0, left: 0, width: cols, height: 1 }, [{ flex: 1 }, systemW], 1);
+  const systemBody = buildSistemaBody(o.data, o.atLabel, Math.max(0, systemRect.width - 4), theme);
+  const available = rect.height - wmBlock.length - cue.length;
+  const memoriesMin = 5; // two borders + three rows
+  const systemH = systemBody.length + 2;
+  const sessionsWant = Math.max(1, sessions.rows.length) + 2;
+  const bandH = Math.max(systemH, Math.min(sessionsWant, Math.max(systemH, available - memoriesMin)));
+  const bandRoom = bandH - 2;
 
-  if (wmRect.height > 0) {
-    for (const l of wmBlock) out.push(l);
-    for (const b of fullBanner) out.push(centerLine(b, cols));
-  }
-
-  if (panelsRect.height > 0) {
-    const [sistemaRect, sesionesRect] = splitH(
-      { top: 0, left: 0, width: panelsRect.width, height: panelsRect.height },
-      [46, { flex: 1 }],
-      2,
-    );
-    const sistemaPanel = panel(
-      { title: "system", focus: focused === "system", width: sistemaRect.width, height: panelsRect.height, body: buildSistemaBody(o.data, theme) },
-      theme,
-    );
-
-    const rowW = Math.max(8, sesionesRect.width - 4);
-    const sSel = clampIndex(sessions.selected, Math.max(1, sessions.rows.length));
-    const sessionBody =
-      sessions.rows.length > 0
-        ? sessions.rows.slice(0, Math.max(0, panelsRect.height - 2)).map((r, i) => {
-            const row = renderFleetRow(r, rowW, i === sSel, theme);
-            return focused === "sessions" && i === sSel ? highlightRow(padTo(row, rowW), theme) : row;
-          })
-        : [theme.fg("text.secondary") + "none · press l to launch" + theme.reset];
-    const sesionesPanel = panel(
-      {
-        title: `active sessions · ${sessions.rows.length}`,
-        focus: focused === "sessions",
-        width: sesionesRect.width,
-        height: panelsRect.height,
-        body: sessionBody,
-      },
-      theme,
-    );
-    const gap = " ".repeat(Math.max(0, panelsRect.width - sistemaRect.width - sesionesRect.width));
-    for (let i = 0; i < panelsRect.height; i++) {
-      out.push((sistemaPanel[i] ?? "") + gap + (sesionesPanel[i] ?? ""));
+  const rowW = Math.max(8, sessionsRect.width - 4);
+  const sSel = clampIndex(sessions.selected, Math.max(1, sessions.rows.length));
+  let sessionBody: string[];
+  if (sessions.rows.length === 0) {
+    sessionBody = [teachLine(theme, "none · press ", { key: "l" }, " to launch")];
+  } else {
+    const shown = sessions.rows.length > bandRoom ? Math.max(1, bandRoom - 1) : sessions.rows.length;
+    sessionBody = sessions.rows.slice(0, shown).map((r, i) => {
+      const row = renderFleetRow(r, rowW, i === sSel, theme);
+      return focused === "sessions" && i === sSel ? highlightRow(padTo(row, rowW), theme) : row;
+    });
+    if (shown < sessions.rows.length) {
+      sessionBody.push(teachLine(theme, `+${sessions.rows.length - shown} more · `, { key: "3" }, " for every session"));
     }
   }
+  const sessionsPanel = panel(
+    { title: `active sessions · ${sessions.rows.length}`, focus: focused === "sessions", width: sessionsRect.width, height: bandH, body: sessionBody },
+    theme,
+  );
+  const systemPanel = panel(
+    { title: "system", focus: focused === "system", width: systemRect.width, height: bandH, body: systemBody },
+    theme,
+  );
 
-  if (memRect.height > 0) {
-    out.push(" ".repeat(cols));
+  out.push(...wmBlock, ...cue);
+  for (let i = 0; i < bandH; i++) out.push((sessionsPanel[i] ?? "") + " " + (systemPanel[i] ?? ""));
+
+  // Memories take the rest: as many learnings as fit, ellipsized rather than cut mid-word.
+  const memH = rect.height - out.length;
+  if (memH >= 3) {
     const learnings = o.memory?.learnings ?? [];
     const mSel = clampIndex(o.memSelected, Math.max(1, learnings.length));
     const memW = Math.max(0, cols - 4);
     const memoriesBody =
       learnings.length > 0
-        ? learnings.slice(0, 3).map((l, i) => {
+        ? learnings.slice(0, memH - 2).map((l, i) => {
             const row = formatOverviewMemoryRow(l, memW, theme);
             return focused === "memories" && i === mSel ? highlightRow(padTo(row, memW), theme) : row;
           })
-        : [theme.fg("text.secondary") + "no recent memories · press 5 then r to save one" + theme.reset];
+        : [teachLine(theme, "no recent memories · press ", { key: "5" }, " then ", { key: "r" }, " to save one")];
     out.push(
       ...panel(
-        { title: "latest memories", focus: focused === "memories", width: cols, height: memoriesPanelHeight, body: memoriesBody },
+        { title: "latest memories", focus: focused === "memories", width: cols, height: memH, body: memoriesBody },
         theme,
       ),
     );
   }
 
-  while (out.length < rect.height) out.push(" ".repeat(cols));
+  while (out.length < rect.height) out.push(blank);
   return out.slice(0, rect.height);
 }
 
@@ -2365,18 +2431,20 @@ function renderFleetRow(it: SessionListItem, width: number, sel: boolean, theme:
   const nameW = Math.max(0, width - 11 - 1 - uptimeW);
   const nameColor = sel ? theme.fg("text.primary") + BOLD : theme.fg("text.secondary");
   const displayName = it.workspaceLabel ? `${it.name} · ${it.workspaceLabel}` : it.name;
-  const nameCell = nameColor + padTo(truncate(displayName, nameW), nameW) + reset;
+  const nameCell = nameColor + padTo(ellipsize(displayName, nameW), nameW) + reset;
   const uptimeCell = " " + theme.fg("text.muted") + it.uptime + reset;
   return badgeCell + nameCell + uptimeCell;
 }
 
-function buildCenteredMessagePanel(title: string, message: string, rect: Rect, theme: Theme): string[] {
+/** A full-view box with a centred message: one plain string (drawn dim) or several pre-styled
+ * lines, so an empty state can say what is true on one line and what to press on the next. */
+function buildCenteredMessagePanel(title: string, message: string | string[], rect: Rect, theme: Theme): string[] {
   const contentW = Math.max(0, rect.width - 4);
   const bodyRows = Math.max(0, rect.height - 2);
-  const mid = Math.floor(bodyRows / 2);
-  const colored = theme.fg("text.secondary") + message + theme.reset;
+  const lines = typeof message === "string" ? [theme.fg("text.secondary") + message + theme.reset] : message;
+  const start = Math.max(0, Math.floor((bodyRows - lines.length) / 2));
   const body: string[] = [];
-  for (let i = 0; i < bodyRows; i++) body.push(i === mid ? centerLine(colored, contentW) : "");
+  for (let i = 0; i < bodyRows; i++) body.push(i >= start && i - start < lines.length ? centerLine(lines[i - start]!, contentW) : "");
   return panel({ title, width: rect.width, height: rect.height, body }, theme);
 }
 
@@ -2389,7 +2457,8 @@ export function buildSessionsView(s: SessionsSlice, rect: Rect, theme: Theme): s
     return buildCenteredMessagePanel("sessions", `error: ${s.error ?? "tmux became unavailable"}`, rect, theme);
   }
 
-  // Empty / status states — a single centered message panel (NEVER a spinner-forever).
+  // Empty / status states — a single centered message panel (NEVER a spinner-forever). The empty
+  // state is two lines on purpose: the fact, then the one key that changes it.
   if (s.rows.length === 0) {
     const msg =
       s.status === "no-tmux"
@@ -2398,7 +2467,10 @@ export function buildSessionsView(s: SessionsSlice, rect: Rect, theme: Theme): s
           ? "loading sessions…"
           : s.status === "error"
             ? `error: ${s.error ?? "querying tmux"}`
-            : "no active sessions · press l to launch one";
+            : [
+                theme.fg("text.primary") + "no active sessions" + theme.reset,
+                teachLine(theme, "press ", { key: "l" }, " to launch one"),
+              ];
     return buildCenteredMessagePanel("sessions", msg, rect, theme);
   }
 
@@ -2462,7 +2534,7 @@ export function buildSessionsView(s: SessionsSlice, rect: Rect, theme: Theme): s
 function workspaceRow(candidate: WorkspaceSelection, active: WorkspaceSelection, width: number, selected: boolean, theme: Theme): string {
   const reset = theme.reset;
   const title = `${candidate.label}${candidate.cwd === active.cwd ? " · active" : ""}`;
-  const text = `${title}  ${candidate.cwd}`;
+  const text = `${title}  ${collapseHome(candidate.cwd)}`;
   return (selected ? theme.fg("text.primary") + BOLD : theme.fg("text.secondary")) + truncate(text, width) + reset;
 }
 
@@ -2472,7 +2544,7 @@ function activityRow(activity: WorkspaceActivity, width: number, selected: boole
   const count = `${activity.sessions.length} active`;
   const countW = displayWidth(count);
   const nameW = Math.max(1, width - countW - 2);
-  const name = activity.label ? label : `${label} · ${activity.cwd || "unknown"}`;
+  const name = activity.label ? label : `${label} · ${activity.cwd ? collapseHome(activity.cwd) : "unknown"}`;
   const color = selected ? theme.fg("text.primary") + BOLD : theme.fg("text.secondary");
   return color + padTo(truncate(name, nameW), nameW) + reset + "  " + theme.fg("text.muted") + count + reset;
 }
@@ -2531,7 +2603,7 @@ function workspaceDetailBody(workspace: WorkspaceSlice, sessions: SessionsSlice,
   const latestCreated = matching.map((session) => session.created).filter((created): created is string => Boolean(created)).sort().at(-1);
   const reset = theme.reset;
   const lines = [
-    theme.fg("text.secondary") + "directory  " + reset + theme.fg("text.primary") + selected.cwd + reset,
+    theme.fg("text.secondary") + "directory  " + reset + theme.fg("text.primary") + collapseHome(selected.cwd) + reset,
     theme.fg("text.secondary") + "next launch " + reset + (selected.cwd === workspace.active.cwd ? theme.fg("semantic.ok") + "selected" : theme.fg("text.muted") + "not selected") + reset,
     theme.fg("text.secondary") + "active sessions  " + reset + theme.fg("text.primary") + String(matching.length) + reset,
     ...(latestCreated ? [theme.fg("text.secondary") + "latest active session  " + reset + theme.fg("text.muted") + latestCreated + reset] : []),
@@ -2570,23 +2642,28 @@ function buildWorkspacesView(workspace: WorkspaceSlice, sessions: SessionsSlice,
   }, theme);
 
   const out: string[] = [];
-  // 100 columns still leaves two 49-column panels after the divider. That is enough to keep
-  // the primary desktop cockpit hierarchy; the 80-column minimum remains intentionally stacked.
+  // The detail box is a fixed set of facts, so it claims exactly their height (with a floor of
+  // one row) and the two lists share whatever is left. 100 columns still leaves two 49-column
+  // lists after the divider; the 80-column minimum remains intentionally stacked.
+  const detailH = Math.min(Math.max(3, workspaceDetailBody(workspace, sessions, rect.width, theme).length + (workspace.error ? 1 : 0) + 2), Math.max(3, rect.height - 8));
   if (rect.width >= 100) {
-    const [topRect, detailRect] = splitV(rect, [{ flex: 3 }, { flex: 2 }], 1);
-    const [registryRect, activityRect] = splitH(topRect, [{ flex: 1 }, { flex: 1 }], 2);
+    const [topRect, detailRect] = splitV(rect, [{ flex: 1 }, detailH], 1);
+    const [registryRect, activityRect] = splitH(topRect, [{ flex: 1 }, { flex: 1 }], 1);
     const registry = renderRegistry(registryRect);
     const live = renderActivity(activityRect);
     const gap = " ".repeat(Math.max(0, topRect.width - registryRect.width - activityRect.width));
     for (let index = 0; index < topRect.height; index += 1) out.push((registry[index] ?? "") + gap + (live[index] ?? ""));
-    if (detailRect.top > topRect.top + topRect.height) out.push(" ".repeat(rect.width));
+    out.push(" ".repeat(rect.width));
     out.push(...renderDetail(detailRect));
   } else {
-    const [registryRect, activityRect, detailRect] = splitV(rect, [{ flex: 3 }, { flex: 2 }, { flex: 2 }], 1);
+    // Stacked: live activity is as tall as its rows (three at least), registry takes the rest.
+    const activityRows = Math.max(1, workspaceActivity(workspace, sessions.rows).length);
+    const activityH = Math.min(activityRows + 2, Math.max(3, rect.height - detailH - 2 - 5));
+    const [registryRect, activityRect, detailRect] = splitV(rect, [{ flex: 1 }, activityH, detailH], 1);
     out.push(...renderRegistry(registryRect));
-    if (activityRect.top > registryRect.top + registryRect.height) out.push(" ".repeat(rect.width));
+    out.push(" ".repeat(rect.width));
     out.push(...renderActivity(activityRect));
-    if (detailRect.top > activityRect.top + activityRect.height) out.push(" ".repeat(rect.width));
+    out.push(" ".repeat(rect.width));
     out.push(...renderDetail(detailRect));
   }
   while (out.length < rect.height) out.push(" ".repeat(rect.width));
@@ -2655,6 +2732,11 @@ function resetTaskSetup(launch: LaunchSlice): LaunchSlice {
   return applyTaskSetup(launch, "general", "");
 }
 
+/** Twelve-cell label column for the launch boxes' key/value rows. */
+function fieldLabel(text: string, theme: Theme): string {
+  return theme.fg("text.secondary") + padTo(text, 12) + theme.reset;
+}
+
 function buildLaunchView(launch: LaunchSlice, workspace: WorkspaceSelection, callerDisplayCwd: string, focused: string, rect: Rect, theme: Theme): string[] {
   const reset = theme.reset;
   const wizard = launch.wizard;
@@ -2674,8 +2756,9 @@ function buildLaunchView(launch: LaunchSlice, workspace: WorkspaceSelection, cal
         ? "context  no reviewed packs"
         : `context  ${contextPacks.map((pack) => `${pack.id} v${pack.version}`).join(" · ")}`;
 
-  const manualPanel = (panelRect: Rect): string[] => {
-    const contentW = Math.max(0, panelRect.width - 4);
+  /** Manual agents: workspace, context, the agent grid, and what Enter will do. `airy` puts a
+   * blank row on either side of the grid when the box has the height for it. */
+  const manualBody = (contentW: number, airy: boolean): string[] => {
     const colGap = 2;
     const cellW = Math.max(10, Math.floor((contentW - colGap) / LAUNCH_COLS));
     const grid: string[] = [];
@@ -2692,69 +2775,106 @@ function buildLaunchView(launch: LaunchSlice, workspace: WorkspaceSelection, cal
         const active = index === selected;
         const marker = active ? theme.fg("accent.teal") + "▸ " + reset : "  ";
         const clsColor = agent.cls === "heavy" ? theme.fg("semantic.warn") : theme.fg("text.muted");
-        line += padTo(truncate(marker + badge({ agent: agent.agent }, theme) + "  " + clsColor + agent.cls + reset, cellW), cellW);
+        const cell = padTo(truncate(marker + badge({ agent: agent.agent }, theme) + "  " + clsColor + agent.cls + reset, cellW), cellW);
+        // The selected agent carries the raised cursor while this box has focus, like every other list.
+        line += active && focused === "agents" ? highlightRow(cell, theme) : cell;
       }
       grid.push(line);
     }
     const selectedAgent = LAUNCHABLE[selected]!.agent;
-    const body = [
-      keyHint({ k: "g", label: "workspace" }, theme) + "  " + theme.fg("text.secondary") + truncate(workspaceDisplay(workspace, callerDisplayCwd), Math.max(0, contentW - 14)) + reset,
-      theme.fg(launch.contextStatus === "error" ? "semantic.warn" : "text.muted") + truncate(contextLine, contentW) + reset,
+    const intent =
+      theme.fg("text.muted") + (launch.task ? "Task will be sent to " : "New session with ") + reset +
+      theme.agent(selectedAgent) + BOLD + selectedAgent + reset;
+    return [
+      keyHint({ k: "g", label: "workspace" }, theme) + "  " + theme.fg("text.secondary") + ellipsize(workspaceDisplay(workspace, callerDisplayCwd), Math.max(0, contentW - 15)) + reset,
+      theme.fg(launch.contextStatus === "error" ? "semantic.warn" : "text.muted") + ellipsize(contextLine, contentW) + reset,
+      ...(airy ? [""] : []),
       ...grid,
-      theme.fg("text.muted") + (launch.task ? "Task will be sent to " : "New session with ") + reset + theme.fg("text.primary") + selectedAgent + reset,
+      ...(airy ? [""] : []),
+      intent,
     ];
-    return panel({ title: "1 · manual agents", focus: focused === "agents", width: panelRect.width, height: panelRect.height, body }, theme);
   };
 
-  const guidedPanel = (panelRect: Rect): string[] => {
-    const contentW = Math.max(0, panelRect.width - 4);
+  /** Guided launch: its key, then the current target / profile / capability once they are known.
+   * With fewer than four body rows the three fields collapse into one summary line. */
+  const guidedBody = (contentW: number, room: number): string[] => {
     const body: string[] = [keyHint({ k: "w", label: "open guided launch" }, theme)];
     if (wizard) {
-      body.push(theme.fg("text.secondary") + "target  " + reset + theme.fg("text.primary") + truncate(target?.id ?? "Unavailable", contentW - 8) + reset);
-      body.push(theme.fg("text.secondary") + "profile " + reset + theme.fg("text.primary") + truncate(selectedProfile?.label ?? "Unavailable", contentW - 9) + reset + theme.fg("text.muted") + ` · ${wizard.capability}` + reset);
-      if (wizard.plan) body.push(theme.fg("semantic.ok") + "Preview ready" + reset + theme.fg("text.muted") + ` · ${truncate(`${wizard.plan.model} · ${wizard.plan.costStatus}`, Math.max(0, contentW - 17))}` + reset);
-      else body.push(theme.fg("text.muted") + "Open to review or change this configuration." + reset);
+      const targetId = target?.id ?? "Unavailable";
+      const profileLabel = selectedProfile?.label ?? "Unavailable";
+      const valueW = Math.max(0, contentW - 12);
+      if (room >= 4) {
+        body.push(fieldLabel("target", theme) + theme.fg("text.primary") + ellipsize(targetId, valueW) + reset);
+        body.push(fieldLabel("profile", theme) + theme.fg("text.primary") + ellipsize(profileLabel, valueW) + reset);
+        body.push(fieldLabel("capability", theme) + theme.fg("text.primary") + ellipsize(wizard.capability, valueW) + reset);
+      } else {
+        body.push(theme.fg("text.secondary") + ellipsize(`${targetId} · ${profileLabel} · ${wizard.capability}`, contentW) + reset);
+      }
+      if (wizard.plan) {
+        body.push(theme.fg("semantic.ok") + "Preview ready" + reset + theme.fg("text.muted") + ellipsize(` · ${wizard.plan.model} · ${wizard.plan.costStatus}`, Math.max(0, contentW - 13)) + reset);
+      } else if (room >= 5) {
+        body.push(theme.fg("text.muted") + ellipsize("Open to review or change this configuration.", contentW) + reset);
+      }
     } else if (launch.status === "loading") {
       body.push(spinner({ label: "loading launch options", active: true, frame: 1 }, theme));
     } else {
-      body.push(theme.fg("text.muted") + "Choose target, profile, capability, and workspace." + reset);
+      body.push(theme.fg("text.muted") + ellipsize("Target · profile · capability · workspace.", contentW) + reset);
     }
-    if (launch.status === "error") body.push(theme.fg("semantic.error") + truncate(launch.error ?? "guided launch unavailable", contentW) + reset);
-    return panel({ title: "2 · guided launch", focus: focused === "guided", width: panelRect.width, height: panelRect.height, body }, theme);
+    if (launch.status === "error") body.push(theme.fg("semantic.error") + ellipsize(launch.error ?? "guided launch unavailable", contentW) + reset);
+    return body;
   };
 
-  const taskPanel = (panelRect: Rect): string[] => {
-    const contentW = Math.max(0, panelRect.width - 4);
+  const taskBody = (contentW: number): string[] => {
     const option = TASK_SETUP_OPTIONS[taskSetupIndex(taskCapabilityOf(launch))]!;
+    const valueW = Math.max(0, contentW - 12);
     const body: string[] = [
       keyHint({ k: "t", label: "task setup" }, theme) + "  " + keyHint({ k: "r", label: "reset" }, theme),
-      theme.fg("text.secondary") + "type  " + reset + theme.fg("text.primary") + option.label + reset,
+      fieldLabel("type", theme) + theme.fg("text.primary") + option.label + reset,
       launch.task
-        ? theme.fg("text.secondary") + "task  " + reset + theme.fg("text.primary") + truncate(launch.task, contentW - 6) + reset
-        : theme.fg("text.muted") + "Choose a type, then add an optional task prompt." + reset,
+        ? fieldLabel("task", theme) + theme.fg("text.primary") + ellipsize(oneLine(launch.task), valueW) + reset
+        : theme.fg("text.muted") + ellipsize("Pick a type, then an optional prompt.", contentW) + reset,
     ];
-    if (launch.workflowId) body.push(theme.fg("text.muted") + `workflow  ${truncate(launch.workflowId, contentW - 10)}` + reset);
-    return panel({ title: "3 · task setup", focus: focused === "task", width: panelRect.width, height: panelRect.height, body }, theme);
+    if (launch.workflowId) body.push(fieldLabel("workflow", theme) + theme.fg("text.muted") + ellipsize(launch.workflowId, valueW) + reset);
+    return body;
   };
 
-  // The priority changes at wide widths: manual launch gets the dominant left region. At the
-  // supported compact minimum, panels stack but keep the full six-agent grid visible first.
+  const box = (title: string, region: string, width: number, height: number, body: string[]): string[] =>
+    panel({ title, focus: focused === region, width, height, body }, theme);
+
+  // Wide: manual agents take the large left region; guided launch and task setup stack on the
+  // right. Every box claims the height its rows need, the band is as tall as the taller column,
+  // and the rows beneath stay empty rather than being drawn into boxes with nothing to show.
   if (rect.width >= 100 && rect.height >= 18) {
-    const [agentsRect, rightRect] = splitH(rect, [{ flex: 2 }, { flex: 1 }], 1);
-    const [guidedRect, taskRect] = splitV(rightRect!, [{ flex: 1 }, { flex: 1 }], 1);
-    const left = manualPanel(agentsRect!);
-    const right = [...guidedPanel(guidedRect!), " ".repeat(rightRect!.width), ...taskPanel(taskRect!)];
-    const gap = " ";
-    return Array.from({ length: rect.height }, (_, index) => (left[index] ?? " ".repeat(agentsRect!.width)) + gap + (right[index] ?? " ".repeat(rightRect!.width)));
+    const [agentsRect, rightRect] = splitH(rect, [{ flex: 3 }, { flex: 2 }], 1);
+    const agentsW = agentsRect!.width;
+    const rightW = rightRect!.width;
+    const guided = guidedBody(rightW - 4, 6);
+    const task = taskBody(rightW - 4);
+    const rightH = guided.length + 2 + 1 + task.length + 2;
+    const plainAgentsH = manualBody(agentsW - 4, false).length + 2;
+    const airyAgentsH = manualBody(agentsW - 4, true).length + 2;
+    const bandH = Math.min(rect.height, Math.max(plainAgentsH, rightH));
+    const left = box("1 · manual agents", "agents", agentsW, bandH, manualBody(agentsW - 4, airyAgentsH <= bandH));
+    const right = [
+      ...box("2 · guided launch", "guided", rightW, guided.length + 2, guided),
+      " ".repeat(rightW),
+      ...box("3 · task setup", "task", rightW, task.length + 2, task),
+    ];
+    const out: string[] = [];
+    for (let i = 0; i < bandH; i++) out.push((left[i] ?? " ".repeat(agentsW)) + " " + (right[i] ?? " ".repeat(rightW)));
+    while (out.length < rect.height) out.push(" ".repeat(rect.width));
+    return out.slice(0, rect.height);
   }
 
+  // Compact: stacked, with the full six-agent grid first. Guided keeps two summary rows and task
+  // setup takes what is left, which at 80x24 is exactly its three rows.
   const [agentsRect, guidedRect, taskRect] = splitV(rect, [8, 4, { flex: 1 }], 1);
   return [
-    ...manualPanel(agentsRect!),
+    ...box("1 · manual agents", "agents", rect.width, agentsRect!.height, manualBody(rect.width - 4, false)),
     " ".repeat(rect.width),
-    ...guidedPanel(guidedRect!),
+    ...box("2 · guided launch", "guided", rect.width, guidedRect!.height, guidedBody(rect.width - 4, guidedRect!.height - 2)),
     " ".repeat(rect.width),
-    ...taskPanel(taskRect!),
+    ...box("3 · task setup", "task", rect.width, taskRect!.height, taskBody(rect.width - 4)),
   ];
 }
 
@@ -2834,7 +2954,7 @@ function renderProcedureRow(w: ProcedureSummaryData, width: number, sel: boolean
     " " + padTo(truncate(meta, metaW), metaW, "right") + reset;
 }
 
-export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, theme: Theme): string[] {
+export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, theme: Theme, searchDraft?: LineState): string[] {
   const cols = rect.width;
   const height = rect.height;
   if (height <= 0) return [];
@@ -2851,15 +2971,24 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
   const procedures = procedureRows(m);
   const contexts = m.contexts?.packs ?? [];
   const sessions = m.data.sessions;
-  const [searchRect, midRect, footRect] = splitV(rect, [1, { flex: 1 }, 1]);
+  const [, midRect] = splitV(rect, [1, { flex: 1 }]);
 
   const out: string[] = [];
 
-  // Search stays on the `ebrain q --json` contract; no direct memory/daemon reads here.
+  // Search stays on the `ebrain q --json` contract; no direct memory/daemon reads here. While the
+  // `s` composer is open it edits THIS bar in place: one search field on screen, not a second one
+  // floating over the first.
+  const editing = searchDraft != null;
   out.push(
     padTo(
       promptBox(
-        { value: m.search?.query ?? "", focus: false, placeholder: "shared memory search", hint: "s search", width: cols },
+        {
+          value: editing ? searchDraft.text : m.search?.query ?? "",
+          focus: editing,
+          placeholder: "shared memory search",
+          hint: editing ? "enter search · esc cancel" : "s search",
+          width: cols,
+        },
         theme,
       ),
       cols,
@@ -2971,16 +3100,6 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
   for (let i = 0; i < midRect.height; i++) {
     const right = rightRows[i] ?? " ".repeat(rightRect.width);
     out.push((leftPanel[i] ?? "") + gap + right);
-  }
-
-  // Footer hint (the composer opens as an overlay on `r`). When a search is active, surface
-  // `esc back to recent` so the collection swap is discoverable (G56-F3).
-  if (footRect.height > 0) {
-    const hint = m.search
-      ? "s search · esc back to recent · enter open result · ↑↓ focused box"
-      : "s search · r remember · enter run/open · a attach procedure · ↑↓ focused box";
-    const foot = theme.fg("text.muted") + hint + theme.reset;
-    out.push(padTo(truncate(foot, cols), cols));
   }
 
   while (out.length < height) out.push(" ".repeat(cols));
@@ -3196,8 +3315,8 @@ function renderCheckRow(c: DoctorCheck, width: number, sel: boolean, theme: Them
   const idW = 24;
   const msgW = Math.max(0, width - 2 - idW - 1);
   const idColor = sel ? theme.fg("text.primary") + BOLD : theme.fg("text.primary");
-  const idCell = idColor + padTo(truncate(c.id, idW), idW) + reset;
-  const msgCell = " " + theme.fg("text.muted") + truncate(c.msg, msgW) + reset;
+  const idCell = idColor + padTo(ellipsize(c.id, idW), idW) + reset;
+  const msgCell = " " + theme.fg("text.muted") + ellipsize(collapseHomeIn(c.msg), msgW) + reset;
   const row = glyphCell + idCell + msgCell;
   // Doctor renders checks manually (not via ScrollList), so apply the selection cursor here.
   return sel ? highlightRow(padTo(row, width), theme) : row;
@@ -3208,26 +3327,24 @@ export function buildDoctorView(d: DoctorSlice, focused: string, rect: Rect, the
   const height = rect.height;
   if (height <= 0) return [];
 
-  if (!d.doctor && !d.fleet) {
-    const msg =
-      d.status === "error"
-        ? `error: ${d.error ?? "querying doctor"}`
-        : d.running
-          ? "running diagnostics…"
-          : "loading diagnostics…";
-    return buildCenteredMessagePanel("doctor", msg, rect, theme);
-  }
-
-  const rightW = Math.min(38, Math.max(24, Math.floor(cols * 0.32)));
+  // Both panels are drawn from the first frame, so the view has its shape before any data lands.
+  // A panel whose data has not arrived shows a turning spinner (or its error) in place of its
+  // list; the fleet answers in well under a second, the diagnostics can take several, and each
+  // fills in on its own. Never a static string in an empty frame.
+  const rightW = Math.min(38, Math.max(30, Math.floor(cols * 0.32)));
   const [leftRect, rightRect] = splitH({ top: 0, left: 0, width: cols, height }, [{ flex: 1 }, rightW], 2);
+  const loading = (label: string): string => spinner({ label, frame: d.spinnerFrame }, theme);
+  const failed = (message: string): string => theme.fg("semantic.error") + message + theme.reset;
 
   // Left: diagnostics list (spinner row while re-running).
   const checks = d.doctor?.checks ?? [];
   const selected = clampIndex(d.selected, Math.max(1, checks.length));
   const leftBody: string[] = [];
   if (d.running) {
-    leftBody.push(spinner({ label: "re-running checks…", frame: d.spinnerFrame }, theme));
+    leftBody.push(loading("re-running checks…"));
     leftBody.push("");
+  } else if (!d.doctor) {
+    leftBody.push(d.status === "error" ? failed(`error: ${d.error ?? "querying doctor"}`) : loading("loading diagnostics…"));
   }
   const listRoom = Math.max(1, height - 2 - leftBody.length);
   const rowW = Math.max(8, leftRect.width - 4);
@@ -3236,7 +3353,7 @@ export function buildDoctorView(d: DoctorSlice, focused: string, rect: Rect, the
   for (let i = 0; i < windowed.length; i++) {
     leftBody.push(renderCheckRow(windowed[i]!, rowW, offset + i === selected, theme));
   }
-  const title = d.running ? "diagnostics" : d.atLabel ? `diagnostics · last ${d.atLabel}` : "diagnostics";
+  const title = !d.running && d.doctor && d.atLabel ? `diagnostics · last ${d.atLabel}` : "diagnostics";
   const leftPanel = panel(
     { title, focus: focused === "checks", width: leftRect.width, height, body: leftBody },
     theme,
@@ -3249,13 +3366,16 @@ export function buildDoctorView(d: DoctorSlice, focused: string, rect: Rect, the
   const fleetSel = clampIndex(d.fleetSelected, Math.max(1, agents.length));
   const fleetW = Math.max(0, rightRect.width - 4);
   const fleetBody: string[] = [];
+  if (!d.fleet) fleetBody.push(d.status === "error" ? failed("fleet unavailable") : loading("loading fleet…"));
+  // Three cells per row - name, state, class - sized so the row is exactly fleetW wide.
+  const stateW = 7; // "offline"
+  const clsW = agents.reduce((w, a) => Math.max(w, displayWidth(a.cls)), 0);
+  const nameW = Math.max(4, fleetW - 1 - stateW - 1 - clsW);
   for (let ai = 0; ai < agents.length; ai++) {
     const a = agents[ai]!;
     const b = badge({ agent: a.name as AgentName, label: a.name }, theme);
-    const state = a.ok ? theme.fg("semantic.ok") + "online" : theme.fg("semantic.error") + "offline";
-    const cls = theme.fg("text.muted") + " " + a.cls + theme.reset;
-    const bw = Math.max(0, rightRect.width - 4 - 7 - displayWidth(a.cls) - 1);
-    const row = padTo(b, bw) + state + theme.reset + cls;
+    const state = a.ok ? theme.fg("semantic.ok") + "online" + theme.reset : theme.fg("semantic.error") + "offline" + theme.reset;
+    const row = padTo(ellipsize(b, nameW), nameW) + " " + padTo(state, stateW) + " " + theme.fg("text.muted") + a.cls + theme.reset;
     fleetBody.push(focused === "fleet" && ai === fleetSel ? highlightRow(padTo(row, fleetW), theme) : row);
   }
   if (d.doctor) {
@@ -3265,7 +3385,7 @@ export function buildDoctorView(d: DoctorSlice, focused: string, rect: Rect, the
     );
   }
   const rightPanel = panel(
-    { title: `fleet ${online}/${total}`, focus: focused === "fleet", width: rightRect.width, height, body: fleetBody },
+    { title: d.fleet ? `fleet ${online}/${total}` : "fleet", focus: focused === "fleet", width: rightRect.width, height, body: fleetBody },
     theme,
   );
 
@@ -3621,7 +3741,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       state = { ...state, overview: { ...cur, status: cur.data ? cur.status : "loading" } };
       if (state.tab === "home") render();
 
-      const [st, mem] = await Promise.all([fetchStatus(), fetchMemory(3)]);
+      const [st, mem] = await Promise.all([fetchStatus(), fetchMemory(20)]);
       const o = overviewOf(state);
       if (st.ok) {
         state = {
@@ -3988,15 +4108,26 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       }
       state = { ...state, doctor: { ...cur, status: cur.doctor ? cur.status : "loading", running: force } };
       if (state.tab === "doctor") render();
+      if (!spinnerTimer) spinnerTimer = setInterval(spinnerTick, 120);
 
-      const [fl, dc] = await Promise.all([fetchFleet(), fetchDoctor()]);
-      const d = doctorOf(state);
-      const fleet = fl.ok ? fl.data : d.fleet;
-      const doctor = dc.ok ? dc.data : d.doctor;
+      // The two fetches land on their own: the fleet in well under a second, the diagnostics
+      // sometimes after several. Each panel fills in as soon as its data arrives while the other
+      // keeps its spinner turning; a failed fetch keeps whatever that panel already showed.
+      const patchDoctor = (patch: Partial<DoctorSlice>): void => {
+        state = { ...state, doctor: { ...doctorOf(state), ...patch } };
+        if (state.tab === "doctor") render();
+      };
+      const [fl, dc] = await Promise.all([
+        fetchFleet().then((r) => { if (r.ok) patchDoctor({ fleet: r.data }); return r; }),
+        fetchDoctor().then((r) => { if (r.ok) patchDoctor({ doctor: r.data }); return r; }),
+      ]);
       const err = !fl.ok ? fl.error : !dc.ok ? dc.error : undefined;
       const status: LoadStatus = fl.ok || dc.ok ? "ready" : "error";
-      state = { ...state, doctor: { ...d, fleet, doctor, status, error: err, running: false, atLabel: nowClock() } };
-      if (state.tab === "doctor") render();
+      patchDoctor({ status, error: err, running: false, atLabel: nowClock() });
+      if (spinnerTimer) {
+        clearInterval(spinnerTimer);
+        spinnerTimer = null;
+      }
     }
 
     async function rerunDoctor(): Promise<void> {
@@ -4013,7 +4144,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
 
     function spinnerTick(): void {
       const d = doctorOf(state);
-      if (!d.running) return;
+      if (!d.running && d.status !== "loading") return;
       state = { ...state, doctor: { ...d, spinnerFrame: d.spinnerFrame + 1 } };
       if (state.tab === "doctor") render();
     }

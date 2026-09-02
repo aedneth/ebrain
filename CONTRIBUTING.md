@@ -2,6 +2,14 @@
 
 Thanks for your interest in eBrain! Contributions — from bug reports to features — are welcome.
 
+## Where to start
+
+Issues labelled [good first issue](https://github.com/aedneth/ebrain/labels/good%20first%20issue)
+are scoped so you can finish one in a sitting: each says what to change, which test file to add to,
+and how to see the result. [help wanted](https://github.com/aedneth/ebrain/labels/help%20wanted)
+covers work that needs something the maintainer does not have — a macOS machine, an account with a
+particular provider — more than it needs deep familiarity with the codebase.
+
 ## Development setup
 
 ```bash

@@ -17,7 +17,8 @@ EBRAIN_REF="${EBRAIN_REF:-main}"
 EBRAIN_HOME_EXPLICIT="${EBRAIN_HOME:+1}"
 EBRAIN_HOME="${EBRAIN_HOME:-$HOME/eBrain}"
 GBRAIN_REPO="${GBRAIN_REPO:-https://github.com/garrytan/gbrain.git}"
-# Pinned engine commit (v0.42.58.0). See docs/SPRINT.md §0.1.5 and docs/ARCHITECTURE.md.
+# Pinned engine commit (v0.42.58.0). The engine is a separate upstream project installed
+# alongside eBrain, not vendored into it; see THIRD_PARTY_NOTICES.md for the boundary.
 GBRAIN_REF="${GBRAIN_REF:-a25209bbb2bacf1b88e06fd5282b27f1bf4a3e7a}"
 EBRAIN_BIN_DIR="${EBRAIN_BIN_DIR:-$HOME/.local/bin}"
 

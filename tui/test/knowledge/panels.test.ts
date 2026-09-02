@@ -48,10 +48,12 @@ describe("Overview panel (6.5.1) + lock banner (6.5.5)", () => {
     },
   });
 
-  it("raises the lock banner with server + cached timestamp when the brain read was cached", () => {
+  it("names the lock holder + cached timestamp in the system box when the brain read was cached", () => {
+    // The notice lives as a fifth system row rather than a centred banner that restated the
+    // status bar's `brain UP` a third time.
     const t = frameText(cached);
-    expect(t).toContain("brain served by mcp:8541 (lock)");
-    expect(t).toContain("cached 14:31");
+    expect(t).toContain("mcp:8541");
+    expect(t).toContain("cached  14:31 · lock held by mcp:8541");
   });
 
   it("shows real spend/fleet/memory in the sistema panel + last learning", () => {
@@ -154,9 +156,11 @@ describe("Memory panel (F9.2)", () => {
     expect(t).toContain("active · 3 uses · skill");
     expect(t).toContain("07-14 12:45");
     expect(t).toContain("refactor router");
-    expect(t).toContain("r remember");
+    // The compact controls live in the global hint bar only; the view no longer paints a second
+    // hint row of its own directly above it.
+    expect(t).toContain("[r] remember");
     expect(t).toContain("shared memory search");
-    expect(t).toContain("s search");
+    expect(t).toContain("[s] search");
   });
 
   it("keeps Recall usable at 80x24 and never exposes an episode body", () => {
@@ -305,7 +309,7 @@ describe("Memory search selection (G56-F3)", () => {
     const t = frameText(memState({ search: { query: "q", results: RESULTS }, searchSelected: 1 }));
     expect(t).toContain("search results · 3");
     expect(t).toContain("SEARCH-1");
-    expect(t).toContain("esc back to recent");
+    expect(t).toContain("[esc] back to recent");
     // A stale cursor past the result set must not break the width invariant (frameText asserts it).
     frameText(memState({ search: { query: "q", results: RESULTS }, searchSelected: 99 }));
   });

@@ -664,9 +664,49 @@ function serviceIsActive(): boolean {
   return false;
 }
 
-export function installService(): { manager: ServiceManager; path: string; hint: string } {
+export interface InstallServiceResult {
+  manager: ServiceManager;
+  path: string;
+  hint: string;
+  /** True when a manually started host was stopped so the supervised one could take the port. */
+  handed_over: boolean;
+  healthy: boolean;
+}
+
+/**
+ * Does an already-running host have to be stopped before a unit can take over?
+ *
+ * Only when something is running AND nothing is supervising it. A host already owned by systemd or
+ * launchd is left alone: re-running install-service against an installed unit is an upgrade of the
+ * unit file, and stopping there would interrupt a working daemon for no reason.
+ */
+export function needsHandover(state: DaemonState, supervisor: ServiceManager): boolean {
+  return state !== "down" && supervisor === "none";
+}
+
+/**
+ * Install a service unit and hand the running host over to it.
+ *
+ * The handover is the point. Anyone running this command is, by definition, on a machine where the
+ * daemon is already running the way it has always run: started by hand. The unit is `Type=simple`
+ * with `Restart=always`, so enabling it starts a SECOND host against a port and a PGLite lock the
+ * first one still owns. That second process cannot bind, systemd restarts it five seconds later,
+ * and the user has traded a working daemon for a crash loop — while being told the install
+ * succeeded, because `systemctl enable --now` returns 0 for a unit that started and then died.
+ *
+ * So: stop the unsupervised host first, let the unit take the port, and confirm against /health
+ * that something is actually serving before claiming supervision is in place.
+ */
+export async function installService(): Promise<InstallServiceResult> {
   const launcher = launcherPath();
   if (!existsSync(launcher)) throw new Error(`launcher not found (${launcher})`);
+
+  // Only a host we are NOT already supervising needs handing over; re-running this command against
+  // an installed unit is an upgrade of the unit file, and stopping there would be a pointless
+  // interruption.
+  const before = await status();
+  const handOver = needsHandover(before.state, before.supervisor);
+  if (handOver) await stop({ quiet: true });
 
   if (process.platform === "darwin") {
     const path = launchdPlistPath();
@@ -675,7 +715,10 @@ export function installService(): { manager: ServiceManager; path: string; hint:
     Bun.spawnSync(["launchctl", "unload", path], { stdout: "ignore", stderr: "ignore" });
     const load = Bun.spawnSync(["launchctl", "load", path], { stdout: "pipe", stderr: "pipe" });
     if (load.exitCode !== 0) throw new Error(`launchctl load failed: ${load.stderr.toString().trim()}`);
-    return { manager: "launchd", path, hint: `launchctl list ${LAUNCHD_LABEL}` };
+    return {
+      manager: "launchd", path, hint: `launchctl list ${LAUNCHD_LABEL}`,
+      handed_over: handOver, healthy: await awaitSupervisedHealth(),
+    };
   }
 
   if (!hasBinary("systemctl")) {
@@ -693,7 +736,23 @@ export function installService(): { manager: ServiceManager; path: string; hint:
     stderr: "pipe",
   });
   if (enable.exitCode !== 0) throw new Error(`systemctl enable failed: ${enable.stderr.toString().trim()}`);
-  return { manager: "systemd", path, hint: `systemctl --user status ${SERVICE_LABEL}` };
+  return {
+    manager: "systemd", path, hint: `systemctl --user status ${SERVICE_LABEL}`,
+    handed_over: handOver, healthy: await awaitSupervisedHealth(),
+  };
+}
+
+/**
+ * Wait for the supervised host to answer. `systemctl enable --now` exits 0 for a unit that started
+ * and immediately died, so its exit code says the unit was accepted, not that anything is serving.
+ */
+async function awaitSupervisedHealth(timeoutMs = 20_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await healthCheck(healthUrl(port()), 2_000)) return true;
+    await Bun.sleep(500);
+  }
+  return false;
 }
 
 export function uninstallService(): { removed: boolean; path: string | null } {
@@ -765,12 +824,19 @@ async function main(): Promise<void> {
       break;
     }
     case "install-service": {
-      const res = installService();
+      const res = await installService();
       if (json) console.log(JSON.stringify(res, null, 2));
       else {
         console.log(`ebrain daemon: supervised by ${res.manager} · ${res.path}`);
+        if (res.handed_over) console.log("  the manually started host was stopped so the supervised one could take the port");
         console.log(`  the host now starts at login and is restarted if it dies · check: ${res.hint}`);
+        if (!res.healthy) {
+          console.log(`  ⚠ nothing is answering /health yet · inspect: ${logLocation()}`);
+        }
       }
+      // A unit that was accepted but is not serving is not supervision in place; say so with the
+      // exit code as well as on screen, so a script installing this does not report success.
+      if (!res.healthy) process.exitCode = 1;
       break;
     }
     case "uninstall-service": {

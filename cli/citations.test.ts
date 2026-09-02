@@ -99,6 +99,40 @@ describe("a cited repository path resolves", () => {
     expect([...sample.matchAll(CITATION)].map((m) => m[1])).toEqual(["docs/AUDIT-F7-F12-PASS4.md"]);
   });
 
+  test("shipped source does not point a reader at a document that is not there", () => {
+    // The Markdown check above only reads Markdown. A comment in a shell script or a TypeScript
+    // header is a citation too, and it is the one a reader follows while they have the file open.
+    // Three of them survived a documentation move and pointed at paths a fresh clone does not
+    // have — invisible to the existing check because none of them was inside backticks.
+    const SOURCE_CITATION = /(?:^|[\s(:,])(docs\/[\w./-]+\.md)/g;
+    // Pathspecs, not globs. `cli/**/*.ts` matches NOTHING here — `**` needs a directory level to
+    // cross and cli/ is flat — so the first version of this test scanned zero files in the very
+    // directory it was written for, and passed. Hence the floor asserted below.
+    const files = tracked(["cli/*.ts", "scripts/*", "harness/**/*.sh", "tui/src/**/*.ts", "tui/tools/*"])
+      .filter((file) => !file.endsWith(".test.ts")); // a test may name an absent path on purpose
+
+    const broken: string[] = [];
+    let scanned = 0;
+    for (const file of files) {
+      let text: string;
+      try {
+        text = readFileSync(join(ROOT, file), "utf8");
+      } catch {
+        continue; // a binary or unreadable file carries no prose citation
+      }
+      scanned += 1;
+      for (const m of text.matchAll(SOURCE_CITATION)) {
+        const cited = m[1]!;
+        if (!existsSync(join(ROOT, cited))) broken.push(`${file} → ${cited}`);
+      }
+    }
+
+    // A guard that reads nothing passes for the wrong reason, and looks identical to one that
+    // works. This is the same reasoning as the planted-offender step in CI.
+    expect(scanned).toBeGreaterThan(100);
+    expect([...new Set(broken)]).toEqual([]);
+  });
+
   test("a review report cited as evidence exists, with no baseline forgiveness", () => {
     // The exact shape of the finding that prompted this: a document announcing "the verdict is
     // recorded at X", where X had never been written. A cited verdict has to be readable by the

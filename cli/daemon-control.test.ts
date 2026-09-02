@@ -25,7 +25,8 @@ import {
   serviceUnitStale,
   logLocation,
   LOG_MAX_BYTES,
-} from "./daemon-control.ts";
+
+  needsHandover,} from "./daemon-control.ts";
 
 const CONTROL = join(import.meta.dir, "daemon-control.ts");
 const REPO = join(import.meta.dir, "..");
@@ -377,5 +378,32 @@ describe("daemon control (hermetic)", () => {
     const res = ctl(box, ["frobnicate"]);
     expect(res.code).toBe(2);
     expect(res.stderr).toContain("usage:");
+  });
+});
+
+// ── install-service hands over rather than racing the host that is already running ──
+describe("needsHandover", () => {
+  test("stops an unsupervised host, because the unit would otherwise fight it for the port", () => {
+    // This is the state anyone is in when they decide to install supervision: the daemon is up,
+    // started by hand. The unit is Type=simple with Restart=always, so enabling it starts a second
+    // host against a port and a PGLite lock the first still owns — a crash loop every five seconds,
+    // reported as a successful install because `systemctl enable --now` exits 0 for a unit that
+    // started and then died.
+    expect(needsHandover("up", "none")).toBe(true);
+    expect(needsHandover("starting", "none")).toBe(true);
+  });
+
+  test("leaves a host that is already supervised alone", () => {
+    // Re-running install-service against an installed unit is an upgrade of the unit file. Stopping
+    // a working supervised daemon to reinstall its own unit would be an interruption for nothing.
+    for (const manager of ["systemd", "launchd"] as const) {
+      expect(needsHandover("up", manager)).toBe(false);
+      expect(needsHandover("starting", manager)).toBe(false);
+    }
+  });
+
+  test("has nothing to hand over when nothing is running", () => {
+    expect(needsHandover("down", "none")).toBe(false);
+    expect(needsHandover("down", "systemd")).toBe(false);
   });
 });

@@ -49,17 +49,14 @@ export function promptBox(props: PromptBoxProps, theme: Theme): string {
 
   // Room for the value text = field minus caret minus hint (hint wins the right edge).
   const textRoom = Math.max(0, fieldW - caretW - hintW);
-  const valueCell = padTo(truncate(shown, textRoom), textRoom);
+  // The caret sits where typing lands: after the value, or ahead of the placeholder when the
+  // field is empty. Padding comes after it so the caret never floats at the far edge of the field.
+  const text = textColor + truncate(shown, textRoom) + reset;
+  const typed = padTo(empty ? caret + text : text + caret, textRoom + caretW);
 
   const bg = ""; // contour-only: no interior fill (breaks native terminal bg)
-  let field = bg + textColor + valueCell + reset;
-  if (focus) field = bg + textColor + valueCell + reset + caret;
-  if (hintW > 0) {
-    field =
-      bg + textColor + valueCell + reset +
-      caret +
-      bg + " " + theme.fg("text.muted") + hintText + reset;
-  }
+  let field = bg + typed;
+  if (hintW > 0) field = bg + typed + bg + " " + theme.fg("text.muted") + hintText + reset;
 
   // Compose and hard-pad to exact width (bg persists across the field).
   const row = barSeg + " " + field;
