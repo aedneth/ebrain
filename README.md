@@ -106,7 +106,17 @@ The daemon is the single local owner of the shared writer path. `ebrain up` is i
 ebrain up
 ebrain onboard --all
 ebrain daemon status
+ebrain daemon install-service    # so it comes back after a reboot
 ebrain fleet --json
+```
+
+A daemon started only by hand is a daemon that will eventually be down with every registered agent still pointed at it. `daemon status` identifies the running process rather than trusting a recorded PID, start-up is confirmed against the daemon's own health endpoint, and `install-service` hands supervision to systemd or launchd.
+
+Each supported agent is described by a single adapter manifest, and every surface that touches an agent — onboarding, MCP registration, hook wiring, uninstall, the fleet view — reads that one file. Supporting another agent CLI is adding a manifest, which is validated against a strict schema:
+
+```bash
+ebrain adapters list
+ebrain adapters validate
 ```
 
 Read the [boot and onboarding guide](docs/getting-started/onboarding.md), [supported-agent guide](docs/guides/agents.md), and [MCP reference](docs/reference/mcp.md) for the operational contract.
@@ -185,7 +195,10 @@ eBrain makes a careful distinction between a provider choice, a routing budget, 
 
 - **Profiles and targets are user-owned.** A profile is a local provider/model map organized by capability. A target is an adapter declaration able to represent an explicit selection safely.
 - **Task signals are orientation.** They explain a task's capability; they do not determine which model a developer should use.
-- **OpenRouter and other providers are optional.** A developer can use an OpenRouter profile with models they chose, mix compatible providers, or launch a local CLI manually.
+- **The provider is configuration, not a compiled-in fact.** The routing lane makes one kind of outbound call, in OpenAI-compatible shape, and which endpoint receives it is a value in `routing.yaml`. Selecting a provider is setting an id; an endpoint the built-in registry has never heard of works as well, given a base URL and the **name** of the environment variable holding its key. `ebrain providers list` reports whether a key is present — never its value.
+- **Fallback means the same thing everywhere.** Where a provider runs failover itself, eBrain uses it; where one does not, eBrain walks the capability chain locally, so a configured fallback is not an empty promise on most endpoints.
+- **Spend follows the provider that served it.** Each routed call is attributed to its own provider and the monthly cap is measured against that lane, so changing providers does not measure new spend against an old total. The budget is validated on read: a malformed cap is an error naming the line, not a cap that silently stops applying.
+- **All providers are optional.** A developer can configure one with models they chose, mix compatible providers, or launch a local CLI manually and use none of this.
 - **Costs are factual when supplied.** The cost view groups known token and usage records by provider, agent, model, session, and workflow. It leaves unavailable data unavailable.
 - **Subscription prices are out of scope.** A monthly plan or a price snapshot is not the same as tokens consumed by a model, so eBrain does not merge them into usage telemetry.
 
@@ -194,11 +207,12 @@ ebrain task-profile "Refactor a typed API client" --json
 ebrain profiles list --json
 ebrain targets list --json
 ebrain routing --json
+ebrain providers list
 ebrain cost --json
 ebrain spend --json
 ```
 
-This design avoids stale benchmark theater. Model behavior, availability, and pricing change; the developer owns the profile, sees the declared route, and can inspect the usage returned for the work that actually ran. See [routing](docs/guides/routing.md), [profiles and targets](docs/routing/profiles-and-targets.md), and [token and provider telemetry](docs/concepts/costs.md).
+This design avoids stale benchmark theater. Model behavior, availability, and pricing change; the developer owns the profile, sees the declared route, and can inspect the usage returned for the work that actually ran. See [routing](docs/guides/routing.md), [model providers](docs/reference/providers.md), [profiles and targets](docs/routing/profiles-and-targets.md), and [token and provider telemetry](docs/concepts/costs.md).
 
 ## CLI and TUI at the same boundary
 
@@ -211,7 +225,7 @@ The terminal UI is a daily control surface, not a second product with different 
 | Memory | `ebrain remember`, `ebrain q`, `ebrain memory recent --json` | Memory |
 | Context and procedures | `ebrain context`, `ebrain episodes`, `ebrain procedures`, `ebrain workflows` | Memory and Launch |
 | Projects | `ebrain workspaces`, `ebrain sessions` | Workspaces and Sessions |
-| Routing and usage | `ebrain task-profile`, `ebrain profiles`, `ebrain targets`, `ebrain cost` | Launch and Routing |
+| Routing and usage | `ebrain task-profile`, `ebrain profiles`, `ebrain targets`, `ebrain providers`, `ebrain cost` | Launch and Routing |
 
 The [CLI reference](docs/reference/cli.md) is the command index. JSON output is intended for local automation and the TUI; it is not a promise to expose raw private data, file paths, prompt bodies, or credential material.
 
@@ -224,6 +238,7 @@ eBrain is local-first, but local is not permission to index every local file or 
 - command-only adapter bridges instead of copied bearer material;
 - explicit source registration and deny-first isolation checks;
 - secret-shaped content handling at relevant memory, workflow, and display boundaries;
+- a secret guard **wired into** the agent's own runtime configuration during installation rather than written to disk and left for a hand edit — added without disturbing hooks that are not eBrain's, recognised on repeat installs so it is never duplicated, backed up once before the first write, and reported rather than replaced when a config cannot be parsed;
 - scrubbed, bounded session peek rather than raw terminal export; and
 - confirmation gates for destructive session actions and reviewed prompt delivery.
 

@@ -6,7 +6,7 @@ The project story should make only evidence-backed statements:
 - supported local agent CLIs can be onboarded through eBrain's bridge;
 - bounded durable memory, workspaces, sessions, user-governed routing, and factual token telemetry
   are implemented and tested locally;
-- the product was developed under a maker/checker discipline with phase evidence.
+- the product was developed with authorship and review kept separate, and with written evidence per phase.
 
 The static documentation website may be built and inspected locally as demonstration support. A
 local build is not evidence of a public deployment, repository visibility, or external submission.

@@ -80,6 +80,7 @@ export const DOC_SECTIONS: readonly DocSection[] = [
       { id: "reference/memory-commands", title: "Memory commands", description: "Learning, recall, governed context, and workflow boundaries." },
       { id: "reference/session-commands", title: "Workspace and session commands", description: "Validated directories and persistent process control." },
       { id: "reference/routing-commands", title: "Routing and cost commands", description: "Profiles, targets, and factual token attribution." },
+      { id: "reference/providers", title: "Model providers", description: "Provider selection, failover, and spend attribution." },
       { id: "reference/tui", title: "TUI reference", description: "Views, keyboard model, and compact layout." },
       { id: "reference/mcp", title: "MCP reference", description: "Bridge, daemon, and loopback boundary." },
       { id: "reference/configuration", title: "Configuration", description: "User-managed choices and strict stores." },

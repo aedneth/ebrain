@@ -11,6 +11,35 @@ stores as needed and validate their schema on read. Do not commit local runtime 
 - workflow records and procedure review metadata;
 - source registration and local isolation exclusions.
 
+## Routing configuration
+
+`routing.yaml` decides which provider the routing lane calls, which models each capability tries, and
+how much may be spent in a month.
+
+```
+$XDG_CONFIG_HOME/ebrain/routing.yaml     # defaults to $HOME/.config/ebrain/routing.yaml
+```
+
+`ebrain up` materializes it from `config/routing.default.yaml` on a first run — a fresh clone could
+otherwise not route at all — and never overwrites a copy that already exists. Delete yours and re-run
+`ebrain up` to start again from the template. Nothing in the file is a secret: the provider key is
+referenced by environment-variable **name** and read at call time.
+
+| Key | Meaning |
+| --- | --- |
+| `budget.monthly_usd` | The month's ceiling for routed spend. |
+| `budget.hard_stop` | When true, a call that would exceed the ceiling is refused **before** it is made. |
+| `provider.id` | Which provider receives the call. See the [provider reference](providers.md). |
+| `provider.base_url`, `provider.key_env` | Endpoint and key **name**; required for an id the registry does not know. |
+| `capabilities.<name>.models` | The chain tried for that capability, in order. |
+| `classify` | Keywords that orient a prompt toward a capability. An explicit `--cap` always wins. |
+| `frontier.auto_escalate` | Refused rather than obeyed: the routing lane never escalates on its own. |
+
+The file is parsed against a schema on every read, and a failure reports **every** problem at once
+with the YAML path of each. This matters more than it sounds: an unvalidated budget could hold a
+value that compares false against every number, which reads as a configured cap while enforcing
+nothing.
+
 ## Repository deny policy
 
 Some repositories must never enter eBrain — client work under NDA, an employer monorepo, a

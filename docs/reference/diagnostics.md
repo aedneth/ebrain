@@ -20,12 +20,31 @@ automation or the TUI.
 
 ```bash
 ebrain daemon status
+ebrain daemon ensure
 ebrain up
 ```
 
 The daemon is the single local writer and authenticated loopback MCP owner. `daemon status` reports
-whether that owner is available. `up` is idempotent: it prepares the daemon and onboards detected
-supported adapters. It does not ask a user to paste credentials into the terminal.
+whether that owner is available, identifying the process rather than trusting a recorded PID — a
+stale pidfile must read as *down*, not as healthy. `ensure` starts it only if it is not already
+running, and start-up is confirmed against the daemon's own health endpoint instead of assumed.
+`up` is idempotent: it prepares the daemon, materializes missing configuration, and onboards
+detected supported adapters. It does not ask a user to paste credentials into the terminal.
+
+A daemon that is only ever started by hand will eventually be down without anyone noticing, and
+every registered agent will be pointed at a host that is not there. `ebrain daemon install-service`
+registers it with systemd or launchd so it comes back after a reboot.
+
+## Check the adapters themselves
+
+```bash
+ebrain adapters validate
+ebrain harness doctor <agent>
+```
+
+`adapters validate` checks every adapter manifest against its schema and reports the cross-field
+problems a schema cannot see on its own. `harness doctor` reports one agent's real state — including
+whether its hooks are wired into the agent's own configuration, rather than merely present on disk.
 
 ## Read failures before changing state
 

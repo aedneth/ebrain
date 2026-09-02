@@ -8,10 +8,14 @@ commands and is intended for the TUI and local automation, not as a promise of r
 | Command | Purpose |
 | --- | --- |
 | `ebrain` | Open the TUI in a real interactive terminal |
-| `ebrain up` | Start daemon, prepare local MCP access, and onboard detected agents |
+| `ebrain up` | Start daemon, prepare local MCP access, materialize missing config, and onboard detected agents |
 | `ebrain doctor` | Check daemon, adapters, source isolation, and local contracts |
 | `ebrain status --json` | Read a compact health snapshot |
 | `ebrain fleet --json` | Inspect adapter health and RAM class |
+| `ebrain daemon <start\|stop\|status\|restart\|ensure>` | Control the shared local daemon directly |
+| `ebrain daemon install-service` | Register the daemon with systemd/launchd so it survives a reboot |
+| `ebrain adapters <list\|show\|validate>` | Inspect agent adapter manifests and check them against the schema |
+| `ebrain uninstall` | Show a removal plan; `--yes` applies it, `--purge` also removes the brain store |
 
 ## Memory and context
 
@@ -41,6 +45,7 @@ commands and is intended for the TUI and local automation, not as a promise of r
 | `ebrain profiles` | Manage user-selected execution profiles |
 | `ebrain targets` | Inspect/preview/launch declared adapter targets |
 | `ebrain routing --json` | Inspect configured capability chains |
+| `ebrain providers <list\|show>` | Inspect known model providers and whether their key names are set |
 | `ebrain cost --json` | Inspect factual token/provider attribution |
 | `ebrain spend --json` | Inspect routed spend against the local cap |
 
