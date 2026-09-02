@@ -96,9 +96,27 @@ async function tmuxRaw(args: string[]): Promise<{ code: number; stdout: string; 
   }
 }
 
-function classifyTmuxError(stderr: string): TmuxErrorType {
+/**
+ * tmux has more than one way of saying "there is no server".
+ *
+ * When the last session is killed the server exits and unlinks its socket, and which message you
+ * get back depends on where in that teardown the next command lands: "no server running on <sock>"
+ * if the socket is still there, but "error connecting to <sock> (No such file or directory)" once
+ * it is gone. Only the first spelling was recognised, so `ebrain sessions list` immediately after
+ * killing the last session reported a hard error instead of an empty list — on a machine where
+ * that was the ONLY session. On a developer's machine there is usually another session keeping the
+ * server alive, so this surfaced first in CI, which is exactly the environment it describes.
+ */
+export function classifyTmuxError(stderr: string): TmuxErrorType {
   const s = stderr.toLowerCase();
-  if (s.includes("no server running") || s.includes("failed to connect to server")) return "no-server";
+  if (
+    s.includes("no server running") ||
+    s.includes("failed to connect to server") ||
+    // the socket is already gone: same condition, different message
+    (s.includes("error connecting to") && s.includes("no such file or directory"))
+  ) {
+    return "no-server";
+  }
   if (s.includes("can't find session") || s.includes("session not found") || s.includes("unknown session") || s.includes("no such session")) return "not-found";
   return "other";
 }

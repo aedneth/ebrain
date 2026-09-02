@@ -19,6 +19,7 @@ import {
   sessionName, parseSessionName, isSafeToken, isClientPath, scrubSecrets, shellCommandFromArgv,
   listSessions, newSession, peekSession, sendToSession, killSession, resolveLaunch,
   parsePaneTable, SESSION_PREFIX,
+  classifyTmuxError,
 } from "./sessions.ts";
 
 // ── naming ───────────────────────────────────────────────────────────────
@@ -394,5 +395,37 @@ describe("liveness de sesiones (huérfanas)", () => {
   test("una tabla vacía no inventa sesiones", () => {
     expect(parsePaneTable("").size).toBe(0);
     expect(parsePaneTable("\n\n").size).toBe(0);
+  });
+});
+
+// ── classifyTmuxError — "there is no server" has more than one spelling ──
+describe("classifyTmuxError", () => {
+  test("recognises every way tmux says the server is gone", () => {
+    // The third of these is the one that was missing. Killing the last session makes the server
+    // exit and unlink its socket, and a command landing after that unlink gets the "error
+    // connecting" form. `ebrain sessions list` then reported a hard error instead of an empty
+    // list — only ever on a machine where that was the one session, which is why a developer
+    // never saw it and CI did.
+    for (const stderr of [
+      "no server running on /tmp/tmux-1001/default",
+      "failed to connect to server",
+      "error connecting to /tmp/tmux-1001/default (No such file or directory)",
+      "ERROR CONNECTING TO /tmp/tmux-1001/default (No Such File Or Directory)",
+    ]) {
+      expect(classifyTmuxError(stderr)).toBe("no-server");
+    }
+  });
+
+  test("still distinguishes a missing session from a missing server", () => {
+    for (const stderr of ["can't find session: ebr-test-x", "session not found", "no such session"]) {
+      expect(classifyTmuxError(stderr)).toBe("not-found");
+    }
+  });
+
+  test("an unrelated failure stays 'other' rather than being read as an empty list", () => {
+    // Widening "no server" too far would turn a real failure into a silent zero-session answer.
+    expect(classifyTmuxError("error connecting to /tmp/tmux-1001/default (Permission denied)")).toBe("other");
+    expect(classifyTmuxError("no such file or directory")).toBe("other");
+    expect(classifyTmuxError("protocol version mismatch")).toBe("other");
   });
 });
