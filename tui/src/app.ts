@@ -585,6 +585,12 @@ function collapseHome(p: string): string {
   return p;
 }
 
+/** collapseHome for prose: a home path anywhere in the text, not only at its start. */
+function collapseHomeIn(text: string): string {
+  const home = process.env.HOME;
+  return home ? text.split(home).join("~") : text;
+}
+
 /** Best-effort branch name from `.git/HEAD` — no subprocess spawn (cheap, safe to
  * call once at startup). Returns undefined on any failure (not a git dir, detached
  * with an unreadable HEAD, etc.) — the footer just omits the branch segment then. */
@@ -2425,18 +2431,20 @@ function renderFleetRow(it: SessionListItem, width: number, sel: boolean, theme:
   const nameW = Math.max(0, width - 11 - 1 - uptimeW);
   const nameColor = sel ? theme.fg("text.primary") + BOLD : theme.fg("text.secondary");
   const displayName = it.workspaceLabel ? `${it.name} · ${it.workspaceLabel}` : it.name;
-  const nameCell = nameColor + padTo(truncate(displayName, nameW), nameW) + reset;
+  const nameCell = nameColor + padTo(ellipsize(displayName, nameW), nameW) + reset;
   const uptimeCell = " " + theme.fg("text.muted") + it.uptime + reset;
   return badgeCell + nameCell + uptimeCell;
 }
 
-function buildCenteredMessagePanel(title: string, message: string, rect: Rect, theme: Theme): string[] {
+/** A full-view box with a centred message: one plain string (drawn dim) or several pre-styled
+ * lines, so an empty state can say what is true on one line and what to press on the next. */
+function buildCenteredMessagePanel(title: string, message: string | string[], rect: Rect, theme: Theme): string[] {
   const contentW = Math.max(0, rect.width - 4);
   const bodyRows = Math.max(0, rect.height - 2);
-  const mid = Math.floor(bodyRows / 2);
-  const colored = theme.fg("text.secondary") + message + theme.reset;
+  const lines = typeof message === "string" ? [theme.fg("text.secondary") + message + theme.reset] : message;
+  const start = Math.max(0, Math.floor((bodyRows - lines.length) / 2));
   const body: string[] = [];
-  for (let i = 0; i < bodyRows; i++) body.push(i === mid ? centerLine(colored, contentW) : "");
+  for (let i = 0; i < bodyRows; i++) body.push(i >= start && i - start < lines.length ? centerLine(lines[i - start]!, contentW) : "");
   return panel({ title, width: rect.width, height: rect.height, body }, theme);
 }
 
@@ -2449,7 +2457,8 @@ export function buildSessionsView(s: SessionsSlice, rect: Rect, theme: Theme): s
     return buildCenteredMessagePanel("sessions", `error: ${s.error ?? "tmux became unavailable"}`, rect, theme);
   }
 
-  // Empty / status states — a single centered message panel (NEVER a spinner-forever).
+  // Empty / status states — a single centered message panel (NEVER a spinner-forever). The empty
+  // state is two lines on purpose: the fact, then the one key that changes it.
   if (s.rows.length === 0) {
     const msg =
       s.status === "no-tmux"
@@ -2458,7 +2467,10 @@ export function buildSessionsView(s: SessionsSlice, rect: Rect, theme: Theme): s
           ? "loading sessions…"
           : s.status === "error"
             ? `error: ${s.error ?? "querying tmux"}`
-            : "no active sessions · press l to launch one";
+            : [
+                theme.fg("text.primary") + "no active sessions" + theme.reset,
+                teachLine(theme, "press ", { key: "l" }, " to launch one"),
+              ];
     return buildCenteredMessagePanel("sessions", msg, rect, theme);
   }
 
@@ -2522,7 +2534,7 @@ export function buildSessionsView(s: SessionsSlice, rect: Rect, theme: Theme): s
 function workspaceRow(candidate: WorkspaceSelection, active: WorkspaceSelection, width: number, selected: boolean, theme: Theme): string {
   const reset = theme.reset;
   const title = `${candidate.label}${candidate.cwd === active.cwd ? " · active" : ""}`;
-  const text = `${title}  ${candidate.cwd}`;
+  const text = `${title}  ${collapseHome(candidate.cwd)}`;
   return (selected ? theme.fg("text.primary") + BOLD : theme.fg("text.secondary")) + truncate(text, width) + reset;
 }
 
@@ -2532,7 +2544,7 @@ function activityRow(activity: WorkspaceActivity, width: number, selected: boole
   const count = `${activity.sessions.length} active`;
   const countW = displayWidth(count);
   const nameW = Math.max(1, width - countW - 2);
-  const name = activity.label ? label : `${label} · ${activity.cwd || "unknown"}`;
+  const name = activity.label ? label : `${label} · ${activity.cwd ? collapseHome(activity.cwd) : "unknown"}`;
   const color = selected ? theme.fg("text.primary") + BOLD : theme.fg("text.secondary");
   return color + padTo(truncate(name, nameW), nameW) + reset + "  " + theme.fg("text.muted") + count + reset;
 }
@@ -2591,7 +2603,7 @@ function workspaceDetailBody(workspace: WorkspaceSlice, sessions: SessionsSlice,
   const latestCreated = matching.map((session) => session.created).filter((created): created is string => Boolean(created)).sort().at(-1);
   const reset = theme.reset;
   const lines = [
-    theme.fg("text.secondary") + "directory  " + reset + theme.fg("text.primary") + selected.cwd + reset,
+    theme.fg("text.secondary") + "directory  " + reset + theme.fg("text.primary") + collapseHome(selected.cwd) + reset,
     theme.fg("text.secondary") + "next launch " + reset + (selected.cwd === workspace.active.cwd ? theme.fg("semantic.ok") + "selected" : theme.fg("text.muted") + "not selected") + reset,
     theme.fg("text.secondary") + "active sessions  " + reset + theme.fg("text.primary") + String(matching.length) + reset,
     ...(latestCreated ? [theme.fg("text.secondary") + "latest active session  " + reset + theme.fg("text.muted") + latestCreated + reset] : []),
@@ -2630,23 +2642,28 @@ function buildWorkspacesView(workspace: WorkspaceSlice, sessions: SessionsSlice,
   }, theme);
 
   const out: string[] = [];
-  // 100 columns still leaves two 49-column panels after the divider. That is enough to keep
-  // the primary desktop cockpit hierarchy; the 80-column minimum remains intentionally stacked.
+  // The detail box is a fixed set of facts, so it claims exactly their height (with a floor of
+  // one row) and the two lists share whatever is left. 100 columns still leaves two 49-column
+  // lists after the divider; the 80-column minimum remains intentionally stacked.
+  const detailH = Math.min(Math.max(3, workspaceDetailBody(workspace, sessions, rect.width, theme).length + (workspace.error ? 1 : 0) + 2), Math.max(3, rect.height - 8));
   if (rect.width >= 100) {
-    const [topRect, detailRect] = splitV(rect, [{ flex: 3 }, { flex: 2 }], 1);
-    const [registryRect, activityRect] = splitH(topRect, [{ flex: 1 }, { flex: 1 }], 2);
+    const [topRect, detailRect] = splitV(rect, [{ flex: 1 }, detailH], 1);
+    const [registryRect, activityRect] = splitH(topRect, [{ flex: 1 }, { flex: 1 }], 1);
     const registry = renderRegistry(registryRect);
     const live = renderActivity(activityRect);
     const gap = " ".repeat(Math.max(0, topRect.width - registryRect.width - activityRect.width));
     for (let index = 0; index < topRect.height; index += 1) out.push((registry[index] ?? "") + gap + (live[index] ?? ""));
-    if (detailRect.top > topRect.top + topRect.height) out.push(" ".repeat(rect.width));
+    out.push(" ".repeat(rect.width));
     out.push(...renderDetail(detailRect));
   } else {
-    const [registryRect, activityRect, detailRect] = splitV(rect, [{ flex: 3 }, { flex: 2 }, { flex: 2 }], 1);
+    // Stacked: live activity is as tall as its rows (three at least), registry takes the rest.
+    const activityRows = Math.max(1, workspaceActivity(workspace, sessions.rows).length);
+    const activityH = Math.min(activityRows + 2, Math.max(3, rect.height - detailH - 2 - 5));
+    const [registryRect, activityRect, detailRect] = splitV(rect, [{ flex: 1 }, activityH, detailH], 1);
     out.push(...renderRegistry(registryRect));
-    if (activityRect.top > registryRect.top + registryRect.height) out.push(" ".repeat(rect.width));
+    out.push(" ".repeat(rect.width));
     out.push(...renderActivity(activityRect));
-    if (detailRect.top > activityRect.top + activityRect.height) out.push(" ".repeat(rect.width));
+    out.push(" ".repeat(rect.width));
     out.push(...renderDetail(detailRect));
   }
   while (out.length < rect.height) out.push(" ".repeat(rect.width));
@@ -3298,8 +3315,8 @@ function renderCheckRow(c: DoctorCheck, width: number, sel: boolean, theme: Them
   const idW = 24;
   const msgW = Math.max(0, width - 2 - idW - 1);
   const idColor = sel ? theme.fg("text.primary") + BOLD : theme.fg("text.primary");
-  const idCell = idColor + padTo(truncate(c.id, idW), idW) + reset;
-  const msgCell = " " + theme.fg("text.muted") + truncate(c.msg, msgW) + reset;
+  const idCell = idColor + padTo(ellipsize(c.id, idW), idW) + reset;
+  const msgCell = " " + theme.fg("text.muted") + ellipsize(collapseHomeIn(c.msg), msgW) + reset;
   const row = glyphCell + idCell + msgCell;
   // Doctor renders checks manually (not via ScrollList), so apply the selection cursor here.
   return sel ? highlightRow(padTo(row, width), theme) : row;
@@ -3310,26 +3327,24 @@ export function buildDoctorView(d: DoctorSlice, focused: string, rect: Rect, the
   const height = rect.height;
   if (height <= 0) return [];
 
-  if (!d.doctor && !d.fleet) {
-    const msg =
-      d.status === "error"
-        ? `error: ${d.error ?? "querying doctor"}`
-        : d.running
-          ? "running diagnostics…"
-          : "loading diagnostics…";
-    return buildCenteredMessagePanel("doctor", msg, rect, theme);
-  }
-
-  const rightW = Math.min(38, Math.max(24, Math.floor(cols * 0.32)));
+  // Both panels are drawn from the first frame, so the view has its shape before any data lands.
+  // A panel whose data has not arrived shows a turning spinner (or its error) in place of its
+  // list; the fleet answers in well under a second, the diagnostics can take several, and each
+  // fills in on its own. Never a static string in an empty frame.
+  const rightW = Math.min(38, Math.max(30, Math.floor(cols * 0.32)));
   const [leftRect, rightRect] = splitH({ top: 0, left: 0, width: cols, height }, [{ flex: 1 }, rightW], 2);
+  const loading = (label: string): string => spinner({ label, frame: d.spinnerFrame }, theme);
+  const failed = (message: string): string => theme.fg("semantic.error") + message + theme.reset;
 
   // Left: diagnostics list (spinner row while re-running).
   const checks = d.doctor?.checks ?? [];
   const selected = clampIndex(d.selected, Math.max(1, checks.length));
   const leftBody: string[] = [];
   if (d.running) {
-    leftBody.push(spinner({ label: "re-running checks…", frame: d.spinnerFrame }, theme));
+    leftBody.push(loading("re-running checks…"));
     leftBody.push("");
+  } else if (!d.doctor) {
+    leftBody.push(d.status === "error" ? failed(`error: ${d.error ?? "querying doctor"}`) : loading("loading diagnostics…"));
   }
   const listRoom = Math.max(1, height - 2 - leftBody.length);
   const rowW = Math.max(8, leftRect.width - 4);
@@ -3338,7 +3353,7 @@ export function buildDoctorView(d: DoctorSlice, focused: string, rect: Rect, the
   for (let i = 0; i < windowed.length; i++) {
     leftBody.push(renderCheckRow(windowed[i]!, rowW, offset + i === selected, theme));
   }
-  const title = d.running ? "diagnostics" : d.atLabel ? `diagnostics · last ${d.atLabel}` : "diagnostics";
+  const title = !d.running && d.doctor && d.atLabel ? `diagnostics · last ${d.atLabel}` : "diagnostics";
   const leftPanel = panel(
     { title, focus: focused === "checks", width: leftRect.width, height, body: leftBody },
     theme,
@@ -3351,13 +3366,16 @@ export function buildDoctorView(d: DoctorSlice, focused: string, rect: Rect, the
   const fleetSel = clampIndex(d.fleetSelected, Math.max(1, agents.length));
   const fleetW = Math.max(0, rightRect.width - 4);
   const fleetBody: string[] = [];
+  if (!d.fleet) fleetBody.push(d.status === "error" ? failed("fleet unavailable") : loading("loading fleet…"));
+  // Three cells per row - name, state, class - sized so the row is exactly fleetW wide.
+  const stateW = 7; // "offline"
+  const clsW = agents.reduce((w, a) => Math.max(w, displayWidth(a.cls)), 0);
+  const nameW = Math.max(4, fleetW - 1 - stateW - 1 - clsW);
   for (let ai = 0; ai < agents.length; ai++) {
     const a = agents[ai]!;
     const b = badge({ agent: a.name as AgentName, label: a.name }, theme);
-    const state = a.ok ? theme.fg("semantic.ok") + "online" : theme.fg("semantic.error") + "offline";
-    const cls = theme.fg("text.muted") + " " + a.cls + theme.reset;
-    const bw = Math.max(0, rightRect.width - 4 - 7 - displayWidth(a.cls) - 1);
-    const row = padTo(b, bw) + state + theme.reset + cls;
+    const state = a.ok ? theme.fg("semantic.ok") + "online" + theme.reset : theme.fg("semantic.error") + "offline" + theme.reset;
+    const row = padTo(ellipsize(b, nameW), nameW) + " " + padTo(state, stateW) + " " + theme.fg("text.muted") + a.cls + theme.reset;
     fleetBody.push(focused === "fleet" && ai === fleetSel ? highlightRow(padTo(row, fleetW), theme) : row);
   }
   if (d.doctor) {
@@ -3367,7 +3385,7 @@ export function buildDoctorView(d: DoctorSlice, focused: string, rect: Rect, the
     );
   }
   const rightPanel = panel(
-    { title: `fleet ${online}/${total}`, focus: focused === "fleet", width: rightRect.width, height, body: fleetBody },
+    { title: d.fleet ? `fleet ${online}/${total}` : "fleet", focus: focused === "fleet", width: rightRect.width, height, body: fleetBody },
     theme,
   );
 
@@ -4090,15 +4108,26 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
       }
       state = { ...state, doctor: { ...cur, status: cur.doctor ? cur.status : "loading", running: force } };
       if (state.tab === "doctor") render();
+      if (!spinnerTimer) spinnerTimer = setInterval(spinnerTick, 120);
 
-      const [fl, dc] = await Promise.all([fetchFleet(), fetchDoctor()]);
-      const d = doctorOf(state);
-      const fleet = fl.ok ? fl.data : d.fleet;
-      const doctor = dc.ok ? dc.data : d.doctor;
+      // The two fetches land on their own: the fleet in well under a second, the diagnostics
+      // sometimes after several. Each panel fills in as soon as its data arrives while the other
+      // keeps its spinner turning; a failed fetch keeps whatever that panel already showed.
+      const patchDoctor = (patch: Partial<DoctorSlice>): void => {
+        state = { ...state, doctor: { ...doctorOf(state), ...patch } };
+        if (state.tab === "doctor") render();
+      };
+      const [fl, dc] = await Promise.all([
+        fetchFleet().then((r) => { if (r.ok) patchDoctor({ fleet: r.data }); return r; }),
+        fetchDoctor().then((r) => { if (r.ok) patchDoctor({ doctor: r.data }); return r; }),
+      ]);
       const err = !fl.ok ? fl.error : !dc.ok ? dc.error : undefined;
       const status: LoadStatus = fl.ok || dc.ok ? "ready" : "error";
-      state = { ...state, doctor: { ...d, fleet, doctor, status, error: err, running: false, atLabel: nowClock() } };
-      if (state.tab === "doctor") render();
+      patchDoctor({ status, error: err, running: false, atLabel: nowClock() });
+      if (spinnerTimer) {
+        clearInterval(spinnerTimer);
+        spinnerTimer = null;
+      }
     }
 
     async function rerunDoctor(): Promise<void> {
@@ -4115,7 +4144,7 @@ export async function runUi(opts: RunUiOptions = {}): Promise<void> {
 
     function spinnerTick(): void {
       const d = doctorOf(state);
-      if (!d.running) return;
+      if (!d.running && d.status !== "loading") return;
       state = { ...state, doctor: { ...d, spinnerFrame: d.spinnerFrame + 1 } };
       if (state.tab === "doctor") render();
     }

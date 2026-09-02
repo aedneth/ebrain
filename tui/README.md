@@ -27,9 +27,10 @@ in tmux and the data views consume the same contract-tested ebrain CLI commands.
   optional exact task prompt. This is a reversible capability preset: it never creates or changes
   an execution profile, provider, or model. `r` clears the transient type, prompt, workflow
   attribution, and any stale guided preview.
-- **Guided Launch:** `w`, or Enter on Guided Launch, opens a centered target/profile/capability/
-  workspace review. Fields report their available count; a singleton is explicitly locked, while
-  arrows change only fields with alternatives. `c`, or Enter on the workspace field, reuses the
+- **Guided Launch:** `w`, or Enter on Guided Launch, opens a target/profile/capability/workspace
+  review. Each field shows its value and, quieter after it, where it comes from and whether the
+  arrows can change it; a field with a single option says it is the only one instead of pretending
+  to offer a choice. `c`, or Enter on the workspace field, reuses the
   validated workspace picker. Enter previews then reviews the exact launch, and only `y` confirms
   it. Existing sessions keep their original directory when a later workspace is selected.
 - **Sessions (`3`):** `a`/Enter attaches, `k` asks before killing, and `p` opens a
@@ -45,8 +46,17 @@ in tmux and the data views consume the same contract-tested ebrain CLI commands.
 Execution profiles are user-owned local model orderings with provenance. Task Setup provides a
 user-selected capability preset only; it does not recommend a provider, benchmark winner, or model.
 
-The centered footer keeps at most six `[key] action` controls visible. Use `?` for the full
-action reference when a view has more actions than fit comfortably.
+The centered footer keeps at most six `[key] action` controls visible and drops trailing controls
+whole when a row is too narrow for all of them, so a hint is never cut mid-word. Use `?` for the
+full action reference, which explains every key of the current view in one line each.
+
+## Overlays
+
+A modal owns the screen while it is open: the view behind it keeps its text but loses its colour,
+the modal is the only box with a lit border, and its own actions row is the only list of keys (the
+footer goes quiet rather than repeating them). Confirmations and references centre in the view;
+anything with a cursor or a selection - the palette, composers, pickers, forms - anchors near the
+top so it holds still while it grows. Overlays never cover the status bar, tabs or footer.
 
 See `docs/TUI-CLI-COVERAGE.md` for the boundary between daily TUI controls and explicit CLI
 administration commands.
