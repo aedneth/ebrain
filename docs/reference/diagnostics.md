@@ -35,6 +35,14 @@ A daemon that is only ever started by hand will eventually be down without anyon
 every registered agent will be pointed at a host that is not there. `ebrain daemon install-service`
 registers it with systemd or launchd so it comes back after a reboot.
 
+It also performs the handover, which is the part that matters. Anyone running that command is on a
+machine where the daemon is already running the way it always has: started by hand. Enabling the
+unit without stopping that host first would start a second one against a port and a database lock
+the first still owns, and the unit restarts on failure — so the result would be a crash loop
+reported as a successful install. The manually started host is stopped first, and the command
+confirms against the health endpoint that something is actually serving before it claims
+supervision is in place.
+
 ## Check the adapters themselves
 
 ```bash
