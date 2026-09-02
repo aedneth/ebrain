@@ -88,3 +88,62 @@ ebrain_export_home() {
 	EBRAIN_HOME=$(ebrain_resolve_home "${1:-$0}")
 	export EBRAIN_HOME
 }
+
+# ── portable userland ────────────────────────────────────────────────────────
+#
+# eBrain is developed and CI-tested on Linux, and the shell it grew up in is GNU. Three GNU
+# spellings had leaked across the harness and each one fails differently on a BSD userland
+# (macOS), always quietly: a bare `mktemp` aborts, `stat -c` prints nothing, and a missing
+# `timeout` makes the whole command substitution empty. Every one of those is swallowed by a
+# nearby `|| true` or `2>/dev/null`, so the symptom is not an error — it is a check that
+# silently reports the wrong thing, which is the failure class this harness cares about most.
+#
+# These shims are not a claim of macOS support; see the platform note in README. They exist so
+# that a Mac user sees eBrain degrade honestly instead of misreporting.
+
+# ebrain_mktemp — a temp file with an explicit template. GNU allows a bare `mktemp`; BSD requires
+# the template, so passing one always is the portable spelling.
+ebrain_mktemp() {
+	mktemp "${TMPDIR:-/tmp}/ebrain.XXXXXXXX"
+}
+
+# ebrain_timeout <seconds> <command...> — bound a command's runtime where the platform can.
+# GNU coreutils ships `timeout`; macOS ships none in the base system and `gtimeout` only with
+# Homebrew coreutils. Running unbounded is the honest degradation: the alternative is refusing to
+# run a diagnostic at all on a platform where it would have worked.
+ebrain_timeout() {
+	_secs=$1
+	shift
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "$_secs" "$@"
+	elif command -v gtimeout >/dev/null 2>&1; then
+		gtimeout "$_secs" "$@"
+	else
+		# No timeout binary at all (macOS base userland). "Unbounded" is not an honest fallback
+		# for a diagnostic: a blocked engine call would hang `ebrain doctor` forever, and a hang
+		# is indistinguishable from slow. A shell watchdog is less precise than timeout(1) but it
+		# always terminates.
+		"$@" &
+		_ebrain_job=$!
+		( sleep "$_secs"; kill "$_ebrain_job" 2>/dev/null ) &
+		_ebrain_watch=$!
+		wait "$_ebrain_job"
+		_ebrain_rc=$?
+		kill "$_ebrain_watch" 2>/dev/null
+		return $_ebrain_rc
+	fi
+}
+
+# ebrain_file_mode <path> — octal permissions, or empty when they cannot be read.
+ebrain_file_mode() {
+	stat -c '%a' "$1" 2>/dev/null || stat -f '%OLp' "$1" 2>/dev/null || printf ''
+}
+
+# ebrain_os — the platform, named honestly for anything that reports support.
+ebrain_os() {
+	case "$(uname -s 2>/dev/null)" in
+		Linux)  printf 'linux' ;;
+		Darwin) printf 'macos' ;;
+		*)      printf 'other' ;;
+	esac
+}

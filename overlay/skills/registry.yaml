@@ -1,6 +1,6 @@
 # registry.yaml — catálogo federado de skills canónicas (generado por skills-federate)
 # fuente de verdad para el skillpack que ebrain publica vía list_skills (MCP).
-generated: 2026-09-01T22:23:30Z
+generated: 2026-09-02T01:52:47Z
 skills:
   - name: remember
     source: harness

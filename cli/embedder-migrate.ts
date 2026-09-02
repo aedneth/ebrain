@@ -315,6 +315,20 @@ async function defaultWriteConfig(target: TargetEmbedder): Promise<void> {
  * Default submit (EFFECTFUL — reached only past the confirmation gate). Reuses cli/remote-tools.ts → callTool to
  * submit the `submit_job` MCP tool with the re-embed payload, exactly as submitCycle does. Lazy import.
  */
+/**
+ * Restart the host so it picks up the embedder configuration just written.
+ *
+ * The engine resolves its embedding gateway once at boot, so a running host keeps using the model
+ * it started with no matter what the config file now says. This is the step that makes the write
+ * actually take effect before anything is re-embedded against it.
+ */
+async function defaultReloadDaemon(): Promise<void> {
+  const { stop, ensure } = await import("./daemon-control.ts");
+  await stop({ quiet: true });
+  const status = await ensure({ quiet: true });
+  if (status.state !== "up") throw new Error(`host did not come back up: ${status.detail}`);
+}
+
 async function defaultSubmit(payload: ReembedSubmission): Promise<unknown> {
   const { callTool } = await import("./remote-tools.ts");
   return callTool(SUBMIT_JOB_TOOL, payload as unknown as Record<string, unknown>);
@@ -378,6 +392,8 @@ export interface RunMigrateOptions {
   estimate?: (target: TargetEmbedder, actions: EmbedderAction[]) => Promise<CostPreview>;
   isDaemonReachable?: () => Promise<boolean>;
   writeConfig?: (target: TargetEmbedder) => Promise<void>;
+  /** Restart the host so it loads the embedder just written. See the note at the call site. */
+  reloadDaemon?: () => Promise<void>;
   submit?: (payload: ReembedSubmission) => Promise<unknown>;
   confirm?: (target: TargetEmbedder) => boolean;
   log?: (line: string) => void;
@@ -407,6 +423,7 @@ export async function runMigrate(opts: RunMigrateOptions = {}): Promise<MigrateR
   const estimate = opts.estimate ?? defaultEstimate;
   const isDaemonReachable = opts.isDaemonReachable ?? defaultIsDaemonReachable;
   const writeConfig = opts.writeConfig ?? defaultWriteConfig;
+  const reloadDaemon = opts.reloadDaemon ?? defaultReloadDaemon;
   const submit = opts.submit ?? defaultSubmit;
   const confirm = opts.confirm ?? defaultConfirm;
   const to = opts.to && opts.to.trim() !== "" ? opts.to.trim() : null;
@@ -464,6 +481,21 @@ export async function runMigrate(opts: RunMigrateOptions = {}): Promise<MigrateR
   }
 
   await writeConfig(target);
+
+  // The host resolves its embedding gateway ONCE, at boot. Writing the new model to the engine
+  // config and then submitting the re-embed to the process that is still running would re-embed
+  // the whole store with the OLD model and stamp it with the NEW signature — a silent, expensive
+  // corruption that reports success. Restart between the write and the submit so the job runs
+  // under the embedder the user just chose, and refuse to submit if the restart did not take.
+  try {
+    await reloadDaemon();
+  } catch (e) {
+    throw new DaemonUnreachableError(
+      "the embedder configuration was written, but the host could not be restarted to load it. " +
+        "Nothing was re-embedded. Run 'ebrain daemon restart', then re-run this command.",
+    );
+  }
+
   const payload = buildReembedSubmission({ sourceId: opts.source ?? undefined });
   const submitResult = await submit(payload);
 

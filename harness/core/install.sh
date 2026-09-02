@@ -137,10 +137,29 @@ if [ -n "$NORMS_TARGET" ] && [ "$NORMS_TARGET" != "null" ] && [ -f "$NORMS_TARGE
   grep -q 'ebrain-norms:begin' "$NORMS_TARGET" && echo "  normas ✓ bloque presente en $NORMS_TARGET" || { echo "  normas ⚠ bloque ausente en $NORMS_TARGET"; rc=1; }
 fi
 
-# b.1) modo MCP declarado por el adapter (D.4.3)
+# b.1) registro MCP REAL del adapter (D.4.3 · F3).
+# Antes esto reportaba lo que el manifest DECLARA (`mcp.register`), no lo que está instalado: ese
+# string es idéntico en toda máquina, así que imprimía "mcp ✓" incluso donde el onboarding nunca
+# corrió. Es exactamente el fallo que la nota de arriba llama "el peor bug: el doctor pinta OK sin
+# haber instalado nada". Ahora se lee la config real del agente y se distingue "no registrado" de
+# "no pude verificarlo".
 if [ -n "$MCP_REGISTER" ] && [ "$MCP_REGISTER" != "null" ]; then
   if printf '%s' "$MCP_REGISTER" | grep -q 'ebrain onboard'; then
-    echo "  mcp ✓ http-daemon (ebrain onboard)"
+    MCP_CHECK="$EBRAIN_HOME/cli/mcp-registration.ts"
+    if [ -f "$MCP_CHECK" ]; then
+      # The checker prints its own verdict line. If it cannot RUN, say that instead of setting
+      # rc=1 with nothing on screen — an invisible failure is the class this block replaced.
+      mcp_out="$("$BUN" run "$MCP_CHECK" "$AGENT" 2>&1)"; mcp_rc=$?
+      if [ -n "$mcp_out" ]; then
+        printf '%s\n' "$mcp_out"
+      else
+        echo "  mcp ⚠ the registration check produced no output (rc=$mcp_rc)"
+      fi
+      [ "$mcp_rc" -eq 0 ] || rc=1
+    else
+      echo "  mcp ⚠ cannot verify: $MCP_CHECK missing"
+      rc=1
+    fi
   elif printf '%s' "$MCP_REGISTER" | grep -qE 'gbrain-mcp|ebrain-mcp'; then
     echo "  mcp ⚠ stdio-local fallback"
   else

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * ebrain sessions <list|new|peek|send|kill> — orquestación de terminales agénticas sobre tmux
+ * ebrain sessions <list|new|peek|send|kill|reap> — orquestación de terminales agénticas sobre tmux
  * (SPRINT-TUI 6.1.6 · ADR-003 §2 · ULTRAPLAN-TUI §2/§5.4). La TUI (F6.4) es SOLO el control plane;
  * tmux es el data plane — las sesiones sobreviven a la TUI y a este proceso CLI.
  *
@@ -21,6 +21,7 @@
  *   ebrain sessions peek <name> [--lines N] --json
  *   ebrain sessions send <name> "<texto>" --yes --json
  *   ebrain sessions kill <name> --yes --json
+ *   ebrain sessions reap [--yes] --json      # mata solo sesiones cuyos panes TODOS murieron
  */
 import { existsSync, realpathSync } from "fs";
 import { join, resolve } from "path";
@@ -125,6 +126,49 @@ export type Result<T> = { ok: true } & T | { ok: false; error: TmuxError };
  * the only field that could contain one — is last and is parsed as the remainder.
  */
 const TMUX_FIELD_SEP = "|";
+
+// ── liveness ─────────────────────────────────────────────────────────────
+// A tmux session outliving the TUI is the design. A tmux session outliving its AGENT is a
+// leak: `list` shows name, creation time, attachment and path, none of which change when the
+// process inside dies, so a crashed session is byte-identical to a working one and stays that
+// way until someone notices. tmux does know — it tracks per-pane liveness — the CLI just never
+// asked.
+
+export interface SessionLiveness {
+  panes: number;
+  /** Every pane exited and tmux is holding the corpse open (`remain-on-exit`). */
+  dead: boolean;
+  /** No pane is running anything but a plain shell: the agent is gone, the terminal remains. */
+  idle: boolean;
+  commands: string[];
+}
+
+const PLAIN_SHELLS = new Set(["bash", "zsh", "sh", "fish", "dash", "ksh", "tmux"]);
+
+/** Parse `list-panes -a -F '#{session_name}<sep>#{pane_dead}<sep>#{pane_current_command}'`. */
+export function parsePaneTable(stdout: string, sep = TMUX_FIELD_SEP): Map<string, SessionLiveness> {
+  const byName = new Map<string, SessionLiveness>();
+  for (const line of stdout.split("\n")) {
+    if (!line.trim()) continue;
+    const [name, deadFlag, ...rest] = line.split(sep);
+    if (!name) continue;
+    const command = rest.join(sep).trim();
+    const entry = byName.get(name) ?? { panes: 0, dead: true, idle: true, commands: [] };
+    entry.panes += 1;
+    if (deadFlag !== "1") entry.dead = false;
+    if (command) entry.commands.push(command);
+    if (deadFlag !== "1" && command && !PLAIN_SHELLS.has(command)) entry.idle = false;
+    byName.set(name, entry);
+  }
+  return byName;
+}
+
+export async function sessionLiveness(): Promise<Map<string, SessionLiveness>> {
+  const format = ["#{session_name}", "#{pane_dead}", "#{pane_current_command}"].join(TMUX_FIELD_SEP);
+  const r = await tmuxRaw(["list-panes", "-a", "-F", format]);
+  if ("spawnError" in r || r.code !== 0) return new Map();
+  return parsePaneTable(r.stdout);
+}
 
 export async function listSessions(): Promise<Result<{ sessions: SessionRow[] }>> {
   const format = ["#{session_name}", "#{session_created}", "#{session_attached}", "#{session_path}"].join(TMUX_FIELD_SEP);
@@ -348,8 +392,64 @@ async function main() {
       const r = await listSessions();
       if (!r.ok) { printResult(json, false, r, "", (e) => e.message); process.exit(1); }
       if (json) { console.log(JSON.stringify({ sessions: r.sessions }, null, 2)); return; }
+      const live = await sessionLiveness();
       console.log(`ebrain sessions (${r.sessions.length})`);
-      for (const s of r.sessions) console.log(`  ${s.attached ? "●" : "○"} ${s.name}  agent=${s.agent} slug=${s.slug} cwd=${s.cwd} created=${s.created}`);
+      for (const s of r.sessions) {
+        const l = live.get(s.name);
+        const state = l?.dead ? " [dead]" : l?.idle ? " [idle: no agent running]" : "";
+        console.log(`  ${s.attached ? "●" : "○"} ${s.name}${state}  agent=${s.agent} slug=${s.slug} cwd=${s.cwd} created=${s.created}`);
+      }
+      if ([...live.values()].some((l) => l.dead)) console.log("  reap the dead ones with: ebrain sessions reap --yes");
+      return;
+    }
+    case "reap": {
+      // Only sessions whose panes have ALL exited are reaped. An "idle" session — a pane sitting
+      // at a shell — is reported and never killed: a user who dropped out of an agent into a
+      // shell on purpose would not forgive us for deciding that looked abandoned.
+      const r = await listSessions();
+      if (!r.ok) { printResult(json, false, r, "", (e) => e.message); process.exit(1); }
+      const live = await sessionLiveness();
+      const dead = r.sessions.filter((s) => live.get(s.name)?.dead);
+      const idle = r.sessions.filter((s) => !live.get(s.name)?.dead && live.get(s.name)?.idle);
+
+      if (!yes) {
+        // Same envelope and the same exit code as every other mutating subcommand: refusing for
+        // want of --yes is `confirm-required` → exit 2, whether or not --json was asked for.
+        const payload = {
+          ok: false,
+          error: { type: "confirm-required", message: "sessions reap kills tmux sessions; confirm with --yes" },
+          would_reap: dead.map((s) => s.name),
+          idle: idle.map((s) => s.name),
+        };
+        if (json) { console.log(JSON.stringify(payload, null, 2)); process.exit(2); }
+        console.log(`ebrain sessions reap: ${dead.length} dead session(s) would be killed`);
+        for (const s of dead) console.log(`  × ${s.name}`);
+        for (const s of idle) console.log(`  · ${s.name} (idle, NOT reaped — a shell is still a session someone may want)`);
+        if (dead.length) {
+          console.log("  confirm with: ebrain sessions reap --yes");
+        } else {
+          // Be honest about WHY it is empty. Under tmux's default `remain-on-exit off` a crashed
+          // pane takes its session with it, so tmux has already done the reaping and a dead
+          // session cannot be observed. Saying only "nothing to reap" invites the reader to
+          // conclude their orphaned sessions were missed.
+          console.log("  nothing to reap — with tmux's default 'remain-on-exit off' a crashed agent");
+          console.log("  takes its session with it, so tmux reaps these before eBrain can see them.");
+          if (idle.length) console.log("  the sessions above are idle, not dead: close them with 'ebrain sessions kill <name> --yes'.");
+        }
+        process.exit(2);
+      }
+
+      const reaped: string[] = [];
+      const failed: string[] = [];
+      for (const s of dead) {
+        const k = await killSession(s.name, true);
+        (k.ok ? reaped : failed).push(s.name);
+      }
+      if (json) { console.log(JSON.stringify({ ok: failed.length === 0, reaped, failed, idle: idle.map((s) => s.name) }, null, 2)); return; }
+      console.log(`ebrain sessions reap: ${reaped.length} reaped${failed.length ? `, ${failed.length} failed` : ""}`);
+      for (const name of reaped) console.log(`  ✓ ${name}`);
+      for (const name of failed) console.log(`  ✗ ${name}`);
+      if (failed.length) process.exit(1);
       return;
     }
     case "new": {
@@ -395,7 +495,7 @@ async function main() {
       return;
     }
     default:
-      die(`ebrain sessions: unknown subcommand '${sub ?? ""}' (supported: list · new · peek · send · kill)`, 2);
+      die(`ebrain sessions: unknown subcommand '${sub ?? ""}' (supported: list · new · peek · send · kill · reap)`, 2);
   }
 }
 

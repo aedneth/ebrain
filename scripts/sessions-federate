@@ -27,7 +27,7 @@ mkdir -p "$SESSIONS"
 . "$EBRAIN_HOME/harness/core/trust.sh"
 
 count=0; skipped=0; denied=0
-UPDATED_LIST="$(mktemp)"
+UPDATED_LIST="$(ebrain_mktemp)"
 trap 'rm -f "$UPDATED_LIST"' EXIT
 while IFS= read -r sdir; do
   repo="$(dirname "$(dirname "$sdir")")"

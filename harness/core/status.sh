@@ -33,7 +33,7 @@ if [ "$JSON" = 1 ]; then
     printf '%s' "$j_sources" | jq -e . >/dev/null 2>&1 || j_sources='[]'
   else
     j_state="idle"; j_served_by="direct"; j_cached=false
-    j_src="$(cd /tmp && timeout 50 "$RUN" sources list --timeout=40000 2>&1 || true)"
+    j_src="$(cd /tmp && ebrain_timeout 50 "$RUN" sources list --timeout=40000 2>&1 || true)"
     j_names="$(printf '%s' "$j_src" | grep -oE '"name": *"[^"]+"' | cut -d'"' -f4 | grep -v '^default$')"
     j_sources="$(printf '%s\n' "$j_names" | jq -R -s -c 'split("\n") | map(select(length>0))')"
     mkdir -p "$CACHE_DIR" 2>/dev/null || true
@@ -55,7 +55,25 @@ if [ "$JSON" = 1 ]; then
         [ -f "$m" ] || continue
         ja="$(basename "$(dirname "$m")")"
         jkey="$("$BUN" run "$MGET" "$m" agent 2>/dev/null || true)"
-        jok=false; [ "$jkey" = "$ja" ] && jok=true
+        # `ok` used to mean only "the manifest parses and its agent key matches its directory",
+        # which is true of every adapter in the repo on every machine — so this field reported
+        # green for a fleet that was not installed, while `ebrain fleet --json` emitted the same
+        # shape from real state. Two contracts, one name, opposite meanings. `ok` now means the
+        # adapter is genuinely wired: manifest consistent AND the MCP server present in its config.
+        jok=false
+        if [ "$jkey" = "$ja" ]; then
+          # Only adapters that DECLARE an MCP registration are held to having one. `generic` has
+          # no native MCP client, so asking whether it is registered is a question with no answer;
+          # marking it red would be as dishonest as the blanket green this replaced.
+          jreg="$("$BUN" run "$MGET" "$m" mcp.register 2>/dev/null || true)"
+          if [ -z "$jreg" ] || [ "$jreg" = "null" ]; then
+            jok=true
+          elif [ -f "$EBRAIN_HOME/cli/mcp-registration.ts" ]; then
+            "$BUN" run "$EBRAIN_HOME/cli/mcp-registration.ts" "$ja" >/dev/null 2>&1 && jok=true
+          else
+            jok=true
+          fi
+        fi
         jq -n --arg name "$ja" --argjson ok "$jok" '{name:$name, ok:$ok}'
       done | jq -s -c '.'
     )"
@@ -86,7 +104,7 @@ serve_pid="$(pgrep -f 'cli\.ts serve' 2>/dev/null | head -1 || true)"
 if [ -n "$serve_pid" ]; then
   printf '  brain    UP · servido por MCP (PID %s) · lock PGLite activo\n' "$serve_pid"
 else
-  src="$(cd /tmp && timeout 50 "$RUN" sources list --timeout=40000 2>&1 || true)"
+  src="$(cd /tmp && ebrain_timeout 50 "$RUN" sources list --timeout=40000 2>&1 || true)"
   names="$(printf '%s' "$src" | grep -oE '"name": *"[^"]+"' | cut -d'"' -f4 | grep -v '^default$' | paste -sd' ' - 2>/dev/null)"
   if [ -n "$names" ]; then printf '  brain    idle · sources: %s\n' "$names"
   else printf '  brain    idle · sources: (no legibles) %s\n' "$(printf '%s' "$src" | head -1)"; fi

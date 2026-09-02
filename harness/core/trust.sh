@@ -18,7 +18,14 @@
 # (cli/deny-policy.ts) — $EBRAIN_DENIED_REPOS, else one bare name per line in the config file,
 # with '#' comments. A clean install denies nothing by name; default-deny federation is the first
 # gate and this is the second.
+# Both locations are read, mirroring cli/deny-policy.ts. This file used to honour XDG_CONFIG_HOME
+# while the rest of eBrain lives unconditionally under ~/.config/ebrain, so on a machine with
+# XDG_CONFIG_HOME set elsewhere a policy dropped beside the token file was read by nobody — and an
+# isolation policy that is silently not found is the same thing as no policy.
 TRUST_DENY_CONFIG="${EBRAIN_DENY_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/ebrain/denied-repos}"
+TRUST_DENY_CONFIG_ALT="$HOME/.config/ebrain/denied-repos"
+[ "$TRUST_DENY_CONFIG_ALT" = "$TRUST_DENY_CONFIG" ] && TRUST_DENY_CONFIG_ALT=''
+[ -n "${EBRAIN_DENY_CONFIG:-}" ] && TRUST_DENY_CONFIG_ALT=''
 TRUST_POLICY_ERROR=0
 TRUST_DENY=''
 
@@ -61,13 +68,24 @@ EOF
 
 if [ -n "${EBRAIN_DENIED_REPOS+x}" ]; then
   trust__load "EBRAIN_DENIED_REPOS" "$EBRAIN_DENIED_REPOS" || :
-elif [ -e "$TRUST_DENY_CONFIG" ]; then
-  if [ -r "$TRUST_DENY_CONFIG" ]; then
-    trust__load "$TRUST_DENY_CONFIG" "$(cat "$TRUST_DENY_CONFIG")" || :
-  else
-    # Present but unreadable: we cannot know the policy, so we assume the strictest one.
-    TRUST_POLICY_ERROR=1
-    printf 'trust.sh: deny policy exists but is unreadable — treating every repository as denied\n' >&2
+else
+  trust__raw=''
+  trust__origin=''
+  for trust__cfg in "$TRUST_DENY_CONFIG" "$TRUST_DENY_CONFIG_ALT"; do
+    [ -n "$trust__cfg" ] || continue
+    [ -e "$trust__cfg" ] || continue
+    if [ -r "$trust__cfg" ]; then
+      trust__raw="$trust__raw
+$(cat "$trust__cfg")"
+      if [ -n "$trust__origin" ]; then trust__origin="$trust__origin, $trust__cfg"; else trust__origin="$trust__cfg"; fi
+    else
+      # Present but unreadable: we cannot know the policy, so we assume the strictest one.
+      TRUST_POLICY_ERROR=1
+      printf 'trust.sh: deny policy exists but is unreadable — treating every repository as denied\n' >&2
+    fi
+  done
+  if [ -n "$trust__origin" ]; then
+    trust__load "$trust__origin" "$trust__raw" || :
   fi
 fi
 

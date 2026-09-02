@@ -141,8 +141,14 @@ export function writeThinClientConfig(opts: {
       oauth_client_id: opts.clientId,
     },
   };
+  // Atomic, because a torn write here bricks the daemon permanently rather than transiently:
+  // the boot preflight reads this file back, `readJsonObject` refuses to touch invalid JSON, and
+  // the host therefore exits on every subsequent start with no way for the user to see why.
   mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
-  writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  const tmp = `${file}.tmp-${process.pid}`;
+  writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(tmp, 0o600);
+  renameSync(tmp, file);
   chmodSync(file, 0o600);
 }
 

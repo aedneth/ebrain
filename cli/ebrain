@@ -86,7 +86,9 @@ ebrain — unified harness + agentic-memory layer (provider-agnostic)
   ebrain advise "<task>" [--json]                             compatible alias of task-profile
   ebrain up [--json]                                          plug-and-play boot: daemon + token + onboard + smoke
   ebrain onboard [--all|agent] [--json]                       register HTTP MCP for detected agents
-  ebrain daemon {start|stop|status|restart}                  shared-brain HTTP-MCP host (:8541 loopback, owns the lock)
+  ebrain daemon {start|stop|status|restart|ensure}           shared-brain HTTP-MCP host (:8541 loopback, owns the lock)
+  ebrain daemon install-service|uninstall-service            keep the host running across reboots and crashes
+  ebrain uninstall [--dry-run] [--purge]                     remove eBrain: agent entries, launcher, service, config
   ebrain norms render <file>                                 render the managed norms block
   ebrain federate sessions|skills                            sweep .brain/ or skills into federated memory
   ebrain help
@@ -136,6 +138,7 @@ case "$cmd" in
   up)         run "$SCRIPTS/ebrain-up" up "$@" ;;
   onboard)    run "$SCRIPTS/ebrain-up" onboard "$@" ;;
   daemon)    run "$SCRIPTS/ebrain-daemon" "$@" ;;
+  uninstall) run_bun "$EBRAIN_HOME/cli/uninstall.ts" "$@" ;;
   route)     if [ -x "$CFG/ebrain-route" ]; then "$CFG/ebrain-route" "$@"; else run "$SCRIPTS/ebrain-route" "$@"; fi ;;
   ui)       run_ui "$@" ;;
   harness)

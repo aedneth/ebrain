@@ -308,7 +308,14 @@ export async function toolsListSmoke(url: string, token: string, timeoutMs = 10_
     });
     const body = await fetchTextSafe(res);
     if (!res.ok) return { ok: false, message: `tools/list returned HTTP ${res.status}: ${redactSecrets(body, [token])}` };
-    return { ok: true, tools: toolsCountFromMcpBody(body) };
+    // A 200 carrying no tools is not a working brain: it is what an unreadable body, an empty
+    // surface or a shape this parser does not understand all look like. Reporting that as a
+    // green smoke test is how a half-broken install passes its own verification.
+    const tools = toolsCountFromMcpBody(body);
+    if (tools === 0) {
+      return { ok: false, message: "tools/list answered 200 but exposed no tools; the host is up without a usable tool surface" };
+    }
+    return { ok: true, tools };
   } catch (e) {
     return { ok: false, message: redactSecrets(e instanceof Error ? e.message : String(e), [token]) };
   } finally {

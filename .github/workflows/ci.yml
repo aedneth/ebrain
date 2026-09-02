@@ -56,10 +56,36 @@ jobs:
         run: bun run website:build
 
       - name: Shell syntax check
+        # Every shell entrypoint, not a hand-listed five. The list drifted behind the tree, so a
+        # launcher or a harness core file could ship unparseable and only fail on a user's machine.
         run: |
-          for f in scripts/install.sh scripts/ebrain-q scripts/ebrain-up scripts/ebrain-daemon cli/ebrain; do
-            [ -f "$f" ] && sh -n "$f" 2>/dev/null || bash -n "$f"
+          fail=0
+          for f in cli/ebrain scripts/* harness/core/*.sh; do
+            case "$f" in *.md|*.ts|*/systemd) continue ;; esac
+            [ -f "$f" ] || continue
+            head -n1 "$f" | grep -qE '^#!.*(sh|bash)' || case "$f" in *.sh) ;; *) continue ;; esac
+            if ! bash -n "$f" 2>/tmp/shellerr; then
+              echo "::error file=$f::$(cat /tmp/shellerr)"; fail=1
+            fi
           done
+          exit $fail
+
+      - name: No GNU-only spellings outside the portability shims
+        # These four fail differently on a BSD userland (macOS) and every failure is swallowed by a
+        # nearby `|| true`, so the symptom is a check that silently reports the wrong thing.
+        # harness/core/ebrain-home.sh holds the shims and is the only place allowed to name them.
+        run: |
+          fail=0
+          check() {
+            if rg -n "$1" scripts/ harness/ --glob '!harness/core/ebrain-home.sh' 2>/dev/null; then
+              echo "::error::$2"; fail=1
+            fi
+          }
+          check '\$\(mktemp\)'            "bare mktemp needs a template on BSD — use ebrain_mktemp"
+          check 'stat -c'                 "stat -c is GNU-only — use ebrain_file_mode"
+          check '(^|[|;&(] *)timeout [0-9]' "timeout is GNU coreutils — use ebrain_timeout"
+          check 'declare -A|local -A'     "associative arrays need bash 4; macOS ships bash 3.2"
+          exit $fail
 
       - name: Zero-hex rule (TUI colors come from the design system, not literals)
         run: |

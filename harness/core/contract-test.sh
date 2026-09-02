@@ -50,7 +50,7 @@ JSON_TEST="$EBRAIN_HOME/cli/contract.test.ts"
 BUN="${BUN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN=bun
 if [ -f "$JSON_TEST" ]; then
   if command -v "$BUN" >/dev/null 2>&1; then
-    jt="$(mktemp)"
+    jt="$(ebrain_mktemp)"
     if "$BUN" test "$JSON_TEST" >"$jt" 2>&1; then
       json_ok=1
     else

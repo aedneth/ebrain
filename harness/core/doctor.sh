@@ -58,6 +58,15 @@ launcher_path() { # echoes the first existing/executable launcher for $1, or not
 for f in ebrain-run ebrain-mcp ebrain-route ebrain-q ebrain-brain ebrain-daemon ebrain-up; do
   if p="$(launcher_path "$f")"; then c_ok "launcher:$f" "$f ($p)"; else c_fail "launcher:$f" "$f falta o no ejecutable (ni $CFG/$f ni $EBRAIN_HOME/scripts/$f)"; fi
 done
+
+# Plataforma. README promete que doctor la reporta, así que doctor la reporta — y dice la verdad
+# sobre el soporte en vez de callarlo: Linux es la única plataforma probada en CI.
+c_sec "plataforma"
+case "$(ebrain_os)" in
+  linux) c_ok "platform" "Linux — la plataforma soportada y probada en CI" ;;
+  macos) c_warn "platform" "macOS — NO soportada (sin job de CI); eBrain intenta degradar honestamente, no garantiza funcionar" ;;
+  *)     c_warn "platform" "$(uname -s 2>/dev/null || echo desconocida) — NO soportada; solo Linux está probado" ;;
+esac
 for f in gbrain-run gbrain-mcp; do
   if [ -e "$CFG/$f" ] || [ -e "$EBRAIN_HOME/scripts/$f" ]; then c_ok "launcher:compat:$f" "$f compat"; else c_warn "launcher:compat:$f" "$f compat ausente (fallback stdio/legacy podría requerirlo)"; fi
 done
@@ -79,7 +88,7 @@ c_sec "config"
 # present-but-wrong (bad perms) stays a WARN; only real corruption would be a FAIL.
 [ -f "$CFG/routing.yaml" ] && c_ok "config:routing.yaml" "routing.yaml" || c_warn "config:routing.yaml" "routing.yaml aún no creado — corré 'ebrain up' para configurar ($CFG/routing.yaml)"
 if [ -f "$CFG/.env" ]; then
-  perm="$(stat -c '%a' "$CFG/.env" 2>/dev/null || echo '?')"
+  perm="$(ebrain_file_mode "$CFG/.env")"; [ -n "$perm" ] || perm='?'
   [ "$perm" = "600" ] && c_ok "config:dotenv:perm" "dotenv de config presente (chmod 600)" || c_warn "config:dotenv:perm" "dotenv presente pero perms=$perm (esperado 600)"
   # presencia de keys SIN imprimir valor (subshell: source carga sin volcar; solo -n)
   for k in OPENAI_API_KEY OPENROUTER_API_KEY; do
@@ -96,7 +105,7 @@ fi
 # la suite bun 6× (SPRINT-TUI 6.1.8 perf: doctor 31s→~18s). No cambia rc: este check ya registró
 # ok/fail arriba; los adapters no son el watchdog del contrato — este bloque sí.
 c_sec "guard de secretos (contract-test)"
-ct_tmp="$(mktemp)"
+ct_tmp="$(ebrain_mktemp)"
 if bash "$CORE/contract-test.sh" >"$ct_tmp" 2>&1; then
   c_ok "guard:contract-test" "$(tail -1 "$ct_tmp")"
 else
@@ -110,7 +119,7 @@ export EBRAIN_CONTRACT_TESTED=1   # ver comentario arriba: dedup del contrato en
 c_sec "flota (harness adapters)"
 all_agents(){ for m in "$EBRAIN_HOME"/harness/adapters/*/manifest.yaml; do [ -f "$m" ] && basename "$(dirname "$m")"; done; }
 for a in $(all_agents); do
-  a_tmp="$(mktemp)"
+  a_tmp="$(ebrain_mktemp)"
   if bash "$CORE/install.sh" --doctor "$a" >"$a_tmp" 2>&1; then c_ok "adapter:$a" "adapter $a"; else c_warn "adapter:$a" "adapter $a: pendiente (ver 'ebrain harness doctor $a')"; fi
   if grep -q 'mcp .*http-daemon' "$a_tmp" 2>/dev/null; then
     c_ok "adapter:$a:mcp" "adapter $a MCP=http-daemon"
@@ -140,7 +149,7 @@ serve_pid="$(pgrep -f 'cli\.ts serve' 2>/dev/null | head -1 || true)"
 REMOTE_TOOLS="$EBRAIN_HOME/cli/remote-tools.ts"
 BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN_BIN=bun
 if [ -n "$serve_pid" ] && [ -f "$REMOTE_TOOLS" ]; then
-  src_json="$(mktemp)"; src_err="$(mktemp)"
+  src_json="$(ebrain_mktemp)"; src_err="$(ebrain_mktemp)"
   if "$BUN_BIN" run "$REMOTE_TOOLS" sources-list --json >"$src_json" 2>"$src_err"; then
     if [ "$TRUST_POLICY_ERROR" -eq 1 ]; then
       # Never claim isolation is clean under a policy we could not parse.
@@ -157,7 +166,7 @@ if [ -n "$serve_pid" ] && [ -f "$REMOTE_TOOLS" ]; then
   fi
   rm -f "$src_json" "$src_err"
 else
-  src_out="$(cd /tmp && timeout 60 "$RUN" sources list --timeout=45000 2>&1 || true)"
+  src_out="$(cd /tmp && ebrain_timeout 60 "$RUN" sources list --timeout=45000 2>&1 || true)"
   if [ "$TRUST_POLICY_ERROR" -eq 1 ]; then
     # trust_denied answers "denied" for everything in this state; that is correct for enforcement
     # but would be a false isolation verdict here.
@@ -197,8 +206,8 @@ c_sec "brain engine"
 if [ -n "$serve_pid" ]; then
   c_ok "brain:engine" "brain UP (MCP serve, PID $serve_pid); stats vía tools MCP o 'ebrain status' con MCP idle"
 else
-  h_tmp="$(mktemp)"
-  if (cd /tmp && timeout 60 "$RUN" doctor >"$h_tmp" 2>&1); then :; fi
+  h_tmp="$(ebrain_mktemp)"
+  if (cd /tmp && ebrain_timeout 60 "$RUN" doctor >"$h_tmp" 2>&1); then :; fi
   if grep -q 'GBrain Health Check' "$h_tmp"; then
     c_ok "brain:engine" "el motor respondió (WARN internos de resolver_health/skills = no-bloqueantes para ebrain)"
   else
@@ -209,7 +218,7 @@ fi
 
 # ── memory recall (embedder) ─────────────────────────────────────────────────
 c_sec "memory recall"
-emb_tmp="$(mktemp)"
+emb_tmp="$(ebrain_mktemp)"
 EMB_ENV_FILE="$HOME/.config/ebrain/.env"
 # The embedder decision hinges on whether a hosted key (e.g. OPENROUTER_API_KEY) is configured — which
 # lives in the daemon's env file, not a bare shell. Source it in a SUBSHELL (scoped; the value is never

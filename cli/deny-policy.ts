@@ -41,11 +41,32 @@ const SEPARATORS = /[ \t\v\f\r,]+/;
 const EDGE_SEPARATORS = /^[ \t\v\f\r]+|[ \t\v\f\r]+$/g;
 
 /** Path of the deny configuration, whether or not it exists. Exposed for `doctor` and docs. */
-export function denyConfigPath(): string {
+/**
+ * Every place this policy may live, most explicit first.
+ *
+ * The deny policy honoured `XDG_CONFIG_HOME` while the rest of eBrain — token store, dotenv,
+ * launcher copies, neutral working directory — is unconditionally under `~/.config/ebrain`. On a
+ * machine with `XDG_CONFIG_HOME` set elsewhere, a `denied-repos` file dropped beside the token
+ * file was therefore read by nobody, and an isolation policy that is silently not found is
+ * indistinguishable from no policy at all.
+ *
+ * Both locations are searched rather than picking a winner: for a security policy, "look
+ * everywhere it could plausibly be" is the fail-safe reading, and it moves nothing for anyone.
+ */
+export function denyConfigPaths(): string[] {
   const explicit = process.env.EBRAIN_DENY_CONFIG;
-  if (explicit) return explicit;
-  const configHome = process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
-  return join(configHome, "ebrain", "denied-repos");
+  if (explicit) return [explicit];
+  const paths: string[] = [];
+  const xdg = process.env.XDG_CONFIG_HOME;
+  if (xdg) paths.push(join(xdg, "ebrain", "denied-repos"));
+  const home = join(homedir(), ".config", "ebrain", "denied-repos");
+  if (!paths.includes(home)) paths.push(home);
+  return paths;
+}
+
+/** The primary path, kept for callers that report where the policy would be read from. */
+export function denyConfigPath(): string {
+  return denyConfigPaths()[0];
 }
 
 function parseEntries(raw: string, origin: string): string[] {
@@ -77,17 +98,22 @@ export function deniedRepos(): string[] {
   const override = process.env.EBRAIN_DENIED_REPOS;
   if (override !== undefined) return parseEntries(override, "EBRAIN_DENIED_REPOS");
 
-  const path = denyConfigPath();
-  if (!existsSync(path)) return [];
-  let raw: string;
-  try {
-    raw = readFileSync(path, "utf8");
-  } catch {
-    // Present but unreadable: the operator asked for a policy we cannot see. Refuse to proceed
-    // under an unknown policy rather than assume it was empty.
-    throw new Error(`deny policy at ${path} exists but could not be read — refusing to run with an unknown policy`);
+  // The union of every location, so a policy file can never be silently missed because the
+  // operator's config root does not match the one this module happened to prefer.
+  const entries: string[] = [];
+  for (const path of denyConfigPaths()) {
+    if (!existsSync(path)) continue;
+    let raw: string;
+    try {
+      raw = readFileSync(path, "utf8");
+    } catch {
+      // Present but unreadable: the operator asked for a policy we cannot see. Refuse to proceed
+      // under an unknown policy rather than assume it was empty.
+      throw new Error(`deny policy at ${path} exists but could not be read — refusing to run with an unknown policy`);
+    }
+    entries.push(...parseEntries(raw, path));
   }
-  return parseEntries(raw, path);
+  return [...new Set(entries)];
 }
 
 /**

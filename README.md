@@ -37,6 +37,8 @@ The result is a local control plane for work that otherwise gets scattered acros
 
 ## Five-minute proof
 
+Platform: **Linux**. That is where eBrain is developed, tested and run in CI, and it is the only platform claimed. It is written to degrade honestly elsewhere rather than pretend — the shell layer avoids GNU-only spellings and the daemon supervision has a launchd path — but macOS and WSL are untested, so treat them as unsupported until a CI job says otherwise. `ebrain doctor` reports the platform it is running on.
+
 Requirements: [Bun](https://bun.sh), git, tmux for persistent sessions, and at least one supported local agent CLI. The source install retrieves the pinned upstream knowledge engine separately; see [third-party notices](THIRD_PARTY_NOTICES.md) for the attribution boundary.
 
 ```bash
