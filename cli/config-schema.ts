@@ -161,9 +161,11 @@ export function parseRoutingConfig(raw: unknown, path = "routing.yaml"): Resolve
 }
 
 /**
- * Request-body keys the config sets that the selected provider is not known to understand.
- * Advisory only: `ebrain providers check` surfaces these so a config copied between providers
- * does not fail with an opaque 400 from the endpoint.
+ * Request-body keys the config sets that the selected provider is known NOT to understand.
+ * Advisory only: `route.ts` leaves them out of the request and warns, so a config copied between
+ * providers neither fails with an opaque 400 nor loses a setting in silence. An id the registry
+ * has never heard of reports nothing here — there is no knowledge to contradict the config with,
+ * so its extras are sent as written.
  */
 export function unsupportedExtras(config: ResolvedRoutingConfig): string[] {
   const descriptor = findProvider(config.provider.id);

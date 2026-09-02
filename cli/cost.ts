@@ -427,7 +427,7 @@ function parseRecord(args: string[]): { input: RecordInput; yes: boolean; json: 
 function printReport(report: CostReport): void {
   console.log(`ebrain cost — ${report.month}`);
   console.log(`  ${report.routed_provider} $${report.routed_mtd.toFixed(4)} / cap $${report.budget.monthly_usd} (restante $${report.remaining_routed.toFixed(4)})`);
-  console.log(`  conocido total $${report.known_mtd.toFixed(4)}; cap aplica solo a OpenRouter`);
+  console.log(`  conocido total $${report.known_mtd.toFixed(4)}; cap aplica solo a ${report.routed_provider}`);
   if (report.engine.observed) {
     const note = report.engine.partiallyObserved ? " (parcial — llamadas sin precio)" : "";
     console.log(`  motor (think/dream) $${report.engine.usd.toFixed(4)}${note}`);

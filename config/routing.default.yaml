@@ -23,8 +23,8 @@ provider:
   key_env: OPENROUTER_API_KEY
 
   # Extra fields merged into the request body. These are provider-specific by nature — the keys
-  # below are OpenRouter's. Switching `id` to a provider that does not understand them will make
-  # `ebrain providers check` say so; it is data, not behaviour.
+  # below are OpenRouter's. Switching `id` to a provider known not to understand them makes
+  # `ebrain route` leave them out and say so on stderr; it is data, not behaviour.
   provider_routing:
     data_collection: deny         # privacy: prompts carry your own context
     max_price:                    # per-request ceiling ($/M), a belt over the monthly cap

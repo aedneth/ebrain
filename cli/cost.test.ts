@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -153,5 +153,35 @@ describe("provider attribution beyond a single lane", () => {
     // Nothing may be called "metered" before an event exists unless it reports real USD.
     expect(report.providers.find((row) => row.provider === "groq")!.status).toBe("untracked");
     expect(report.providers.find((row) => row.provider === "openrouter")!.status).toBe("metered");
+  });
+});
+
+describe("the human report", () => {
+  test("names the provider the cap governs instead of a hardcoded lane", () => {
+    // The first line was made to follow routing.yaml; the line under it still said the cap applied
+    // to OpenRouter, which is false the moment the config points anywhere else.
+    const home = tmp();
+    try {
+      const cfg = join(home, ".config", "ebrain");
+      mkdirSync(cfg, { recursive: true });
+      writeFileSync(join(cfg, "routing.yaml"), [
+        "budget: { monthly_usd: 5, hard_stop: true, log: ~/.config/ebrain/spend.jsonl }",
+        "provider: { id: groq }",
+        "capabilities: { general: { models: [vendor/model-a] } }",
+        "",
+      ].join("\n"));
+      const proc = Bun.spawnSync(["bun", "run", join(import.meta.dir, "cost.ts")], {
+        env: { PATH: process.env.PATH ?? "", HOME: home },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const out = proc.stdout.toString();
+      expect(proc.exitCode).toBe(0);
+      expect(out).toContain("groq $0.0000 / cap $5");
+      expect(out).toContain("cap aplica solo a groq");
+      expect(out).not.toContain("cap aplica solo a OpenRouter");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
   });
 });

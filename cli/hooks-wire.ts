@@ -108,18 +108,36 @@ function eventEntries(node: unknown): Record<string, unknown>[] {
   return Array.isArray(node) ? node.filter(isRecord) : [];
 }
 
+/**
+ * Every way a command may name this wrapper. Hook commands run through a shell, so a user who
+ * wrote `~/.claude/hooks/guard.sh` or `$HOME/.claude/hooks/guard.sh` has a working hook; matching
+ * only the expanded absolute path would call it "not wired" and append a second copy on every
+ * install — the exact duplication the idempotency rule exists to prevent.
+ */
+export function wrapperSpellings(wrapperPath: string, home: string): string[] {
+  const spellings = [wrapperPath];
+  const prefix = home.replace(/\/+$/, "");
+  if (prefix && wrapperPath.startsWith(`${prefix}/`)) {
+    const relative = wrapperPath.slice(prefix.length);
+    spellings.push(`~${relative}`, `$HOME${relative}`, `\${HOME}${relative}`);
+  }
+  return spellings;
+}
+
 /** Is this wrapper already referenced anywhere under this event, however the user spelled it? */
-function alreadyWired(entries: Record<string, unknown>[], wrapperPath: string): boolean {
+function alreadyWired(entries: Record<string, unknown>[], spellings: readonly string[]): boolean {
   return entries.some((entry) => {
     const inner = Array.isArray(entry.hooks) ? entry.hooks : [];
-    return inner.some((hook) => isRecord(hook) && typeof hook.command === "string" && hook.command.includes(wrapperPath));
+    return inner.some((hook) =>
+      isRecord(hook) && typeof hook.command === "string" && spellings.some((spelling) => (hook.command as string).includes(spelling)),
+    );
   });
 }
 
 /**
  * Merge eBrain's hook entries into an existing config object. Pure: the caller writes the result.
  */
-export function mergeHookConfig(current: Record<string, unknown>, spec: HooksSpec): WireOutcome {
+export function mergeHookConfig(current: Record<string, unknown>, spec: HooksSpec, home = homedir()): WireOutcome {
   const added: string[] = [];
   const present: string[] = [];
   const unmapped: string[] = [];
@@ -143,7 +161,7 @@ export function mergeHookConfig(current: Record<string, unknown>, spec: HooksSpe
     }
     const wrapperPath = join(spec.hooksDir, wrapper.file);
     const entries = eventEntries(container[runtimeEvent]);
-    if (alreadyWired(entries, wrapperPath)) {
+    if (alreadyWired(entries, wrapperSpellings(wrapperPath, home))) {
       present.push(wrapper.file);
       continue;
     }

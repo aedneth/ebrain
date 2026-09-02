@@ -17,7 +17,7 @@
 import { homedir } from "os";
 import { join } from "path";
 import { appendFile } from "fs/promises";
-import { parseRoutingConfig, RoutingConfigError, type ResolvedRoutingConfig } from "./config-schema.ts";
+import { parseRoutingConfig, RoutingConfigError, unsupportedExtras, type ResolvedRoutingConfig } from "./config-schema.ts";
 import { completionsUrl, readCost } from "./providers.ts";
 
 const HOME = homedir();
@@ -161,6 +161,37 @@ export function isProviderLevelFailure(status: number): boolean {
 }
 
 /**
+ * El descriptor lista los NOMBRES que pueden tener la credencial, el mejor primero (google acepta
+ * GEMINI_API_KEY o GOOGLE_API_KEY). Se elige el primero que esté seteado; si ninguno lo está, el
+ * primero, para que el error nombre el que el usuario debería crear. Mirar solo `[0]` hacía que
+ * `ebrain providers list` dijera "set" y `ebrain route` muriera pidiendo otra variable.
+ */
+export function selectKeyName(names: readonly string[], env: NodeJS.ProcessEnv = process.env): string | null {
+  return names.find((name) => (env[name] ?? "").length > 0) ?? names[0] ?? null;
+}
+
+/**
+ * El body común a cualquier intento contra este provider — todo menos `model`/`models`, que lo
+ * pone el camino de failover. Puro, para poder afirmar en un test qué se manda a quién sin red.
+ */
+export function buildRequestBody(cfg: Cfg, prompt: string): Record<string, unknown> {
+  // Los extras del provider son DATOS: se mandan cuando el endpoint los entiende, así una
+  // routing.yaml copiada entre providers no explota con un 400 opaco. Para un id que el registro
+  // no conoce, la config es la única autoridad sobre ese endpoint: el usuario los escribió para él,
+  // y descartarlos en silencio sería ignorar (p. ej.) su preferencia de privacidad sin decirlo.
+  const sendsProviderExtras = !cfg.providerKnown || cfg.provider.extra_body_keys.includes("provider");
+  return {
+    messages: [{ role: "user", content: prompt }],
+    ...(sendsProviderExtras && Object.keys(cfg.providerRouting).length > 0
+      ? { provider: cfg.providerRouting }
+      : {}),
+    ...cfg.completionDefaults,
+    // Solo tiene sentido pedir el costo donde el descriptor dice que lo devuelven.
+    ...(cfg.provider.cost_path ? { usage: { include: true } } : {}),
+  };
+}
+
+/**
  * Ejecuta la cadena de capacidad.
  *
  * Dos caminos, elegidos por el descriptor del provider y no por el nombre de nadie:
@@ -184,17 +215,7 @@ async function complete(
     ...(key ? { Authorization: `Bearer ${key}` } : {}),
     ...(cfg.provider.headers ?? {}),
   };
-  const base: Record<string, unknown> = {
-    messages: [{ role: "user", content: prompt }],
-    // Los extras del provider son DATOS: se mandan solo si este endpoint los entiende, así una
-    // routing.yaml copiada entre providers no explota con un 400 opaco.
-    ...(cfg.provider.extra_body_keys.includes("provider") && Object.keys(cfg.providerRouting).length > 0
-      ? { provider: cfg.providerRouting }
-      : {}),
-    ...cfg.completionDefaults,
-    // Solo tiene sentido pedir el costo donde el descriptor dice que lo devuelven.
-    ...(cfg.provider.cost_path ? { usage: { include: true } } : {}),
-  };
+  const base = buildRequestBody(cfg, prompt);
 
   const post = async (body: Record<string, unknown>): Promise<Response> => {
     try {
@@ -248,6 +269,12 @@ async function main() {
   const logPath = expandHome(cfg.budget.log);
   const spent = await monthSpend(logPath);
 
+  // Un extra que este provider no entiende se descarta del body (ver buildRequestBody), pero no en
+  // silencio: la config lo pide y el usuario merece saber que su preferencia no viaja.
+  for (const key of unsupportedExtras(cfg)) {
+    console.error(`⚠ provider_routing ignorado: ${cfg.provider.label} no entiende la clave '${key}' del body — se manda sin ella`);
+  }
+
   if (dryRun) {
     console.log(JSON.stringify({
       capability, chain: models,
@@ -269,12 +296,12 @@ async function main() {
   }
   if (!finalPrompt) die("prompt vacío (pásalo como argumento o por stdin)");
 
-  const keyName = cfg.provider.key_env[0] ?? null;
+  const keyName = selectKeyName(cfg.provider.key_env);
   const key = keyName ? process.env[keyName] : "";
   // Un server local (ollama, llama-server) no necesita credencial: solo exigila cuando el
   // descriptor dice que este provider cobra.
   if (keyName && !key) {
-    die(`${keyName} no está en el entorno — corré vía el launcher ebrain-route, que carga la config privada`);
+    die(`${cfg.provider.key_env.join(" / ")} no está en el entorno — corré vía el launcher ebrain-route, que carga la config privada`);
   }
 
   const { data, modelRequested } = await complete(cfg, models, finalPrompt, key ?? "");

@@ -22,7 +22,7 @@ import {
   readCost,
   resolveProvider,
 } from "./providers.ts";
-import { inferProviderId, parseRoutingConfig, RoutingConfigError } from "./config-schema.ts";
+import { inferProviderId, parseRoutingConfig, RoutingConfigError, unsupportedExtras } from "./config-schema.ts";
 
 const EBRAIN_HOME = join(import.meta.dir, "..");
 
@@ -277,5 +277,20 @@ describe("parseRoutingConfig", () => {
     expect(config.frontier.auto_escalate).toBe(false);
     // A local provider needs no credential and must not be asked for one.
     expect(config.provider.key_env).toEqual([]);
+  });
+});
+
+describe("unsupportedExtras", () => {
+  test("names an extra a known provider will not take, and stays silent where the registry cannot judge", () => {
+    const routing = { provider_routing: { data_collection: "deny" } };
+    expect(unsupportedExtras(parseRoutingConfig(baseConfig({ provider: { id: "openrouter", ...routing } })))).toEqual([]);
+    expect(unsupportedExtras(parseRoutingConfig(baseConfig({ provider: { id: "openai", ...routing } })))).toEqual(["provider"]);
+    // Nothing configured, nothing to warn about.
+    expect(unsupportedExtras(parseRoutingConfig(baseConfig({ provider: { id: "openai" } })))).toEqual([]);
+    // An unknown gateway: the config is the only authority on it, so its extras are sent as
+    // written and there is nothing "unsupported" to report.
+    expect(unsupportedExtras(parseRoutingConfig(baseConfig({
+      provider: { id: "mystery-gateway", base_url: "https://mystery.test/v1", key_env: "MYSTERY_KEY", ...routing },
+    })))).toEqual([]);
   });
 });

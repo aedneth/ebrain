@@ -17,6 +17,7 @@ import {
   parseHooksBlock,
   readJson,
   wireAgent,
+  wrapperSpellings,
   writeJson,
   type HooksSpec,
 } from "./hooks-wire.ts";
@@ -99,6 +100,36 @@ describe("mergeHookConfig", () => {
       expect(added).toEqual([]);
       expect(present).toEqual(["guard.sh"]);
     }
+  });
+
+  test("recognises a hook the user wired by a home-relative path, too", () => {
+    // Hook commands run through a shell, so `~/…` and `$HOME/…` are working hooks. Calling them
+    // "not wired" would append the expanded path next to them on every install.
+    for (const command of [
+      "~/.claude/hooks/guard.sh",
+      "bash $HOME/.claude/hooks/guard.sh",
+      "${HOME}/.claude/hooks/guard.sh --verbose",
+    ]) {
+      const current = { hooks: { PreToolUse: [{ matcher: "", hooks: [{ type: "command", command }] }] } };
+      const { added, present } = mergeHookConfig(current, NESTED, "/home/t");
+      expect(added).toEqual([]);
+      expect(present).toEqual(["guard.sh"]);
+    }
+    // The same spelling under a different home names a different file.
+    const elsewhere = { hooks: { PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "~/.claude/hooks/guard.sh" }] }] } };
+    expect(mergeHookConfig(elsewhere, NESTED, "/home/someone-else").added).toEqual(["guard.sh"]);
+  });
+
+  test("wrapperSpellings offers home-relative forms only for a path under that home", () => {
+    expect(wrapperSpellings("/home/t/.claude/hooks/guard.sh", "/home/t/")).toEqual([
+      "/home/t/.claude/hooks/guard.sh",
+      "~/.claude/hooks/guard.sh",
+      "$HOME/.claude/hooks/guard.sh",
+      "${HOME}/.claude/hooks/guard.sh",
+    ]);
+    expect(wrapperSpellings("/opt/hooks/guard.sh", "/home/t")).toEqual(["/opt/hooks/guard.sh"]);
+    // `/home/tt` is not under `/home/t`: a prefix match on the string would say it was.
+    expect(wrapperSpellings("/home/tt/hooks/guard.sh", "/home/t")).toEqual(["/home/tt/hooks/guard.sh"]);
   });
 
   test("a wrapper with no runtime event is reported, not invented", () => {
