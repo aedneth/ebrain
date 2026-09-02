@@ -17,29 +17,23 @@
 import { homedir } from "os";
 import { join } from "path";
 import { appendFile } from "fs/promises";
+import { parseRoutingConfig, RoutingConfigError, type ResolvedRoutingConfig } from "./config-schema.ts";
+import { completionsUrl, readCost } from "./providers.ts";
 
 const HOME = homedir();
 const CFG_PATH = join(HOME, ".config", "ebrain", "routing.yaml");
 const FETCH_TIMEOUT_MS = 120_000;
-const FALLBACK_RATE_USD_PER_TOKEN = 4.0 / 1e6; // ~$4/M conservador si OpenRouter no devuelve cost
+const FALLBACK_RATE_USD_PER_TOKEN = 4.0 / 1e6; // ~$4/M conservador si el provider no devuelve cost
 
 // Doble candado sobre frontier.auto_escalate:false — ningún frontier entra a una cadena Tier 1.
 // Hermético: gpt-N, oN-, gemini-*(pro|ultra), y los frontier de Anthropic/xAI por nombre.
 export const FRONTIER = /claude|opus|sonnet|fable|grok|gpt-[0-9]|(^|\/)o[0-9]+-|gemini[-a-z0-9.]*(pro|ultra)/i;
 
-type Chain = { models: string[] };
-interface Cfg {
-  budget: { monthly_usd: number; hard_stop: boolean; log: string };
-  provider: {
-    base_url: string;
-    key_env: string;
-    provider_routing?: Record<string, unknown>;   // objeto `provider` de OpenRouter (privacidad/routing/max_price)
-    completion_defaults?: Record<string, unknown>; // params top-level de la request (max_tokens, …)
-  };
-  capabilities: Record<string, Chain>;
-  classify: Record<string, string[]>;
-  frontier: { auto_escalate: boolean };
-}
+/**
+ * La config ya no se castea: `parseRoutingConfig` la valida y resuelve el provider contra el
+ * registro. `Cfg` queda como el tipo resuelto, así el resto del archivo no cambia de forma.
+ */
+type Cfg = ResolvedRoutingConfig;
 
 function die(msg: string, code = 1): never {
   console.error(`✗ ${msg}`);
@@ -62,8 +56,18 @@ export function chainHasFrontier(models: string[]): boolean {
 
 async function loadCfg(): Promise<Cfg> {
   const f = Bun.file(CFG_PATH);
-  if (!(await f.exists())) die(`routing.yaml no existe en ${CFG_PATH}`);
-  return (Bun as unknown as { YAML: { parse: (s: string) => Cfg } }).YAML.parse(await f.text());
+  if (!(await f.exists())) {
+    // Ahora `ebrain up` lo crea desde config/routing.default.yaml, así que el mensaje puede
+    // nombrar la acción exacta en vez de dejar al usuario buscándola.
+    die(`routing.yaml no existe en ${CFG_PATH} — corré 'ebrain up' para crearlo desde el default`);
+  }
+  const raw = (Bun as unknown as { YAML: { parse: (s: string) => unknown } }).YAML.parse(await f.text());
+  try {
+    return parseRoutingConfig(raw, CFG_PATH);
+  } catch (e) {
+    if (e instanceof RoutingConfigError) die(e.message);
+    throw e;
+  }
 }
 
 export function parseRouteArgs(argv: string[]) {
@@ -141,6 +145,89 @@ async function appendSpend(logPath: string, rec: unknown) {
   await appendFile(logPath, JSON.stringify(rec) + "\n");
 }
 
+interface CompletionResponse {
+  model?: string;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
+  choices?: { message?: { content?: string } }[];
+}
+
+/**
+ * Un status que NO tiene sentido reintentar con otro modelo: la credencial, el permiso o el cap
+ * son del provider entero. Insistir con el siguiente slug solo gasta tiempo y, en el caso del
+ * 429, empuja contra un límite que ya mordió.
+ */
+export function isProviderLevelFailure(status: number): boolean {
+  return status === 401 || status === 403 || status === 429;
+}
+
+/**
+ * Ejecuta la cadena de capacidad.
+ *
+ * Dos caminos, elegidos por el descriptor del provider y no por el nombre de nadie:
+ *
+ *  - `server_side_failover`: se manda `models: [...]` y el provider hace el failover. Es lo que
+ *    hacía la versión anterior, y sigue siendo lo mejor cuando el endpoint lo soporta — una sola
+ *    ida y vuelta.
+ *  - si no: se camina la cadena localmente con `model: <id>`. Sin esto, el registro sería una
+ *    promesa vacía: mandarle un array `models` a un endpoint que espera `model` es un 400, así
+ *    que "cualquier provider OpenAI-compatible" habría fallado en el primer intento.
+ */
+async function complete(
+  cfg: Cfg,
+  models: string[],
+  prompt: string,
+  key: string,
+): Promise<{ data: CompletionResponse; modelRequested: string }> {
+  const url = completionsUrl(cfg.provider);
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(key ? { Authorization: `Bearer ${key}` } : {}),
+    ...(cfg.provider.headers ?? {}),
+  };
+  const base: Record<string, unknown> = {
+    messages: [{ role: "user", content: prompt }],
+    // Los extras del provider son DATOS: se mandan solo si este endpoint los entiende, así una
+    // routing.yaml copiada entre providers no explota con un 400 opaco.
+    ...(cfg.provider.extra_body_keys.includes("provider") && Object.keys(cfg.providerRouting).length > 0
+      ? { provider: cfg.providerRouting }
+      : {}),
+    ...cfg.completionDefaults,
+    // Solo tiene sentido pedir el costo donde el descriptor dice que lo devuelven.
+    ...(cfg.provider.cost_path ? { usage: { include: true } } : {}),
+  };
+
+  const post = async (body: Record<string, unknown>): Promise<Response> => {
+    try {
+      return await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), // un request colgado no bloquea para siempre
+      });
+    } catch (e) {
+      die(`${cfg.provider.label} inalcanzable o timeout (${url}): ${(e as Error).message} — el agente interactivo es el fallback manual`, 4);
+    }
+  };
+
+  if (cfg.provider.server_side_failover) {
+    const res = await post({ ...base, models });
+    if (res.status === 429) die(`429 — cap/rate limit de ${cfg.provider.label} alcanzado (el candado server-side funciona).`, 2);
+    if (!res.ok) die(`${cfg.provider.label} ${res.status}: ${(await res.text()).slice(0, 400)}`);
+    return { data: (await res.json()) as CompletionResponse, modelRequested: models[0]! };
+  }
+
+  const failures: string[] = [];
+  for (const model of models) {
+    const res = await post({ ...base, model });
+    if (res.ok) return { data: (await res.json()) as CompletionResponse, modelRequested: model };
+    if (isProviderLevelFailure(res.status)) {
+      die(`${cfg.provider.label} ${res.status} — credencial, permiso o cap del provider; la cadena no se sigue.`, res.status === 429 ? 2 : 1);
+    }
+    failures.push(`${model}: ${res.status} ${(await res.text()).slice(0, 160)}`);
+  }
+  die(`ningún modelo de la cadena respondió en ${cfg.provider.label}:\n  ${failures.join("\n  ")}`);
+}
+
 async function main() {
   const { cap, dryRun, json, floor, agent, session, workflow, prompt } = parseRouteArgs(process.argv.slice(2));
   const cfg = await loadCfg();
@@ -182,55 +269,39 @@ async function main() {
   }
   if (!finalPrompt) die("prompt vacío (pásalo como argumento o por stdin)");
 
-  const key = process.env[cfg.provider.key_env];
-  if (!key) die(`${cfg.provider.key_env} no está en el entorno — corré vía launcher ebrain-route (sourcea .env)`);
-
-  const body = {
-    models,
-    messages: [{ role: "user", content: finalPrompt }],
-    provider: cfg.provider.provider_routing ?? {},   // objeto `provider` (data_collection, max_price)
-    ...(cfg.provider.completion_defaults ?? {}),      // params top-level (max_tokens, …)
-    usage: { include: true }, // ← sin esto OpenRouter devuelve tokens pero no el costo USD
-  };
-
-  let res: Response;
-  try {
-    res = await fetch(`${cfg.provider.base_url}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}`,
-        "HTTP-Referer": "https://github.com/aedneth/ebrain", "X-Title": "ebrain-route" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),   // un request colgado no bloquea para siempre
-    });
-  } catch (e) {
-    die(`red/OpenRouter inalcanzable o timeout: ${(e as Error).message} — Tier 0 (Codex/Claude Code) es el fallback manual`, 4);
+  const keyName = cfg.provider.key_env[0] ?? null;
+  const key = keyName ? process.env[keyName] : "";
+  // Un server local (ollama, llama-server) no necesita credencial: solo exigila cuando el
+  // descriptor dice que este provider cobra.
+  if (keyName && !key) {
+    die(`${keyName} no está en el entorno — corré vía el launcher ebrain-route, que carga la config privada`);
   }
 
-  if (res.status === 429) die("429 — hard cap / rate limit de OpenRouter alcanzado (el candado server-side funciona).", 2);
-  if (!res.ok) die(`OpenRouter ${res.status}: ${(await res.text()).slice(0, 400)}`);
+  const { data, modelRequested } = await complete(cfg, models, finalPrompt, key ?? "");
 
-  const data = await res.json() as {
-    model?: string;
-    usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
-    choices?: { message?: { content?: string } }[];
-  };
-  const modelUsed = data.model ?? "?";
+  // El provider puede o no devolver qué modelo sirvió. Si no lo dice, el que pedimos es la
+  // mejor respuesta honesta — mucho mejor que "?" para atribuir gasto.
+  const modelUsed = typeof data.model === "string" && data.model ? data.model : modelRequested;
   const tin = data.usage?.prompt_tokens ?? 0;
   const tout = data.usage?.completion_tokens ?? 0;
   const content = data.choices?.[0]?.message?.content ?? "";
 
-  // Costo: usar el real de OpenRouter; si falta, ESTIMAR conservador (nunca $0 silencioso,
-  // o el cap jamás mordería). Se marca usd_estimated para no ensuciar la contabilidad real.
-  let usd = data.usage?.cost;
+  // Costo: el real del provider cuando el descriptor dice dónde vive; si no, ESTIMAR conservador
+  // (nunca $0 silencioso, o el cap jamás mordería). Se marca usd_estimated para no ensuciar la
+  // contabilidad real. Un provider local no cobra: ahí el costo es 0 y NO es una estimación.
+  const reported = readCost(data, cfg.provider.cost_path);
+  const isLocal = cfg.provider.metering === "local";
+  let usd = reported ?? (isLocal ? 0 : undefined);
   let estimated = false;
   if (typeof usd !== "number") {
     estimated = true;
     usd = (tin + tout) * FALLBACK_RATE_USD_PER_TOKEN;
-    console.error(`⚠ usage.cost ausente — costo ESTIMADO conservador (~$4/M): $${usd.toFixed(6)}`);
+    console.error(`⚠ el provider no reportó costo — ESTIMADO conservador (~$4/M): $${usd.toFixed(6)}`);
   }
 
   const rec = {
     ts: new Date().toISOString(), src: "route", cap: capability, model: modelUsed,
+    provider: cfg.provider.id,
     agent: costAgent ?? "route", tokens_in: tin, tokens_out: tout, usd,
     ...(costSession ? { session: costSession } : {}),
     ...(costWorkflow ? { workflow: costWorkflow } : {}),
@@ -242,7 +313,7 @@ async function main() {
     console.log(JSON.stringify({ ...rec, content }, null, 2));
   } else {
     process.stdout.write(content + "\n");
-    console.error(`\n— model=${modelUsed} cap=${capability}${floor ? " (:floor)" : ""} tokens=${tin}+${tout} cost=$${usd.toFixed(6)}${estimated ? "~" : ""} · mes=$${(spent + usd).toFixed(4)}/$${cfg.budget.monthly_usd}`);
+    console.error(`\n— provider=${cfg.provider.id} model=${modelUsed} cap=${capability}${floor ? " (:floor)" : ""} tokens=${tin}+${tout} cost=$${usd.toFixed(6)}${estimated ? "~" : ""} · mes=$${(spent + usd).toFixed(4)}/$${cfg.budget.monthly_usd}`);
   }
 }
 

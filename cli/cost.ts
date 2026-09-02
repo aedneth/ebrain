@@ -23,6 +23,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { loadRoutingCfg, resolveEngineAuditDir } from "./spend.ts";
+import { providerIds, providerStatusFor } from "./providers.ts";
 import { expandHome, monthKey } from "./route.ts";
 import { readEngineSpend, type EngineSpend } from "./engine-spend.ts";
 
@@ -76,7 +77,18 @@ export interface EngineCostLane {
 export interface CostReport {
   schema_version: 2;
   month: string;
-  budget: { monthly_usd: number; hard_stop: boolean; scope: "openrouter" };
+  /** `scope` is the provider the monthly cap actually governs — the one routing.yaml points at. */
+  budget: { monthly_usd: number; hard_stop: boolean; scope: string };
+  /** The routed provider id, so a report is readable without also reading the config. */
+  routed_provider: string;
+  /** Month-to-date spend on the routed provider. This is what the cap is measured against. */
+  routed_mtd: number;
+  remaining_routed: number;
+  /**
+   * Retained for consumers written when OpenRouter was the only lane. These stay literally
+   * correct — spend attributed to OpenRouter, and the cap minus it — but when routing.yaml points
+   * somewhere else they describe a lane that is not the one being budgeted. Prefer `routed_*`.
+   */
   openrouter_mtd: number;
   known_mtd: number;
   remaining_openrouter: number;
@@ -109,9 +121,18 @@ interface RawRecord {
   schema_version?: unknown;
 }
 
+/**
+ * Seed statuses for lanes with no events this month, so `ebrain cost` lists them at zero rather
+ * than omitting them. Two kinds of entry live here and they are not the same thing:
+ *
+ *  - model providers, taken from the registry, so adding a provider needs no edit here; only one
+ *    that reports real USD per request can be called "metered" before any event exists.
+ *  - agent CLIs, which spend money on their own subscriptions that eBrain cannot see at all.
+ */
 const PROVIDER_STATUS: Record<string, ProviderStatus> = {
-  openrouter: "metered",
-  openai: "untracked",
+  ...Object.fromEntries(
+    providerIds().map((id) => [id, providerStatusFor(id) === "metered" ? "metered" : "untracked"] as const),
+  ),
   gemini: "untracked",
   claude: "untracked",
   cursor: "untracked",
@@ -167,7 +188,10 @@ export function normalizeRouteRecord(record: RawRecord): CostEvent | null {
   return {
     schema_version: 2,
     ts,
-    provider: "openrouter",
+    // `route.ts` now stamps the provider it actually called. Records written before it did are
+    // from the era when there was only one lane, so that is what they are attributed to — the
+    // alternative, dropping them into "unknown", would rewrite spend history that is not wrong.
+    provider: asString(record.provider) ?? "openrouter",
     agent: asString(record.agent) ?? "route",
     model: asString(record.model),
     session: asString(record.session),
@@ -251,7 +275,14 @@ const UNOBSERVED_ENGINE_SPEND: EngineSpend = { usd: 0, observed: false, partiall
 export function buildCostReport(
   routeRecords: RawRecord[],
   adapterRecords: RawRecord[],
-  opts: { month?: string; budget?: { monthly_usd: number; hard_stop: boolean }; limit?: number; engine?: EngineSpend } = {},
+  opts: {
+    month?: string;
+    budget?: { monthly_usd: number; hard_stop: boolean };
+    limit?: number;
+    engine?: EngineSpend;
+    /** Which provider routing.yaml points at. Defaults to the historical single lane. */
+    routedProvider?: string;
+  } = {},
 ): CostReport {
   const month = opts.month ?? monthKey();
   const engineSpend = opts.engine ?? UNOBSERVED_ENGINE_SPEND;
@@ -266,6 +297,8 @@ export function buildCostReport(
     if (!providers.has(provider)) providers.set(provider, { ...emptyBreakdown(provider), provider, status });
   }
   const providerList = [...providers.values()].sort((a, b) => b.usd - a.usd || a.provider.localeCompare(b.provider));
+  const routedProvider = opts.routedProvider ?? "openrouter";
+  const routed = providers.get(routedProvider) ?? { ...emptyBreakdown(routedProvider), provider: routedProvider, status: providerStatus(routedProvider, emptyBreakdown(routedProvider)) };
   const openrouter = providers.get("openrouter") ?? { ...emptyBreakdown("openrouter"), provider: "openrouter", status: "metered" as const };
   const knownMtd = money(events.reduce((sum, event) => sum + (event.usd ?? 0), 0));
   const limit = Math.max(1, opts.limit ?? DEFAULT_LIMIT);
@@ -274,7 +307,10 @@ export function buildCostReport(
   return {
     schema_version: 2,
     month,
-    budget: { ...budget, scope: "openrouter" },
+    budget: { ...budget, scope: routedProvider },
+    routed_provider: routedProvider,
+    routed_mtd: routed.usd,
+    remaining_routed: money(budget.monthly_usd - routed.usd),
     openrouter_mtd: openrouter.usd,
     known_mtd: knownMtd,
     remaining_openrouter: money(budget.monthly_usd - openrouter.usd),
@@ -298,7 +334,7 @@ export async function loadCostReport(limit = DEFAULT_LIMIT, sidecarPath = DEFAUL
   const routeLog = expandHome(cfg.budget.log);
   const [routeRecords, adapterRecords] = await Promise.all([readJsonl(routeLog), readJsonl(sidecarPath)]);
   const engine = readEngineSpend(resolveEngineAuditDir());
-  return buildCostReport(routeRecords, adapterRecords, { budget: cfg.budget, limit, engine });
+  return buildCostReport(routeRecords, adapterRecords, { budget: cfg.budget, limit, engine, routedProvider: cfg.provider.id });
 }
 
 export interface RecordInput {
@@ -390,7 +426,7 @@ function parseRecord(args: string[]): { input: RecordInput; yes: boolean; json: 
 
 function printReport(report: CostReport): void {
   console.log(`ebrain cost — ${report.month}`);
-  console.log(`  OpenRouter $${report.openrouter_mtd.toFixed(4)} / cap $${report.budget.monthly_usd} (restante $${report.remaining_openrouter.toFixed(4)})`);
+  console.log(`  ${report.routed_provider} $${report.routed_mtd.toFixed(4)} / cap $${report.budget.monthly_usd} (restante $${report.remaining_routed.toFixed(4)})`);
   console.log(`  conocido total $${report.known_mtd.toFixed(4)}; cap aplica solo a OpenRouter`);
   if (report.engine.observed) {
     const note = report.engine.partiallyObserved ? " (parcial — llamadas sin precio)" : "";

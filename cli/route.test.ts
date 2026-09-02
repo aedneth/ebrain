@@ -4,7 +4,7 @@
  * candado frontier, y parseo/suma de spend.jsonl por mes. `bun test cli/route.test.ts`.
  */
 import { test, expect } from "bun:test";
-import { classify, capExceeded, chainHasFrontier, monthKey, monthSpend, expandHome, applyFloor, FRONTIER, parseRouteArgs } from "./route.ts";
+import { FRONTIER, applyFloor, capExceeded, chainHasFrontier, classify, expandHome, isProviderLevelFailure, monthKey, monthSpend, parseRouteArgs } from "./route.ts";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -106,4 +106,14 @@ test("monthSpend: archivo inexistente → 0", async () => {
 test("expandHome: expande ~ al home real", () => {
   expect(expandHome("~/x").endsWith("/x")).toBe(true);
   expect(expandHome("/abs/path")).toBe("/abs/path");
+});
+
+// Un fallo de credencial, permiso o cap es del provider entero: caminar al siguiente modelo no
+// puede ayudar, y en el 429 insiste contra un límite que ya mordió.
+test("fallo de provider: la cadena NO sigue", () => {
+  for (const status of [401, 403, 429]) expect(isProviderLevelFailure(status)).toBe(true);
+});
+
+test("fallo de modelo: la cadena sigue al siguiente", () => {
+  for (const status of [400, 404, 500, 502, 503]) expect(isProviderLevelFailure(status)).toBe(false);
 });

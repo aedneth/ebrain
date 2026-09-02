@@ -11,6 +11,7 @@ import { join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 import { appendAdapterEvent, makeAdapterEvent } from "./cost.ts";
 import { readProfileStore, type ExecutionProfile } from "./profiles.ts";
+import { isValidProviderId } from "./providers.ts";
 import { newSession, sendToSession, type NewSessionInfo, type Result, type TmuxError } from "./sessions.ts";
 
 const HOME = homedir();
@@ -22,7 +23,8 @@ const SAFE_TARGET_ID = /^[a-z][a-z0-9-]{0,63}$/;
 export interface ExecutionTarget {
   id: string;
   agent: string;
-  provider: "openrouter";
+  /** Registry provider id. A manifest declares which endpoint its model selector addresses. */
+  provider: string;
   ram_class: "heavy" | "light" | "unknown";
   argv: string[];
   model_flag: string;
@@ -31,7 +33,7 @@ export interface ExecutionTarget {
 export interface LaunchPlan {
   target: string;
   agent: string;
-  provider: "openrouter";
+  provider: string;
   profile: string;
   capability: string;
   model: string;
@@ -62,9 +64,9 @@ export function parseTarget(value: unknown, agent: string, ramClass: "heavy" | "
   const provider = value.provider;
   const argv = value.argv;
   const model = value.model;
-  if (typeof id !== "string" || !SAFE_TARGET_ID.test(id) || provider !== "openrouter" || !Array.isArray(argv) || !argv.every(safeArg) || !isRecord(model)) return null;
+  if (typeof id !== "string" || !SAFE_TARGET_ID.test(id) || !isValidProviderId(provider) || !Array.isArray(argv) || !argv.every(safeArg) || !isRecord(model)) return null;
   if (typeof model.flag !== "string" || !safeArg(model.flag) || typeof model.prefix !== "string" || !safeArg(model.prefix)) return null;
-  return { id, agent, provider: "openrouter", ram_class: ramClass, argv: [...argv], model_flag: model.flag, model_prefix: model.prefix };
+  return { id, agent, provider, ram_class: ramClass, argv: [...argv], model_flag: model.flag, model_prefix: model.prefix };
 }
 
 /** Discover targets from manifests only. No config, credentials, network or CLI probing is read. */

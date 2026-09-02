@@ -182,8 +182,12 @@ else
   fi
 fi
 
-# ── gasto OpenRouter (mes actual) ────────────────────────────────────────────
-c_sec "gasto OpenRouter (mes actual)"
+# ── gasto del provider ruteado (mes actual) ──────────────────────────────────
+# El provider ya no es fijo: nombrá el que routing.yaml apunta, así el encabezado no miente
+# cuando la config apunta a otro lado. Sin config todavía, se reporta genéricamente.
+routed_provider="$(grep -E '^[[:space:]]+id:' "$CFG/routing.yaml" 2>/dev/null | head -1 | sed -E 's/.*id:[[:space:]]*//; s/[[:space:]]*(#.*)?$//')"
+[ -n "$routed_provider" ] || routed_provider="del provider ruteado"
+c_sec "gasto $routed_provider (mes actual)"
 spend="$CFG/spend.jsonl"
 cap="$(grep -E 'monthly_usd' "$CFG/routing.yaml" 2>/dev/null | grep -oE '[0-9]+(\.[0-9]+)?' | head -1)"
 cap="${cap:-10}"

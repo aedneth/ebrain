@@ -6,6 +6,8 @@
  * never hold credentials, provider billing, benchmark-derived ranks, or an automatic default.
  */
 import { chmod, mkdir, rename, writeFile } from "node:fs/promises";
+import { isValidProviderId, providerIds } from "./providers.ts";
+import { inferProviderId } from "./config-schema.ts";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -21,7 +23,12 @@ export interface CatalogEntry { id: string; source: string; as_of: string }
 export interface ExecutionProfile {
   id: string;
   label: string;
-  provider: "openrouter";
+  /**
+   * The provider this profile's models are addressed on. Validated as a slug against the registry
+   * shape rather than pinned to one id: a profile is a user's own list of models, and which
+   * endpoint serves them is a config decision, not a compile-time one.
+   */
+  provider: string;
   capabilities: Record<string, string[]>;
   evidence: ProfileEvidence;
 }
@@ -29,13 +36,16 @@ export interface ProfileStore { schema_version: 1; catalog: CatalogEntry[]; prof
 export interface ProfileSummary {
   id: string;
   label: string;
-  provider: "openrouter";
+  provider: string;
   capabilities: string[];
   models: number;
   evidence: ProfileEvidence;
 }
 
-interface RoutingConfig { capabilities?: Record<string, { models?: unknown }>; provider?: { completion_defaults?: { max_tokens?: unknown } } }
+interface RoutingConfig {
+  capabilities?: Record<string, { models?: unknown }>;
+  provider?: { id?: unknown; base_url?: unknown; completion_defaults?: { max_tokens?: unknown } };
+}
 
 function die(message: string, code = 1): never {
   console.error(`error: ${message}`);
@@ -82,11 +92,11 @@ function parseProfile(value: unknown): ExecutionProfile {
   if (!isRecord(value) || !hasOnly(value, ["id", "label", "provider", "capabilities", "evidence"])) throw new Error("profile has unknown fields");
   if (typeof value.id !== "string" || !SAFE_PROFILE_ID.test(value.id)) throw new Error("invalid profile id");
   if (typeof value.label !== "string" || value.label.trim().length < 1 || value.label.length > 120) throw new Error("invalid profile label");
-  if (value.provider !== "openrouter") throw new Error("unsupported profile provider");
+  if (!isValidProviderId(value.provider)) throw new Error("profile provider must be a lowercase slug");
   return {
     id: value.id,
     label: value.label.trim(),
-    provider: "openrouter",
+    provider: value.provider,
     capabilities: parseCapabilities(value.capabilities),
     evidence: parseEvidence(value.evidence),
   };
@@ -145,6 +155,18 @@ export function addExecutionProfile(store: ProfileStore, profile: ExecutionProfi
   return parseProfileStore({ ...store, profiles: [...store.profiles, profile] });
 }
 
+/**
+ * The provider a routing.yaml describes: stated outright, inferred from its endpoint, or — for a
+ * config predating both — the id that was the only option when it was written. The fallback is a
+ * migration fact, not a default: it applies solely to a file that names no provider at all.
+ */
+function providerOfRouting(config: RoutingConfig): string {
+  const declared = config.provider?.id;
+  if (isValidProviderId(declared)) return declared;
+  const base = typeof config.provider?.base_url === "string" ? config.provider.base_url : undefined;
+  return inferProviderId(base) ?? "openrouter";
+}
+
 export function migrateRoutingConfig(config: RoutingConfig, now = new Date().toISOString()): ProfileStore {
   const capabilities: Record<string, string[]> = {};
   for (const [capability, def] of Object.entries(config.capabilities ?? {})) {
@@ -157,9 +179,9 @@ export function migrateRoutingConfig(config: RoutingConfig, now = new Date().toI
     schema_version: 1,
     catalog: modelIds.map((id) => ({ id, source: "local-routing.yaml", as_of: now })),
     profiles: [{
-      id: "legacy-openrouter",
-      label: "Migrated OpenRouter routing",
-      provider: "openrouter",
+      id: `legacy-${providerOfRouting(config)}`,
+      label: `Migrated ${providerOfRouting(config)} routing`,
+      provider: providerOfRouting(config),
       capabilities,
       evidence: { source: "local-routing.yaml", as_of: now },
     }],
@@ -271,12 +293,17 @@ async function main(): Promise<void> {
     const id = flagValue(args.rest, "--id");
     const label = flagValue(args.rest, "--label");
     const caps = flagValues(args.rest, "--cap");
-    if (!id || !label || caps.length === 0) die("usage: ebrain profiles create --id ID --label LABEL --cap capability=model,model [--cap ...] --yes [--json]");
+    if (!id || !label || caps.length === 0) die("usage: ebrain profiles create --id ID --label LABEL --cap capability=model,model [--cap ...] [--provider ID] --yes [--json]");
     const capabilities = Object.fromEntries(caps.map(parseCap));
+    // Default to whatever routing.yaml is pointed at, so a profile created on a machine
+    // configured for one provider is not silently labelled with another.
+    const provider = flagValue(args.rest, "--provider")
+      ?? providerOfRouting(await loadRoutingConfig().catch(() => ({}) as RoutingConfig));
+    if (!isValidProviderId(provider)) die(`invalid --provider '${provider}' (known: ${providerIds().join(", ")})`);
     const profile: ExecutionProfile = {
       id,
       label,
-      provider: "openrouter",
+      provider,
       capabilities,
       evidence: { source: "user-profile", as_of: new Date().toISOString() },
     };
