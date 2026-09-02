@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 /**
  * ebrain design-sync-tui — genera tui/src/theme.ts a partir de design-system/tokens/ebrain.tokens.json
- * (spec: docs/SPRINT-TUI.md 6.2.2).
+ * Colour tokens live in tui/src/theme.ts and nowhere else; this keeps them in step with the
+ * design system rather than letting each widget invent its own.
  *
  * design-system/tokens/ebrain.tokens.json es la ÚNICA fuente de verdad de color/glifos/spacing/
  * estados de la TUI (vendored desde el export de Claude Design, ver 6.2.1). Este script la parsea

@@ -39,16 +39,16 @@ The result is a local control plane for work that otherwise gets scattered acros
 
 Platform: **Linux**. That is where eBrain is developed, tested and run in CI, and it is the only platform claimed. It is written to degrade honestly elsewhere rather than pretend — the shell layer avoids GNU-only spellings and the daemon supervision has a launchd path — but macOS and WSL are untested, so treat them as unsupported until a CI job says otherwise. `ebrain doctor` reports the platform it is running on.
 
-Requirements: [Bun](https://bun.sh), git, tmux for persistent sessions, and at least one supported local agent CLI. The source install retrieves the pinned upstream knowledge engine separately; see [third-party notices](THIRD_PARTY_NOTICES.md) for the attribution boundary.
+Requirements: git, tmux for persistent sessions, and at least one supported local agent CLI. [Bun](https://bun.sh) and the pinned upstream knowledge engine are installed for you; see [third-party notices](THIRD_PARTY_NOTICES.md) for the attribution boundary.
 
 ```bash
-git clone https://github.com/aedneth/ebrain.git ebrain
-cd ebrain
-bun install
-./scripts/install.sh --from-source
+curl -fsSL https://raw.githubusercontent.com/aedneth/ebrain/main/scripts/install.sh | sh
+```
 
-# One idempotent boot: local credential, loopback daemon, and detected adapters.
-ebrain up
+That installs Bun if it is missing, pins the upstream engine, links `ebrain` onto your PATH, and boots the daemon. It is idempotent, so re-running it is how you update. It never reads a dotenv, never prints a secret, and never installs an agent CLI or calls a provider on your behalf. Prefer to see what you are running first — a reasonable thing to want from a `curl | sh` — then clone and run the same script with `--from-source`.
+
+```bash
+# Verify what the installer just did.
 ebrain doctor
 
 # Retain one reviewable decision, then retrieve it through approved sources.
@@ -59,7 +59,7 @@ ebrain q "what must happen before a database migration merges?"
 ebrain
 ```
 
-`ebrain up` owns local MCP credential creation before the daemon binds, starts the shared daemon, and attempts adapter onboarding. You do not paste a token, hand-manage a writer lock, or configure an OAuth flow to take this path. A missing local CLI remains visible as unavailable instead of being reported as connected.
+The installer ends by running `ebrain up`, which owns local MCP credential creation before the daemon binds, starts the shared daemon, and attempts adapter onboarding. You do not paste a token, hand-manage a writer lock, or configure an OAuth flow to take this path. A missing local CLI remains visible as unavailable instead of being reported as connected.
 
 ## What you can do
 
