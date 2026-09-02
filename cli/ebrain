@@ -72,6 +72,7 @@ ebrain — unified harness + agentic-memory layer (provider-agnostic)
   ebrain episodes <list|get|recall|record> [--json]          bounded local episode recall (no raw transcripts)
   ebrain procedures <list|show|use|review> [--json]          reviewed lifecycle for local workflows/skills
   ebrain providers <list|show> [--json]                      model providers eBrain can route to, and which are configured
+  ebrain adapters <list|show|validate> [--json]              agent adapters: how each is wired, and whether its manifest is valid
   ebrain profiles <list|show|validate|init|catalog-add|create> [--json] user-chosen local execution profiles
   ebrain workspaces <list|add|rename|remove> [--json]            validated local directory registry
   ebrain targets <list|plan|launch> [--json]                  adapter targets with a declared model selector
@@ -120,6 +121,7 @@ case "$cmd" in
   episodes)  run_bun "$EBRAIN_HOME/cli/episodes.ts" "$@" ;;
   procedures) run_bun "$EBRAIN_HOME/cli/procedures.ts" "$@" ;;
   providers) run_bun "$EBRAIN_HOME/cli/providers.ts" "$@" ;;
+  adapters)  run_bun "$EBRAIN_HOME/cli/adapters.ts" "$@" ;;
   profiles)  run_bun "$EBRAIN_HOME/cli/profiles.ts" "$@" ;;
   workspaces) run_bun "$EBRAIN_HOME/cli/workspaces.ts" "$@" ;;
   targets)   run_bun "$EBRAIN_HOME/cli/targets.ts" "$@" ;;
