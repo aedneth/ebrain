@@ -14,6 +14,8 @@
  */
 import { join } from "node:path";
 
+import { scrubSecrets } from "../../../cli/scrub.ts";
+
 import {
   parseStatus,
   parseFleet,
@@ -86,10 +88,14 @@ async function runEbrainJson(args: string[], timeoutMs: number): Promise<KResult
   }, timeoutMs);
 
   try {
-    const [out, exit] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+    const [out, err, exit] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
     clearTimeout(timer);
     if (exit !== 0) {
-      return { ok: false, error: `ebrain ${args[0]} exited with code ${exit}` };
+      return { ok: false, error: failureReason(args, out, err, exit) };
     }
     try {
       return { ok: true, data: JSON.parse(out) };
@@ -104,6 +110,37 @@ async function runEbrainJson(args: string[], timeoutMs: number): Promise<KResult
 
 function msgOf(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * Say WHY the subcommand refused, not merely that it did.
+ *
+ * `exited with code 1` is the least useful true statement available: the process that failed knew
+ * the reason, wrote it down, and it was dropped here because stderr was piped and never read. The
+ * CLI now also prints `{ok:false,error}` on stdout, which is preferred; stderr's first line is the
+ * fallback for subcommands that have not been converted yet.
+ *
+ * The text is scrubbed and bounded before it can reach a panel: it is our own CLI's message today,
+ * but a diagnostic that quotes a path or a config line should never be the way a token reaches a
+ * screen or a session log.
+ */
+function failureReason(args: string[], stdout: string, stderr: string, exit: number): string {
+  try {
+    const body = JSON.parse(stdout);
+    if (body && typeof body === "object" && typeof (body as { error?: unknown }).error === "string") {
+      return boundedMessage((body as { error: string }).error);
+    }
+  } catch {
+    /* not every failing subcommand prints a JSON body yet */
+  }
+  const firstLine = stderr.split("\n").map((line) => line.trim()).find((line) => line.length > 0);
+  if (firstLine) return boundedMessage(firstLine.replace(/^error:\s*/, ""));
+  return `ebrain ${args[0]} exited with code ${exit}`;
+}
+
+function boundedMessage(text: string): string {
+  const clean = scrubSecrets(text).replace(/\s+/g, " ").trim();
+  return clean.length > 160 ? `${clean.slice(0, 159)}\u2026` : clean;
 }
 
 /** Wrap a fetch: run the subcommand, then run the pure parser; a null parse -> error. */
