@@ -56,7 +56,7 @@ remain outside this navigation and are not implicitly public-safe.
 - [Diagnostics reference](reference/diagnostics.md)
 - [Memory commands reference](reference/memory-commands.md)
 - [Workspace and session commands reference](reference/session-commands.md)
-- [Routing and cost commands reference](reference/routing-commands.md)
+- [Routing and cost commands reference](reference/routing-commands.md)\n- [Model providers](reference/providers.md)
 - [TUI reference](reference/tui.md)
 - [MCP reference](reference/mcp.md)
 - [Configuration reference](reference/configuration.md)

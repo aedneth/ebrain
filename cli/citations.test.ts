@@ -41,48 +41,26 @@ function tracked(pattern: string[]): string[] {
  */
 const CITATION = /`((?:docs|cli|scripts|harness|overlay|website|tui)\/[\w./-]+\.(?:md|ts|tsx|sh|json|yml|yaml|astro|css|service|timer|in))`/g;
 
-/** Documents whose whole purpose is to describe files that do not exist yet, or no longer do. */
-const EXEMPT_DOCS = new Set<string>([
-  // Audit reports are historical records: they describe a tree as it was at the time of the audit,
-  // including files a remediation later renamed. Rewriting them would falsify the record.
-  "docs/AUDIT-F7-F12-INDEPENDENT.md",
-  "docs/AUDIT-F7-F12-REAUDIT.md",
-  "docs/AUDIT-F7-F12-PASS3.md",
-  "docs/AUDIT-F7-F12-PASS5.md",
-  "docs/AUDIT-FABLE-F6-CORRECTIONS.md",
-  "docs/AUDIT-FABLE-FASE-D.md",
-  "docs/AUDIT-GPT-5.6-SOL-F6.md",
-]);
+/**
+ * Documents whose whole purpose is to describe files that do not exist yet, or no longer do.
+ * Empty: the historical records that needed this exemption are no longer part of the public tree.
+ */
+const EXEMPT_DOCS = new Set<string>([]);
 
 /** Individual citations that are deliberately about something absent, with the reason. */
-const EXEMPT_CITATIONS = new Map<string, string>([
-  ["docs/AUDIT-F7-F12-PASS4.md", "named in the correction that documents its non-existence"],
-]);
+const EXEMPT_CITATIONS = new Map<string, string>([]);
 
 /**
- * Broken citations that already existed when this test was written, frozen 2026-07-21.
+ * Broken citations that already existed when this test was written, frozen 2026-07-21 and cleared
+ * 2026-09-02.
  *
  * Turning this test on found twenty of them — planning documents pointing at files that were
- * renamed, never written, or lived in a vendored tree. None is a shipping defect, and fixing them
- * all here would bury the portability work in unrelated churn. So they are a baseline that can only
- * SHRINK: a citation not on this list must resolve, and an entry that starts resolving must be
- * deleted from the list (asserted below), so the debt cannot quietly be re-added under an old name.
+ * renamed, never written, or lived in a vendored tree. The list could only SHRINK, and it has now
+ * shrunk to nothing: every document that carried one of those citations was working material and
+ * left the public tree with the rest of it. The rule the list existed to protect still holds —
+ * a citation that does not resolve fails the build, and nothing may be re-added here to excuse one.
  */
-const KNOWN_BROKEN = new Set<string>([
-  "CHANGELOG.md → cli/model-pricing.ts",
-  "discovery/00-environment.md → docs/INSTALL.md",
-  "discovery/01-gbrain-engine.md → docs/INSTALL.md",
-  "discovery/01-gbrain-engine.md → docs/architecture/schema-packs.md",
-  "discovery/01-gbrain-engine.md → docs/architecture/pack-upgrade-mechanism.md",
-  "discovery/03-gstack-skills.md → scripts/resolvers/redact-doc.ts",
-  "discovery/04-connection-contract.md → scripts/preflight-agent-sdk.ts",
-  "docs/GUARDRAILS.md → docs/trust-map.md",
-  "docs/HANDOFF-CLAUDE-F6-CORRECTIONS.md → cli/model-pricing.ts",
-  "docs/SPRINT-TUI.md → cli/model-pricing.ts",
-  "docs/SPRINT.md → docs/multi-provider-brain-audit.md",
-  "docs/SPRINT.md → docs/validation-f4.md",
-  "docs/prompts/CLAUDE-DESIGN-BRIEF.md → tui/src/kit/wordmark.ts",
-]);
+const KNOWN_BROKEN = new Set<string>([]);
 
 /** Every broken citation in the tree right now, as `doc → cited`. */
 function brokenCitations(pattern: string[], re: RegExp): string[] {

@@ -40,6 +40,7 @@ const PUBLIC_FILES = [
   "docs/reference/memory-commands.md",
   "docs/reference/session-commands.md",
   "docs/reference/routing-commands.md",
+  "docs/reference/providers.md",
   "docs/reference/tui.md",
   "docs/reference/mcp.md",
   "docs/reference/configuration.md",

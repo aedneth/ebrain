@@ -27,15 +27,17 @@
 - Esto lo enforcea técnicamente el guard canónico del harness (`guard-secrets.sh`); estas líneas son refuerzo.
 
 ## REPOS DE CLIENTE (aislamiento duro)
-- `brisas-del-golfo` y `dekko` son **código de cliente**. NUNCA los exfiltres, NUNCA los pushees a un
+- Los repos listados en tu deny-policy (`$XDG_CONFIG_HOME/ebrain/denied-repos`) son **código de
+  cliente**. NUNCA los exfiltres, NUNCA los pushees a un
   remote que no sea el suyo, NUNCA cruces su código a otros proyectos ni a la memoria de ebrain
   (son `deny` en la federación de knowledge, en `remember` y en el sweep de sesiones).
 - No abras un agente full-access en un directorio **padre** que los contenga; trabajá en el repo específico.
 
 ## Disciplina de trabajo (SOP CKIS)
 - Trabajo serio = pipeline spec-driven: contexto → plan → implementar → review → gate → ship.
-- **maker ≠ checker:** lo que un agente constructor produce, **Opus (Claude Code) lo audita** antes de merge.
-  Ningún agente se auto-aprueba en cambios de alto riesgo (arquitectura, migraciones, releases).
+- **Quien construye no aprueba:** lo que un agente constructor produce, **lo audita otro agente**
+  antes de merge. Ningún agente se auto-aprueba en cambios de alto riesgo (arquitectura,
+  migraciones, releases). Qué agente hace de revisor es tu decisión; que no sea el mismo, no.
 - Commit por fase con mensaje descriptivo. **Nunca** commitees `.brain/`, `.claude/`, backups ni secretos.
 - Los cambios estructurales dejan **rastro narrativo**: el session log es automático (hook stop →
   `.brain/sessions/`), pero además dejá entrada en el CHANGELOG del proyecto y, si aprendiste algo
@@ -43,8 +45,9 @@
 - Acciones irreversibles o hacia afuera (deploy, push, borrado): confirmá primero salvo autorización durable.
 
 ## RAM / concurrencia (laptop 4 GB)
-- **Un agente interactivo a la vez.** No corras dos agentes vivos en paralelo. Opus ↔ constructor se pasan
-  la posta por archivos (plan → el constructor ejecuta → Opus audita), no en sesiones simultáneas.
+- **Un agente interactivo a la vez.** No corras dos agentes vivos en paralelo. Revisor y constructor
+  se pasan la posta por archivos (plan → el constructor ejecuta → el revisor audita), no en
+  sesiones simultáneas.
 
 ## Modelos / routing
 - One-shots programáticos baratos → `ebrain route --cap <cap> "…"` (stack OpenRouter ruteado, capado a $10/mo).

@@ -17,7 +17,7 @@ Call `remember` the moment you learn something that a future session would waste
 
 - a **fix** or **gotcha** (root cause + the workaround), a **decision** and its *why*, a **project fact** or constraint not obvious from the code, a **user preference** you were corrected on, a **reference** (URL, path, ticket) worth pinning.
 
-Do **not** call it for: secrets/keys/tokens (it refuses them), one-off trivia, anything already in the repo/CHANGELOG, or work inside a client repo (`brisas-del-golfo`, `dekko` — it refuses those by trust-policy).
+Do **not** call it for: secrets/keys/tokens (it refuses them), one-off trivia, anything already in the repo/CHANGELOG, or work inside a client repo (anything named in your deny policy — it refuses those by trust-policy).
 
 ## How to call it
 

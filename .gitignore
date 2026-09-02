@@ -37,3 +37,7 @@ graphify-out/
 website/dist/
 website/.astro/
 .vercel/
+
+# Working notes, decision records, phase reports and the operator's own agent instructions.
+# They stay on disk and out of a public checkout.
+/docs/internal/
