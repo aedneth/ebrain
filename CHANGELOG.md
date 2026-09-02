@@ -4,6 +4,61 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-09-02 -- one brain, any provider, any agent CLI (#8)
+
+Universality, closed in five steps. The audit that opened it inverted the plan: there is no vendor
+SDK anywhere in eBrain — the sole production dependency is `zod`, and the whole repository makes
+exactly one LLM HTTP call, already in the OpenAI-compatible shape. So the work was never to build a
+provider abstraction. It was that the endpoint, the credential NAME, the request extras and the
+cost behaviour were spelled out inline for one provider, and `provider` was a literal TYPE in
+thirteen places — making a second provider a compile error rather than a config change. Suite
+**1091 pass / 0 fail** (was 991). A review of the change set found four defects; they are fixed here.
+
+- **A fresh clone could not route at all.** `routing.yaml` had four readers and no writer: `ebrain
+  route` died with "routing.yaml no existe", `ebrain profiles init` threw, and `doctor` told the
+  user `ebrain up` would create it — which nothing did. The template ships now, and `ebrain up`
+  materialises any missing user config atomically at 0600 before starting the daemon. It never
+  overwrites one that exists, including under two concurrent runs: a tuned routing table survives.
+- **The spend cap could silently stop existing.** `routing.yaml` was parsed by casting, so a typo in
+  `monthly_usd` produced `NaN` — and `NaN >= x` is false for every x, so `hard_stop` never fired.
+  The config is now parsed against a schema, by both paths that read it, and a bad file is rejected
+  with every problem named at once against its YAML path.
+- **Fifteen providers, selected by config.** A registry states what varies between endpoints:
+  where to POST, which env var NAMES may hold the credential, whether real USD comes back and
+  where, whether the endpoint does model failover itself, and which non-standard body keys it
+  understands. An id the registry has never heard of stays usable as long as the config supplies
+  the endpoint — gateways appear faster than any bundled list, and eBrain must not be the reason a
+  working one cannot be used. A config predating `provider.id` resolves through its `base_url`.
+- **Chain-walking for endpoints without server-side failover.** Without it the registry would have
+  been an empty promise: sending a `models` array to an endpoint expecting `model` is a 400. A 401,
+  403 or 429 stops the walk — those belong to the provider, and retrying a 429 pushes against a
+  limit that has already bitten.
+- **Spend is attributed to the provider that served it**, and the monthly cap is measured against
+  the provider `routing.yaml` actually points at. A non-default lane was previously billed against
+  the wrong budget. Records written before stamping keep their historical attribution rather than
+  being rewritten into "unknown".
+- **A new agent CLI is a manifest, not four edits.** Onboarding was the last place that enumerated
+  agents by name — a switch in `up.ts`, a table of config paths in `mcp-registration.ts`, two lists
+  in `uninstall.ts` — while five other consumers already discovered them by scanning the manifests.
+  The manifest now states the mechanism and one module reads it. Dropping in
+  `harness/adapters/<name>/manifest.yaml` is enough to be discovered, registered, verified and
+  uninstalled.
+- **The secret guard is wired, not just checked.** The installer wrote the guard wrapper to disk and
+  then told the user to add a JSON entry by hand. A guard that is installed but not wired protects
+  nothing, and after the first scroll that state looks exactly like a working one. Wiring is now
+  additive, idempotent and atomic: other hooks are never touched, an unparseable config is reported
+  rather than rewritten, and a hook the user wired themselves — including as `~/...`, which runs
+  fine through a shell — is recognised instead of duplicated into a second invocation per tool call.
+- **The manifest has a contract.** Unknown keys are rejected, so a mistyped `lauch:` is an error
+  rather than an adapter that quietly never launches, and `ebrain adapters validate` lets a
+  contributor check their YAML before opening a PR. `guard` is derived from mechanism, not
+  declaration: an adapter with no hook runtime cannot enforce anything, and saying otherwise would
+  claim protection that does not exist.
+- **New commands:** `ebrain providers <list|show>` (which endpoints are reachable, and whether each
+  credential is configured — presence only, never a value) and `ebrain adapters <list|show|validate>`.
+
+---
+
 ## 2026-09-02 -- robustness at scale: supervision, recovery, and honest diagnostics (#8)
 
 The shared host is now supervised, recovers on its own, and every check that reports on it can
