@@ -4,7 +4,8 @@
  * candado frontier, y parseo/suma de spend.jsonl por mes. `bun test cli/route.test.ts`.
  */
 import { test, expect } from "bun:test";
-import { classify, capExceeded, chainHasFrontier, monthKey, monthSpend, expandHome, applyFloor, FRONTIER, parseRouteArgs } from "./route.ts";
+import { FRONTIER, applyFloor, buildRequestBody, capExceeded, chainHasFrontier, classify, expandHome, isProviderLevelFailure, monthKey, monthSpend, parseRouteArgs, selectKeyName } from "./route.ts";
+import { parseRoutingConfig } from "./config-schema.ts";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -106,4 +107,63 @@ test("monthSpend: archivo inexistente → 0", async () => {
 test("expandHome: expande ~ al home real", () => {
   expect(expandHome("~/x").endsWith("/x")).toBe(true);
   expect(expandHome("/abs/path")).toBe("/abs/path");
+});
+
+// Un fallo de credencial, permiso o cap es del provider entero: caminar al siguiente modelo no
+// puede ayudar, y en el 429 insiste contra un límite que ya mordió.
+test("fallo de provider: la cadena NO sigue", () => {
+  for (const status of [401, 403, 429]) expect(isProviderLevelFailure(status)).toBe(true);
+});
+
+test("fallo de modelo: la cadena sigue al siguiente", () => {
+  for (const status of [400, 404, 500, 502, 503]) expect(isProviderLevelFailure(status)).toBe(false);
+});
+
+// El descriptor puede listar más de un NOMBRE para la credencial (google: GEMINI_API_KEY o
+// GOOGLE_API_KEY). Mirar solo el primero hacía que `providers list` dijera "set" y `route` muriera.
+test("selectKeyName: el primer NOMBRE seteado gana; sin ninguno, el primero declarado (para el error)", () => {
+  const names = ["GEMINI_API_KEY", "GOOGLE_API_KEY"];
+  expect(selectKeyName(names, { GOOGLE_API_KEY: "fixture" })).toBe("GOOGLE_API_KEY");
+  expect(selectKeyName(names, { GEMINI_API_KEY: "fixture", GOOGLE_API_KEY: "fixture" })).toBe("GEMINI_API_KEY");
+  expect(selectKeyName(names, { GEMINI_API_KEY: "", GOOGLE_API_KEY: "fixture" })).toBe("GOOGLE_API_KEY");
+  expect(selectKeyName(names, {})).toBe("GEMINI_API_KEY");
+  expect(selectKeyName([], {})).toBeNull();
+});
+
+function resolved(provider: Record<string, unknown>) {
+  return parseRoutingConfig({
+    budget: { monthly_usd: 5, hard_stop: true, log: "~/x/spend.jsonl" },
+    provider,
+    capabilities: { general: { models: ["vendor/model-a"] } },
+  });
+}
+
+test("buildRequestBody: pide costo y manda extras solo donde el descriptor lo respalda", () => {
+  const routing = { provider_routing: { data_collection: "deny" }, completion_defaults: { max_tokens: 8 } };
+
+  const openrouter = buildRequestBody(resolved({ id: "openrouter", ...routing }), "hola");
+  expect(openrouter.messages).toEqual([{ role: "user", content: "hola" }]);
+  expect(openrouter.usage).toEqual({ include: true });          // sin esto devuelve tokens pero no USD
+  expect(openrouter.provider).toEqual({ data_collection: "deny" });
+  expect(openrouter.max_tokens).toBe(8);
+  expect("model" in openrouter || "models" in openrouter).toBe(false); // eso lo pone el camino de failover
+
+  const openai = buildRequestBody(resolved({ id: "openai", ...routing }), "hola");
+  expect(openai.usage).toBeUndefined();     // no reporta costo: pedirlo no sirve de nada
+  expect(openai.provider).toBeUndefined();  // no entiende la clave: se descarta (y main() avisa)
+  expect(openai.max_tokens).toBe(8);        // los params estándar viajan siempre
+
+  const ollama = buildRequestBody(resolved({ id: "ollama" }), "hola");
+  expect(ollama.usage).toBeUndefined();
+  expect(ollama.provider).toBeUndefined();
+});
+
+test("buildRequestBody: un provider desconocido recibe los extras tal como la config los escribió", () => {
+  // El registro no sabe nada de este endpoint; la config es la única autoridad sobre él. Descartar
+  // `provider_routing` en silencio sería ignorar la preferencia del usuario sin decirlo.
+  const body = buildRequestBody(
+    resolved({ id: "mystery-gateway", base_url: "https://mystery.test/v1", key_env: "MYSTERY_KEY", provider_routing: { data_collection: "deny" } }),
+    "hola",
+  );
+  expect(body.provider).toEqual({ data_collection: "deny" });
 });

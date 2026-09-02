@@ -15,7 +15,16 @@ terminal in an alternate-screen state.
 | no truecolor / non-UTF-8 terminal | xterm-256 and ASCII fallbacks are selected by `theme.ts` | `tui/test/theme.test.ts` |
 | quit, signal, uncaught exception | reader/timers/listeners are cleaned and `Screen.exit()` restores cursor + main screen | `runUi` lifecycle in `tui/src/app.ts`; manual checklist remains required |
 
-Residual privacy tradeoff: a PEM block split outside the bounded tmux capture window can leave
-base64 body lines without a visible header/footer to classify. `peekSession` still scrubs known
-secrets and complete PEM blocks; broad redaction of arbitrary base64 would hide legitimate agent
-output. The final audit must assess this low-severity tradeoff against the existing secret guard.
+Residual privacy tradeoff, stated precisely. `peekSession` captures a bounded window
+(`capture-pane -S -200`, anchored at the live bottom), so a private key can straddle either edge.
+Three of the four possible positions carry a PEM marker and are redacted: the complete block, a
+base64 run terminating at an `END` footer (the window cut above the header), and a `BEGIN` header
+plus the run following it (the window cut below the footer). Each rule requires physical adjacency
+to a literal marker, so a JWT, a hash, a base64 diff hunk and a public `CERTIFICATE` block all pass
+through untouched — which matters beyond `peek`, because `scrubSecrets(text) !== text` is also used
+as an input validator in `cli/episodes.ts` and `cli/context.ts`.
+
+The one position that remains undecidable is a window containing **only** body lines, with both
+markers scrolled out. That needs a key body longer than the whole 200-line window (roughly 12 KB),
+and closing it would require redacting arbitrary base64 — which would both gut `peek` and start
+rejecting legitimate episode text. It is left open deliberately, behind `guard-secrets.sh`.

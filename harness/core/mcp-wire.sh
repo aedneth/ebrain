@@ -22,7 +22,7 @@ command -v jq >/dev/null 2>&1 || { echo "mcp-wire: jq requerido" >&2; exit 1; }
 merge() { # <file> <jq-filter>
   local f="$1" filter="$2" tmp; mkdir -p "$(dirname "$f")"
   [ -f "$f" ] || echo '{}' > "$f"
-  tmp="$(mktemp)" || return 1
+  tmp="$(ebrain_mktemp)" || return 1
   if jq --arg cmd "$SRV" --arg agm "$HOME/.config/opencode/AGENTS.md" "$filter" "$f" > "$tmp" 2>/dev/null; then
     mv "$tmp" "$f"
   else

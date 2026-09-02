@@ -84,7 +84,7 @@ const FAKE_COST: CostPreview = {
 };
 
 /** A recording harness for the two effectful mutators + the daemon probe + estimate. */
-function spies(overrides: { reachable?: boolean; submitResult?: unknown } = {}) {
+function spies(overrides: { reachable?: boolean; submitResult?: unknown; reloadFails?: boolean } = {}) {
   const calls: string[] = [];
   let writeArg: TargetEmbedder | undefined;
   let submitArg: ReembedSubmission | undefined;
@@ -118,6 +118,10 @@ function spies(overrides: { reachable?: boolean; submitResult?: unknown } = {}) 
       writeConfig: async (t: TargetEmbedder) => {
         calls.push("write");
         writeArg = t;
+      },
+      reloadDaemon: async () => {
+        calls.push("reload");
+        if (overrides.reloadFails) throw new Error("host did not come back up");
       },
       submit: async (p: ReembedSubmission) => {
         calls.push("submit");
@@ -301,7 +305,7 @@ describe("runMigrate — confirmation gate (HARD)", () => {
       ...s.deps,
     });
     expect(res.status).toBe("submitted");
-    expect(s.calls).toEqual(["write", "submit"]);
+    expect(s.calls).toEqual(["write", "reload", "submit"]);
   });
 });
 
@@ -317,7 +321,10 @@ describe("runMigrate — --yes (confirmed effectful path)", () => {
     });
     expect(res.status).toBe("submitted");
     expect(res.exitCode).toBe(EXIT_OK);
-    expect(s.calls).toEqual(["write", "submit"]); // order: config switch BEFORE submit
+    // The host resolves its embedding gateway once at boot, so the restart has to sit BETWEEN the
+    // config write and the submit. Submitting to the still-running host would re-embed the whole
+    // store with the OLD model and stamp it with the NEW signature, and report success.
+    expect(s.calls).toEqual(["write", "reload", "submit"]);
     expect(s.writeArg?.signature).toBe(TARGET_SIG);
     expect(s.writeArg?.model).toBe(TARGET_MODEL);
     expect(s.writeArg?.dims).toBe(1536);
@@ -327,6 +334,15 @@ describe("runMigrate — --yes (confirmed effectful path)", () => {
       max_attempts: REEMBED_MAX_ATTEMPTS,
     });
     expect(res.submitResult).toEqual({ jobId: 42 });
+  });
+
+  test("a host that does not come back is NOT re-embedded — nothing is submitted to a stale gateway", async () => {
+    const s = spies({ reachable: true, reloadFails: true });
+    await expect(
+      runMigrate({ detect: detectFake(), yes: true, isTTY: false, ...s.deps }),
+    ).rejects.toThrow(/could not be restarted/);
+    expect(s.calls).toEqual(["write", "reload"]); // submit never happened
+    expect(s.submitArg).toBeUndefined();
   });
 
   test("no --source → payload carries no source_id", async () => {

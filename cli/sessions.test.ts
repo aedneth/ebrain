@@ -18,7 +18,7 @@ import { join } from "path";
 import {
   sessionName, parseSessionName, isSafeToken, isClientPath, scrubSecrets, shellCommandFromArgv,
   listSessions, newSession, peekSession, sendToSession, killSession, resolveLaunch,
-  SESSION_PREFIX,
+  parsePaneTable, SESSION_PREFIX,
 } from "./sessions.ts";
 
 // ── naming ───────────────────────────────────────────────────────────────
@@ -108,6 +108,81 @@ describe("scrubSecrets", () => {
     const pem = scrubSecrets("-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEAbase64blob\n-----END RSA PRIVATE KEY-----");
     expect(pem).not.toContain("MIIEpAIBAAKCAQEAbase64blob");
     expect(pem).toContain("[REDACTED PRIVATE KEY]");
+  });
+
+  // Un pane capturado es una VENTANA de N líneas: la llave puede cruzar cualquiera de sus dos
+  // bordes. Redactar solo el marcador dejaba pasar el cuerpo base64 completo en 3 de las 4
+  // posiciones posibles — incluida la que el marcador suelto decía cubrir.
+  describe("llave PEM que cruza el borde de la ventana capturada", () => {
+    const BEGIN = "-----BEGIN RSA PRIVATE KEY-----";
+    const END = "-----END RSA PRIVATE KEY-----";
+    const BODY = [
+      "MIIEpAIBAAKCAQEAx7Vv9k2mQ1sK3nPqR8tYwZbC4dE5fG6hI7jK8lM9nO0pQ1rS",
+      "2tU3vW4xY5zA6bC7dE8fG9hI0jK1lM2nO3pQ4rS5tU6vW7xY8zA9bC0dE1fG2hI3",
+    ];
+
+    test("BEGIN sin END: la llave no termina en la ventana → se redacta hasta el final", () => {
+      const out = scrubSecrets([BEGIN, ...BODY].join("\n"));
+      for (const line of BODY) expect(out).not.toContain(line);
+      expect(out).toContain("[REDACTED PRIVATE KEY]");
+    });
+
+    test("END sin BEGIN: el caso REAL — `capture-pane -S -200` ancla abajo, así que la ventana corta ARRIBA", () => {
+      const out = scrubSecrets([...BODY, END].join("\n"));
+      for (const line of BODY) expect(out).not.toContain(line);
+      expect(out).toContain("[REDACTED PRIVATE KEY]");
+    });
+
+    test("el output legítimo que PRECEDE a la llave sobrevive — solo se borra la corrida adyacente al marcador", () => {
+      // Regresión cara: una regla anclada al inicio de la ventana cerraba la fuga y de paso
+      // borraba todo el pane. `peek` es para leer lo que hizo el agente; devolver solo
+      // "[REDACTED]" cambia una fuga por una herramienta inútil.
+      const out = scrubSecrets(["[agent] compiling module 42", "[agent] tests passed", ...BODY, END].join("\n"));
+      expect(out).toContain("compiling module 42");
+      expect(out).toContain("tests passed");
+      for (const line of BODY) expect(out).not.toContain(line);
+    });
+
+    test("la última línea corta del cuerpo no corta el barrido hacia atrás desde el END", () => {
+      // Un cuerpo PEM real termina en una línea corta. Con un piso de 16 caracteres, el barrido
+      // se detenía ahí y dejaba pasar todo el resto del cuerpo.
+      const SHORT = "Zm9vYmFy";
+      const out = scrubSecrets([...BODY, SHORT, END].join("\n"));
+      expect(out).not.toContain(SHORT);
+      for (const line of BODY) expect(out).not.toContain(line);
+    });
+
+    test("una llave dentro de un diff (líneas con prefijo '+') también se redacta", () => {
+      const diff = ["+" + BEGIN, ...BODY.map((b) => "+" + b), "+" + END].join("\n");
+      const out = scrubSecrets(diff);
+      for (const line of BODY) expect(out).not.toContain(line);
+    });
+
+    test("el barrido es LINEAL — un scrubber que se cuelga con la entrada es un DoS en el camino de seguridad", () => {
+      // La versión con regex era cuadrática: 200 líneas (el tamaño exacto de la ventana de
+      // `capture-pane -S -200`) tardaban ~1 s, y la TUI hace peek hasta una vez por segundo.
+      const big = Array.from({ length: 2000 }, (_, i) => `MIIEpAIBAAKCAQEAx7Vv9k2mQ1sK3nPqR8tYwZbC4dE5fG6hI7jK8lM9nO0pQ1rS${i}`).join("\n");
+      const started = performance.now();
+      scrubSecrets(big);
+      expect(performance.now() - started).toBeLessThan(500);
+    });
+
+    // Estos controles son la mitad que importa: sin ellos, "arreglar" la fuga con una regla
+    // base64 general pasa los tests y rompe el producto en silencio. `scrubSecrets(text) !== text`
+    // se usa como VALIDADOR de entrada en episodes.ts y context.ts, así que sobre-redactar no
+    // degrada `peek`: empieza a RECHAZAR texto legítimo.
+    describe("no sobre-redacta", () => {
+      const controls: Record<string, string> = {
+        "un JWT": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop",
+        "un hash sha256": "d41d8cd98f00b204e9800998ecf8427ed41d8cd98f00b204e9800998ecf8427e",
+        "un hunk de diff con base64": "+++ b/x.ts\n+SGVsbG8gd29ybGQgdGhpcyBpcyBiYXNlNjQgcGF5bG9hZA==\n-QW5vdGhlciBiYXNlNjQgc3RyaW5nIGhlcmU=",
+        "base64 suelto en un log": BODY.join("\n"),
+        "un CERTIFICATE (material público, no es secreto)": `-----BEGIN CERTIFICATE-----\n${BODY.join("\n")}\n-----END CERTIFICATE-----`,
+      };
+      for (const [name, text] of Object.entries(controls)) {
+        test(name, () => expect(scrubSecrets(text)).toBe(text));
+      }
+    });
   });
 });
 
@@ -292,5 +367,32 @@ d("F-T6 — session management survives a path with a space", () => {
     await killSession(name, true).catch(() => {});
     if (spacedDir) rmSync(spacedDir, { recursive: true, force: true });
     expect(true).toBe(true);
+  });
+});
+
+// tmux knows whether the process inside a pane is still alive; `list` simply never asked, so a
+// crashed agent's session looked byte-identical to a working one for as long as the pane lived.
+describe("liveness de sesiones (huérfanas)", () => {
+  test("distingue muerta, ociosa y viva", () => {
+    const table = [
+      "ebr-claude-dead|1|",
+      "ebr-codex-idle|0|bash",
+      "ebr-gemini-live|0|node",
+      "ebr-mixed|1|",
+      "ebr-mixed|0|python",
+    ].join("\n");
+    const live = parsePaneTable(table);
+
+    expect(live.get("ebr-claude-dead")).toMatchObject({ dead: true, idle: true, panes: 1 });
+    // Un pane en un shell: el agente se fue, la terminal quedó. Se REPORTA, nunca se mata sola.
+    expect(live.get("ebr-codex-idle")).toMatchObject({ dead: false, idle: true });
+    expect(live.get("ebr-gemini-live")).toMatchObject({ dead: false, idle: false });
+    // Una sesión con un pane muerto y otro corriendo algo NO está muerta.
+    expect(live.get("ebr-mixed")).toMatchObject({ dead: false, idle: false, panes: 2 });
+  });
+
+  test("una tabla vacía no inventa sesiones", () => {
+    expect(parsePaneTable("").size).toBe(0);
+    expect(parsePaneTable("\n\n").size).toBe(0);
   });
 });

@@ -22,6 +22,7 @@ import { homedir } from "os";
 import { join } from "path";
 import { monthKey, monthSpend, expandHome } from "./route.ts";
 import { readEngineSpend } from "./engine-spend.ts";
+import { parseRoutingConfig, RoutingConfigError, type ResolvedRoutingConfig } from "./config-schema.ts";
 
 const HOME = homedir();
 const CFG_PATH = join(HOME, ".config", "ebrain", "routing.yaml");
@@ -41,8 +42,12 @@ export function resolveEngineAuditDir(env: NodeJS.ProcessEnv = process.env): str
   return join(base, ".gbrain", "audit");
 }
 
-interface Budget { monthly_usd: number; hard_stop: boolean; log: string }
-interface RoutingCfg { budget: Budget; capabilities: Record<string, { models: string[] }> }
+/**
+ * The routing config, validated rather than cast. Returning the resolved shape means every
+ * consumer (spend, cost, routing) also learns WHICH provider the budget governs, instead of
+ * assuming one.
+ */
+type RoutingCfg = ResolvedRoutingConfig;
 
 export interface CapSpend { capability: string; mtd: number; routes: number }
 
@@ -53,8 +58,14 @@ function die(msg: string, code = 1): never {
 
 export async function loadRoutingCfg(cfgPath = CFG_PATH): Promise<RoutingCfg> {
   const f = Bun.file(cfgPath);
-  if (!(await f.exists())) die(`routing.yaml no existe en ${cfgPath}`);
-  return (Bun as unknown as { YAML: { parse: (s: string) => RoutingCfg } }).YAML.parse(await f.text());
+  if (!(await f.exists())) die(`routing.yaml no existe en ${cfgPath} — corré 'ebrain up' para crearlo desde el default`);
+  const raw = (Bun as unknown as { YAML: { parse: (s: string) => unknown } }).YAML.parse(await f.text());
+  try {
+    return parseRoutingConfig(raw, cfgPath);
+  } catch (e) {
+    if (e instanceof RoutingConfigError) die(e.message);
+    throw e;
+  }
 }
 
 // Agrega MTD + conteo de rutas POR capacidad desde el ledger. Las capacidades conocidas (de

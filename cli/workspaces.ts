@@ -31,6 +31,16 @@ function hasOnly(value: Record<string, unknown>, keys: string[]): boolean {
 }
 
 /** Resolve a submitted directory through symlinks and reject it before it can reach the store. */
+/**
+ * The directory a workspace points at is gone.
+ *
+ * Distinguished from every other validation failure on purpose. A deleted worktree is stale
+ * bookkeeping, not a safety violation — but it used to be fatal to the whole store, which meant
+ * one `rm -rf` of an old worktree took `list`, `add`, `rename` and, worst of all, the `remove`
+ * that would have repaired it. A registry must survive the thing it is a registry of.
+ */
+export class WorkspaceMissingError extends Error {}
+
 export async function canonicalWorkspacePath(input: string): Promise<string> {
   const submitted = resolve(input);
   if (isClientPath(submitted)) throw new Error("client repository paths are not allowed as workspaces");
@@ -38,7 +48,7 @@ export async function canonicalWorkspacePath(input: string): Promise<string> {
   try {
     canonical = await realpath(submitted);
   } catch {
-    throw new Error("workspace directory does not exist");
+    throw new WorkspaceMissingError("workspace directory does not exist");
   }
   if (isClientPath(canonical)) throw new Error("workspace resolves into a client repository");
   let info;
@@ -79,27 +89,55 @@ export function parseWorkspaceStore(value: unknown): WorkspaceStore {
 
 /** Stored directories are revalidated on every read/write. A hand-edited store cannot turn a
  * formerly harmless symlink into a client path or a non-canonical launch target. */
-export async function validateWorkspaceStore(store: WorkspaceStore): Promise<WorkspaceStore> {
+export async function validateWorkspaceStore(
+  store: WorkspaceStore,
+  opts: { tolerateMissing?: boolean } = {},
+): Promise<WorkspaceStore> {
   const parsed = parseWorkspaceStore(store);
   for (const workspace of parsed.workspaces) {
-    const canonical = await canonicalWorkspacePath(workspace.cwd);
+    let canonical: string;
+    try {
+      canonical = await canonicalWorkspacePath(workspace.cwd);
+    } catch (error) {
+      // A vanished directory is kept as recorded so the entry stays visible and removable. The
+      // safety checks it skips are the ones that need a target to resolve; the client-path guard
+      // runs on the submitted path first and still applies, and anything that actually launches
+      // into a workspace re-validates then, when the directory has to exist anyway.
+      if (opts.tolerateMissing && error instanceof WorkspaceMissingError) continue;
+      throw error;
+    }
     if (canonical !== workspace.cwd) throw new Error(`workspace directory is not canonical: ${workspace.id}`);
   }
   return parsed;
+}
+
+/** Entries whose directory is gone — what `ebrain workspaces validate` reports. */
+export async function missingWorkspaces(store: WorkspaceStore): Promise<Workspace[]> {
+  const missing: Workspace[] = [];
+  for (const workspace of store.workspaces) {
+    try {
+      await canonicalWorkspacePath(workspace.cwd);
+    } catch (error) {
+      if (error instanceof WorkspaceMissingError) missing.push(workspace);
+    }
+  }
+  return missing;
 }
 
 export async function readWorkspaceStore(path = STORE_PATH): Promise<WorkspaceStore> {
   const file = Bun.file(path);
   if (!(await file.exists())) return { schema_version: 1, workspaces: [] };
   try {
-    return await validateWorkspaceStore(parseWorkspaceStore(JSON.parse(await file.text())));
+    return await validateWorkspaceStore(parseWorkspaceStore(JSON.parse(await file.text())), { tolerateMissing: true });
   } catch (error) {
     throw new Error(`invalid workspace store: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
 export async function writeWorkspaceStore(store: WorkspaceStore, path = STORE_PATH): Promise<void> {
-  const parsed = await validateWorkspaceStore(store);
+  // Writes tolerate a missing directory too: otherwise removing workspace A would be blocked by
+  // workspace B having been deleted, which is precisely the repair the user is trying to make.
+  const parsed = await validateWorkspaceStore(store, { tolerateMissing: true });
   const dir = dirname(path);
   await mkdir(dir, { recursive: true, mode: 0o700 });
   await chmod(dir, 0o700);
@@ -205,10 +243,20 @@ async function main(): Promise<void> {
     onlyFlags(args, ["--cwd"]);
     if (args.yes) die("workspaces validate does not write local config", 2);
     const cwd = valueOf(args, "--cwd");
-    if (!cwd) die("usage: ebrain workspaces validate --cwd DIR [--json]", 2);
-    return print({ ok: true, cwd: await canonicalWorkspacePath(cwd) });
+    // With `--cwd` it answers "is THIS directory a legal workspace" (unchanged). Without it, it
+    // answers the question the store itself raises now that a vanished directory is tolerated
+    // rather than fatal: which recorded workspaces no longer exist, and how to clear them.
+    if (cwd) return print({ ok: true, cwd: await canonicalWorkspacePath(cwd) });
+    const store = await readWorkspaceStore();
+    const missing = await missingWorkspaces(store);
+    return print({
+      ok: missing.length === 0,
+      workspaces: store.workspaces.length,
+      missing,
+      ...(missing.length === 0 ? {} : { hint: "remove a stale entry with: ebrain workspaces remove --id <id> --yes" }),
+    });
   }
-  if (!["list", "add", "rename", "remove"].includes(args.command)) {
+  if (!["list", "validate", "add", "rename", "remove"].includes(args.command)) {
     die("usage: ebrain workspaces <list|validate|add|rename|remove> [--json]", 2);
   }
   if (args.command === "list") {

@@ -11,7 +11,7 @@
 | `gbrain-run` / `gbrain-mcp` | Wrappers de compat hacia los nombres `ebrain-*` para configs viejas. |
 | `ebrain-q` | **Cross-source fan-out** (overlay): consulta cada source federado y mergea por score. Compensa la v1 limitation de gbrain (`all_sources`/`__all__` devuelven vacío). Ver ADR-001 §cross-source. |
 | `ebrain-brain` | **Host del daemon compartido (FASE D)**: asegura `EBRAIN_MCP_TOKEN` antes de bindear HTTP y luego ejecuta `gbrain serve --http --port 8541 --bind 127.0.0.1` — UN server HTTP-MCP dueño del lock PGLite. |
-| `ebrain-daemon` | Control del host: `start\|stop\|status\|restart` (pidfile + guard del lock single-writer). Cableado como `ebrain daemon …`. |
+| `ebrain-daemon` | Control del host: `start\|stop\|status\|restart\|ensure\|install-service\|uninstall-service`. Wrapper delgado sobre `cli/daemon-control.ts` (igual que `ebrain-up` → `cli/up.ts`); el protocolo — pidfile verificado por identidad, lock de arranque atómico, arranque validado contra `/health`, rotación de log y supervisión systemd/launchd — vive ahí, donde es testeable. Cableado como `ebrain daemon …`. |
 | `ebrain-up` | Wrapper de `ebrain up`/`ebrain onboard`: carga el env privado sin imprimir secretos, asegura token, registra agentes vía bridge al daemon y corre smoke `tools/list`. |
 
 ## Reinstalar en una máquina nueva

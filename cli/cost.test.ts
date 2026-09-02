@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -100,6 +100,88 @@ describe("cost ledger v2", () => {
       expect(() => makeAdapterEvent({ provider: "openai", kind: "actual" })).toThrow("actual/estimated requiere usd");
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("provider attribution beyond a single lane", () => {
+  test("a route record stamped with its provider is attributed there, not to the historical lane", () => {
+    const event = normalizeRouteRecord({
+      ts: "2026-08-15T12:00:00.000Z", src: "route", provider: "groq", cap: "coding",
+      model: "llama-3.3-70b", tokens_in: 10, tokens_out: 5, usd: 0.0002,
+    });
+    expect(event?.provider).toBe("groq");
+  });
+
+  test("a record predating provider stamping keeps its historical attribution", () => {
+    // Dropping these into "unknown" would rewrite spend history that is not wrong.
+    const event = normalizeRouteRecord({ ts: "2026-06-01T00:00:00.000Z", usd: 0.01 });
+    expect(event?.provider).toBe("openrouter");
+  });
+
+  test("the cap is measured against the provider routing.yaml points at", () => {
+    const report = buildCostReport(
+      [
+        { ts: "2026-08-15T00:00:00.000Z", provider: "groq", usd: 2, tokens_in: 1, tokens_out: 1 },
+        { ts: "2026-08-15T01:00:00.000Z", provider: "openrouter", usd: 7, tokens_in: 1, tokens_out: 1 },
+      ],
+      [],
+      { month: "2026-08", budget: { monthly_usd: 10, hard_stop: true }, routedProvider: "groq" },
+    );
+    expect(report.routed_provider).toBe("groq");
+    expect(report.routed_mtd).toBe(2);
+    expect(report.remaining_routed).toBe(8);
+    expect(report.budget.scope).toBe("groq");
+    // The retained fields stay literally true about the OpenRouter lane.
+    expect(report.openrouter_mtd).toBe(7);
+  });
+
+  test("defaults to the historical lane when no provider is named", () => {
+    const report = buildCostReport(
+      [{ ts: "2026-08-15T00:00:00.000Z", usd: 3, tokens_in: 1, tokens_out: 1 }],
+      [],
+      { month: "2026-08", budget: { monthly_usd: 10, hard_stop: true } },
+    );
+    expect(report.routed_provider).toBe("openrouter");
+    expect(report.routed_mtd).toBe(3);
+  });
+
+  test("every registry provider is listed at zero rather than omitted", () => {
+    const report = buildCostReport([], [], { month: "2026-08", routedProvider: "mistral" });
+    const ids = report.providers.map((row) => row.provider);
+    for (const id of ["openrouter", "groq", "mistral", "xai", "ollama"]) expect(ids).toContain(id);
+    // Nothing may be called "metered" before an event exists unless it reports real USD.
+    expect(report.providers.find((row) => row.provider === "groq")!.status).toBe("untracked");
+    expect(report.providers.find((row) => row.provider === "openrouter")!.status).toBe("metered");
+  });
+});
+
+describe("the human report", () => {
+  test("names the provider the cap governs instead of a hardcoded lane", () => {
+    // The first line was made to follow routing.yaml; the line under it still said the cap applied
+    // to OpenRouter, which is false the moment the config points anywhere else.
+    const home = tmp();
+    try {
+      const cfg = join(home, ".config", "ebrain");
+      mkdirSync(cfg, { recursive: true });
+      writeFileSync(join(cfg, "routing.yaml"), [
+        "budget: { monthly_usd: 5, hard_stop: true, log: ~/.config/ebrain/spend.jsonl }",
+        "provider: { id: groq }",
+        "capabilities: { general: { models: [vendor/model-a] } }",
+        "",
+      ].join("\n"));
+      const proc = Bun.spawnSync(["bun", "run", join(import.meta.dir, "cost.ts")], {
+        env: { PATH: process.env.PATH ?? "", HOME: home },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const out = proc.stdout.toString();
+      expect(proc.exitCode).toBe(0);
+      expect(out).toContain("groq $0.0000 / cap $5");
+      expect(out).toContain("cap aplica solo a groq");
+      expect(out).not.toContain("cap aplica solo a OpenRouter");
+    } finally {
+      rmSync(home, { recursive: true, force: true });
     }
   });
 });

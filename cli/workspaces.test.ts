@@ -14,6 +14,8 @@ import {
   readWorkspaceStore,
   renameWorkspace,
   removeWorkspace,
+  missingWorkspaces,
+  validateWorkspaceStore,
   writeWorkspaceStore,
 } from "./workspaces.ts";
 import { SESSION_PREFIX, killSession, listSessions, newSession } from "./sessions.ts";
@@ -149,4 +151,58 @@ tmuxTest("validated workspace records launch independent fake-agent sessions in 
     await killSession(alphaName, true);
     await killSession(betaName, true);
   }
+});
+
+// A registry has to survive the disappearance of the thing it registers. Before this, one
+// `rm -rf` of an old worktree made `readWorkspaceStore` throw, which took list, add, rename and
+// — the part that mattered — the `remove` that was the only way to repair it.
+describe("a workspace directory that no longer exists", () => {
+  test("does not brick the store, and can still be removed", async () => {
+    const base = mkdtempSync(join(tmpdir(), "ebrain-ws-missing-"));
+    try {
+      const keep = join(base, "keep");
+      const doomed = join(base, "doomed");
+      mkdirSync(keep, { recursive: true });
+      mkdirSync(doomed, { recursive: true });
+      const storePath = join(base, "workspaces.json");
+
+      let store = await addWorkspace({ schema_version: 1, workspaces: [] }, { label: "Keep", cwd: keep });
+      store = await addWorkspace(store, { label: "Doomed", cwd: doomed });
+      await writeWorkspaceStore(store, storePath);
+
+      rmSync(doomed, { recursive: true, force: true });
+
+      // The read must succeed and still show both entries.
+      const read = await readWorkspaceStore(storePath);
+      expect(read.workspaces).toHaveLength(2);
+
+      const missing = await missingWorkspaces(read);
+      expect(missing.map((w) => w.label)).toEqual(["Doomed"]);
+
+      // And the repair path has to work.
+      const repaired = removeWorkspace(read, missing[0].id);
+      await writeWorkspaceStore(repaired, storePath);
+      const after = await readWorkspaceStore(storePath);
+      expect(after.workspaces.map((w) => w.label)).toEqual(["Keep"]);
+      expect(await missingWorkspaces(after)).toEqual([]);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  test("tolerance does not extend to unsafe paths — a denied repository is still refused", async () => {
+    const base = mkdtempSync(join(tmpdir(), "ebrain-ws-denied-"));
+    try {
+      const denied = join(base, "denied-alpha");
+      mkdirSync(denied, { recursive: true });
+      await expect(
+        validateWorkspaceStore(
+          { schema_version: 1, workspaces: [{ id: "x", label: "X", cwd: denied }] },
+          { tolerateMissing: true },
+        ),
+      ).rejects.toThrow(/client repositor/);
+    } finally {
+      rmSync(base, { recursive: true, force: true });
+    }
+  });
 });

@@ -7,7 +7,7 @@
  * registers detected agents, and smoke-tests the endpoint. `ebrain onboard`
  * re-runs the idempotent registration layer.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync, copyFileSync, renameSync, realpathSync } from "fs";
 import { access } from "fs/promises";
 import { constants } from "fs";
 import { dirname, join } from "path";
@@ -26,15 +26,30 @@ import {
   tokenStorePaths,
   toolsListSmoke,
 } from "./mcp-token.ts";
+import { ensure as ensureDaemon, stop as stopDaemon, logLocation as daemonLogLocation } from "./daemon-control.ts";
+import { materialiseDefaults } from "./config-bootstrap.ts";
+import { fillArgs, findAgentSpec, mcpEntryFor, onboardableAgents, readAgentMcpSpecs, type AgentMcpSpec } from "./mcp-manifest.ts";
 
 const HOME = homedir();
 const EBRAIN_HOME = resolveEbrainHome();
 const CFG = join(HOME, ".config", "ebrain");
-const SCRIPTS = join(EBRAIN_HOME, "scripts");
-const DEFAULT_AGENTS = ["claude", "codex", "gemini", "cursor", "opencode"] as const;
 const MCP_SERVER_NAME = "ebrain";
 
-export type OnboardAgent = typeof DEFAULT_AGENTS[number] | "generic";
+/**
+ * Which agents `ebrain up` onboards is now a property of the adapters on disk, not a list in this
+ * file. Dropping in `harness/adapters/pi/manifest.yaml` is enough for `ebrain onboard pi` to work,
+ * which is what every other consumer of the manifests already assumed.
+ */
+function onboardableAgentNames(): string[] {
+  return onboardableAgents(readAgentMcpSpecs()).map((spec) => spec.agent);
+}
+
+/** Every adapter, including those with no MCP surface — the set a user may legitimately name. */
+function allAgentNames(): string[] {
+  return readAgentMcpSpecs().map((spec) => spec.agent);
+}
+
+export type OnboardAgent = string;
 export type OnboardStatus = "registered" | "skipped" | "failed";
 
 export interface OnboardResult {
@@ -63,15 +78,14 @@ function ensureDirs(): void {
   mkdirSync(join(CFG, "wd"), { recursive: true, mode: 0o700 });
 }
 
-export function parseOnboardTarget(args: string[]): OnboardAgent[] {
-  if (args.length === 0 || args.includes("--all")) return [...DEFAULT_AGENTS];
+export function parseOnboardTarget(args: string[], known = allAgentNames(), onboardable = onboardableAgentNames()): OnboardAgent[] {
+  if (args.length === 0 || args.includes("--all")) return [...onboardable];
   const target = args.find((a) => !a.startsWith("--"));
-  if (!target) return [...DEFAULT_AGENTS];
-  if (target === "all") return [...DEFAULT_AGENTS];
-  if (![...DEFAULT_AGENTS, "generic"].includes(target as OnboardAgent)) {
-    throw new Error(`unknown agent '${target}'. Use --all or one of: ${[...DEFAULT_AGENTS, "generic"].join(", ")}`);
+  if (!target || target === "all") return [...onboardable];
+  if (!known.includes(target)) {
+    throw new Error(`unknown agent '${target}'. Use --all or one of: ${known.join(", ")}`);
   }
-  return [target as OnboardAgent];
+  return [target];
 }
 
 export async function which(binary: string, pathValue = process.env.PATH || ""): Promise<string | null> {
@@ -86,46 +100,41 @@ export async function which(binary: string, pathValue = process.env.PATH || ""):
   return null;
 }
 
-export function commandForAgent(agent: OnboardAgent, token: string, url = mcpUrl(port()), bridge = bridgeCommandPath(EBRAIN_HOME)): CommandSpec | null {
+/**
+ * The registration command for an agent that owns its own MCP registry, built from its manifest.
+ *
+ * eBrain runs `<binary> mcp add …` rather than writing into a file the agent manages, so the agent
+ * stays the authority on its own config format. The token never appears in argv — the bridge reads
+ * it from the 0600 store at call time — which is why `tokenInArgv` is false for every spec here.
+ */
+export function commandForAgent(
+  agent: OnboardAgent,
+  token: string,
+  url = mcpUrl(port()),
+  bridge = bridgeCommandPath(EBRAIN_HOME),
+  spec = findAgentSpec(agent),
+): CommandSpec | null {
   void token;
   void url;
-  switch (agent) {
-    case "claude":
-      return {
-        binary: "claude",
-        tokenInArgv: false,
-        args: ["mcp", "add", "--scope", "user", MCP_SERVER_NAME, "--", bridge],
-      };
-    case "codex":
-      return {
-        binary: "codex",
-        tokenInArgv: false,
-        args: ["mcp", "add", MCP_SERVER_NAME, "--", bridge],
-      };
-    case "gemini":
-      return {
-        binary: "gemini",
-        tokenInArgv: false,
-        args: ["mcp", "add", "--scope", "user", "--transport", "stdio", MCP_SERVER_NAME, bridge],
-      };
-    case "opencode":
-    case "cursor":
-    case "generic":
-      return null;
-  }
+  if (!spec || spec.method !== "cli" || !spec.binary || spec.addArgs.length === 0) return null;
+  return {
+    binary: spec.binary,
+    tokenInArgv: false,
+    args: fillArgs(spec.addArgs, { name: MCP_SERVER_NAME, bridge }),
+  };
 }
 
-export function removalCommandForAgent(agent: OnboardAgent): CommandSpec | null {
-  switch (agent) {
-    case "claude":
-      return { binary: "claude", args: ["mcp", "remove", MCP_SERVER_NAME], tokenInArgv: false };
-    case "codex":
-      return { binary: "codex", args: ["mcp", "remove", MCP_SERVER_NAME], tokenInArgv: false };
-    case "gemini":
-      return { binary: "gemini", args: ["mcp", "remove", MCP_SERVER_NAME], tokenInArgv: false };
-    default:
-      return null;
-  }
+export function removalCommandForAgent(
+  agent: OnboardAgent,
+  spec = findAgentSpec(agent),
+  bridge = bridgeCommandPath(EBRAIN_HOME),
+): CommandSpec | null {
+  if (!spec || spec.method !== "cli" || !spec.binary || spec.removeArgs.length === 0) return null;
+  return {
+    binary: spec.binary,
+    tokenInArgv: false,
+    args: fillArgs(spec.removeArgs, { name: MCP_SERVER_NAME, bridge }),
+  };
 }
 
 export function commandDisplay(spec: CommandSpec, token: string): string {
@@ -143,6 +152,15 @@ async function runAgentCommand(spec: CommandSpec, token: string): Promise<{ ok: 
     ok: false,
     detail: redactSecrets(`${spec.binary} failed rc=${res.code}: ${res.stderr || res.stdout}`, [token]).trim(),
   };
+}
+
+/**
+ * Did an agent CLI refuse the add only because the name is already taken? That is the one
+ * failure a re-registration may resolve by removing first. Every other failure must leave a
+ * working registration exactly where it is.
+ */
+export function looksLikeAlreadyRegistered(output: string): boolean {
+  return /already\s+(exists|configured|registered|added)|duplicate\s+server|name\s+is\s+taken/i.test(output);
 }
 
 async function removeExisting(agent: OnboardAgent, token: string): Promise<void> {
@@ -164,10 +182,36 @@ function readJsonObject(path: string): Record<string, unknown> {
   }
 }
 
+/**
+ * Write an agent's config atomically, keeping one pre-eBrain copy.
+ *
+ * This file is the user's, not ours — it holds every other MCP server they configured. A
+ * plain `writeFileSync` truncates first, so a crash or a concurrent onboard mid-write leaves
+ * them with a half-written config and no way back. The token store already writes through a
+ * temp file and a rename; agent configs deserve the same care, plus a one-time backup taken
+ * before eBrain ever modifies them.
+ */
 function writeJsonObject(path: string, data: Record<string, unknown>): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600 });
-  chmodSync(path, 0o600);
+  // Write through a symlink, do not replace it. Plenty of people keep ~/.cursor/mcp.json linked
+  // into a dotfiles repo; `rename(2)` onto the link would swap it for a regular file and silently
+  // detach them from their own config. Resolving first also keeps the temp file on the same
+  // filesystem as the target, which is what makes the rename atomic rather than lucky.
+  const target = existsSync(path) ? realpathSync(path) : path;
+  const backup = `${target}.ebrain-backup`;
+  if (existsSync(target) && !existsSync(backup)) {
+    try {
+      copyFileSync(target, backup);
+      // The backup is a copy of a config eBrain then hardens to 0600; leaving the original's
+      // looser mode on it would hand back the permissions the hardening just removed.
+      chmodSync(backup, 0o600);
+    } catch { /* a missing backup must never block onboarding */ }
+  }
+  const tmp = `${target}.ebrain-tmp-${process.pid}`;
+  writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(tmp, 0o600);
+  renameSync(tmp, target);
+  chmodSync(target, 0o600);
 }
 
 function chmodIfExists(path: string, mode: number): void {
@@ -175,105 +219,93 @@ function chmodIfExists(path: string, mode: number): void {
   chmodSync(path, mode);
 }
 
-function hardenAgentConfig(agent: OnboardAgent): void {
-  const files: string[] = [];
-  switch (agent) {
-    case "claude":
-      files.push(join(HOME, ".claude.json"));
-      break;
-    case "codex":
-      files.push(join(HOME, ".codex", "config.toml"));
-      break;
-    case "gemini":
-      files.push(join(HOME, ".gemini", "settings.json"));
-      break;
-    case "cursor":
-      files.push(join(HOME, ".cursor", "mcp.json"));
-      break;
-    case "opencode":
-      files.push(join(HOME, ".config", "opencode", "opencode.json"));
-      break;
-  }
-  for (const file of files) {
-    try { chmodIfExists(file, 0o600); } catch { /* best-effort hardening */ }
-  }
+function hardenAgentConfig(agent: OnboardAgent, spec = findAgentSpec(agent)): void {
+  if (!spec?.configPath) return;
+  try { chmodIfExists(spec.configPath, 0o600); } catch { /* best-effort hardening */ }
 }
 
+/**
+ * Merge eBrain's entry into an agent's JSON config, leaving every neighbouring server untouched.
+ *
+ * The shape and the key come from the agent's manifest, so this one function replaced a
+ * per-agent pair of near-identical merges. `repairs` covers the schema quirks a specific agent
+ * has — declared in its manifest rather than inferred here, because a repair applied to the wrong
+ * config would be eBrain silently rewriting a file it does not own.
+ */
+export function mergeMcpConfig(
+  current: Record<string, unknown>,
+  spec: Pick<AgentMcpSpec, "keys" | "entryShape" | "repairs">,
+  bridge = bridgeCommandConfig(bridgeCommandPath(EBRAIN_HOME)),
+): Record<string, unknown> {
+  const key = spec.keys[0] ?? "mcpServers";
+  const existing = current[key] && typeof current[key] === "object" && !Array.isArray(current[key])
+    ? current[key] as Record<string, unknown>
+    : {};
+
+  let rest: Record<string, unknown> = { ...current };
+  const extra: Record<string, unknown> = {};
+
+  // OpenCode's schema requires `instructions` to be an array; a string there makes it reject the
+  // whole file, including the server we just added. Normalising it is a repair, not a preference.
+  if (spec.repairs.includes("instructions-array")) {
+    const { instructions: raw, ...withoutInstructions } = rest;
+    rest = withoutInstructions;
+    const instructions = Array.isArray(raw) ? raw : typeof raw === "string" ? [raw] : undefined;
+    if (instructions !== undefined) extra.instructions = instructions;
+  }
+
+  return {
+    ...rest,
+    [key]: { ...existing, [MCP_SERVER_NAME]: mcpEntryFor(spec.entryShape, bridge) },
+    ...extra,
+  };
+}
+
+/** Retained for callers and tests that name the agent rather than pass its spec. */
 export function mergeCursorMcpConfig(current: Record<string, unknown>, token: string, url = mcpUrl(port())): Record<string, unknown> {
   void token;
   void url;
-  const bridge = bridgeCommandConfig(bridgeCommandPath(EBRAIN_HOME));
-  const mcpServers = current.mcpServers && typeof current.mcpServers === "object" && !Array.isArray(current.mcpServers)
-    ? current.mcpServers as Record<string, unknown>
-    : {};
-  return {
-    ...current,
-    mcpServers: {
-      ...mcpServers,
-      [MCP_SERVER_NAME]: bridge,
-    },
-  };
+  return mergeMcpConfig(current, { keys: ["mcpServers"], entryShape: "command-args", repairs: [] });
 }
 
 export function mergeOpenCodeMcpConfig(current: Record<string, unknown>, token: string): Record<string, unknown> {
   void token;
-  const mcp = current.mcp && typeof current.mcp === "object" && !Array.isArray(current.mcp)
-    ? current.mcp as Record<string, unknown>
-    : {};
-  const bridge = bridgeCommandConfig(bridgeCommandPath(EBRAIN_HOME));
-  const { instructions: rawInstructions, ...rest } = current;
-  const instructions = Array.isArray(rawInstructions)
-    ? rawInstructions
-    : typeof rawInstructions === "string"
-      ? [rawInstructions]
-      : undefined;
-  return {
-    ...rest,
-    mcp: {
-      ...mcp,
-      [MCP_SERVER_NAME]: {
-        type: "local",
-        command: [bridge.command, ...bridge.args],
-      },
-    },
-    ...(instructions === undefined ? {} : { instructions }),
-  };
+  return mergeMcpConfig(current, { keys: ["mcp"], entryShape: "local-command", repairs: ["instructions-array"] });
 }
 
-async function registerCursor(token: string): Promise<OnboardResult> {
-  if (!(await which("agent"))) return { agent: "cursor", status: "skipped", detail: "agent not installed" };
-  const file = join(HOME, ".cursor", "mcp.json");
+/** Register an agent that has no `mcp add` command, by editing the config its manifest names. */
+async function registerViaJsonConfig(spec: AgentMcpSpec, token: string): Promise<OnboardResult> {
+  const agent = spec.agent;
+  if (!spec.configPath) return { agent, status: "skipped", detail: "manifest declares no config path" };
+  if (spec.binary && !(await which(spec.binary))) return { agent, status: "skipped", detail: `${spec.binary} not installed` };
   try {
-    const next = mergeCursorMcpConfig(readJsonObject(file), token);
-    writeJsonObject(file, next);
-    return { agent: "cursor", status: "registered", detail: "~/.cursor/mcp.json -> daemon bridge" };
+    const next = mergeMcpConfig(readJsonObject(spec.configPath), spec);
+    writeJsonObject(spec.configPath, next);
+    hardenAgentConfig(agent, spec);
+    return { agent, status: "registered", detail: `${spec.configPath} -> daemon bridge` };
   } catch (e) {
-    return { agent: "cursor", status: "failed", detail: redactSecrets(e instanceof Error ? e.message : String(e), [token]) };
-  }
-}
-
-async function registerOpenCode(token: string): Promise<OnboardResult> {
-  if (!(await which("opencode"))) return { agent: "opencode", status: "skipped", detail: "opencode not installed" };
-  const file = join(HOME, ".config", "opencode", "opencode.json");
-  try {
-    const next = mergeOpenCodeMcpConfig(readJsonObject(file), token);
-    writeJsonObject(file, next);
-    return { agent: "opencode", status: "registered", detail: "~/.config/opencode/opencode.json -> daemon bridge" };
-  } catch (e) {
-    return { agent: "opencode", status: "failed", detail: redactSecrets(e instanceof Error ? e.message : String(e), [token]) };
+    return { agent, status: "failed", detail: redactSecrets(e instanceof Error ? e.message : String(e), [token]) };
   }
 }
 
 async function onboardOne(agent: OnboardAgent, token: string): Promise<OnboardResult> {
-  if (agent === "generic") return { agent, status: "skipped", detail: "generic has no native MCP client" };
-  if (agent === "cursor") return registerCursor(token);
-  if (agent === "opencode") return registerOpenCode(token);
+  const manifest = findAgentSpec(agent);
+  if (!manifest) return { agent, status: "skipped", detail: "no adapter manifest for this agent" };
+  if (manifest.method === "none") return { agent, status: "skipped", detail: "this adapter has no native MCP client" };
+  if (manifest.method === "json") return registerViaJsonConfig(manifest, token);
 
-  const spec = commandForAgent(agent, token);
+  const spec = commandForAgent(agent, token, undefined, undefined, manifest);
   if (!spec) return { agent, status: "skipped", detail: "no registration command" };
   if (!(await which(spec.binary))) return { agent, status: "skipped", detail: `${spec.binary} not installed` };
-  await removeExisting(agent, token);
-  const res = await runAgentCommand(spec, token);
+
+  // Add first, and only drop an existing entry once a plain add has proved the name is
+  // taken. Removing up front made every re-run destructive: if the add then failed for any
+  // reason at all, the user was left with no eBrain entry where a working one had been.
+  let res = await runAgentCommand(spec, token);
+  if (!res.ok && looksLikeAlreadyRegistered(res.detail)) {
+    await removeExisting(agent, token);
+    res = await runAgentCommand(spec, token);
+  }
   if (res.ok) hardenAgentConfig(agent);
   return {
     agent,
@@ -286,21 +318,6 @@ export async function onboardAgents(agents: OnboardAgent[], token: string): Prom
   const out: OnboardResult[] = [];
   for (const agent of agents) out.push(await onboardOne(agent, token));
   return out;
-}
-
-async function startDaemon(): Promise<void> {
-  const ctl = join(SCRIPTS, "ebrain-daemon");
-  const res = await runProcess(["bash", ctl, "start"], { timeoutMs: 30_000 });
-  if (res.code !== 0) throw new Error(redactSecrets(res.stderr || res.stdout).trim() || "daemon start failed");
-}
-
-async function waitForDaemon(timeoutMs = 15_000): Promise<boolean> {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    if (await healthCheck(healthUrl(port()), 2_000)) return true;
-    await Bun.sleep(500);
-  }
-  return false;
 }
 
 async function tokenForOnboard(): Promise<string> {
@@ -350,22 +367,68 @@ async function cmdEnsureToken(args: string[]): Promise<void> {
   if (!quiet) console.log(`ebrain token: ready (${token.source})`);
 }
 
+/**
+ * The smoke test decides whether `ebrain up` succeeded, so it has to be as patient as the thing
+ * it is measuring. A single un-retried 10-second probe turned any transient blip — an engine still
+ * warming its tool registry on a slow machine — into a failed installation, because
+ * `scripts/install.sh` treats a non-zero `ebrain up` as fatal. The bridge already retries this
+ * exact class of failure; the verifier of the install should not be less forgiving than the
+ * runtime.
+ */
+async function smokeWithRetry(token: string, attempts = 3): Promise<Awaited<ReturnType<typeof toolsListSmoke>>> {
+  let last = await toolsListSmoke(mcpUrl(port()), token, 20_000);
+  for (let attempt = 2; attempt <= attempts && !last.ok; attempt++) {
+    await Bun.sleep(1_000 * (attempt - 1));
+    last = await toolsListSmoke(mcpUrl(port()), token, 20_000);
+  }
+  return last;
+}
+
 async function cmdUp(args: string[]): Promise<void> {
   const json = args.includes("--json");
   ensureDirs();
 
-  const wasHealthy = await healthCheck(healthUrl(port()), 3_000);
-  if (!wasHealthy) {
-    await startDaemon();
-    if (!(await waitForDaemon())) throw new Error("daemon did not become healthy on :8541");
-  }
+  // The user config comes first: `routing.yaml` was read by four call sites and written by none,
+  // so a fresh clone could bring the daemon up and still fail on the first `ebrain route`. Doing
+  // it before the daemon also means a failure here costs nothing that has to be undone.
+  const configs = materialiseDefaults({ configDir: CFG });
 
-  const token = await tokenForOnboard();
-  const smoke = await toolsListSmoke(mcpUrl(port()), token);
-  const results = await onboardAgents([...DEFAULT_AGENTS], token);
+  // `ensureDaemon` is the idempotent primitive: healthy already, or started under the shared
+  // start lock and confirmed serving before it returns. Going through it rather than spawning
+  // the control script means N agents running `ebrain up` at once still produce one host.
+  const wasHealthy = await healthCheck(healthUrl(port()), 3_000);
+  await ensureDaemon({ quiet: json });
+
+  // A healthy daemon with no token store used to dead-end: the only mint that works without an
+  // admin bootstrap token is the one the host performs at boot, before it takes the PGLite lock,
+  // and `up` skips the boot when the port already answers. The user was told to "run 'ebrain up'"
+  // — by `ebrain up`. Restarting the host runs that boot-time mint, so do it rather than say it.
+  //
+  // Two guards on that, because a command named `up` must never leave the brain DOWN. The trigger
+  // is narrowed to the one failure a restart can actually fix, and if the restart does not take,
+  // the host we stopped is brought back before the error propagates.
+  let token: string;
+  try {
+    token = await tokenForOnboard();
+  } catch (e) {
+    const missingToken = e instanceof Error && e.message.includes(EBRAIN_MCP_TOKEN_ENV);
+    if (!wasHealthy || !missingToken) throw e;
+    if (!json) console.log("ebrain up: no local token found; restarting the host so it can mint one …");
+    await stopDaemon({ quiet: true });
+    try {
+      await ensureDaemon({ quiet: json });
+      token = await tokenForOnboard();
+    } catch (restartError) {
+      try { await ensureDaemon({ quiet: true }); } catch { /* reported below either way */ }
+      throw restartError;
+    }
+  }
+  const smoke = await smokeWithRetry(token);
+  const results = await onboardAgents(onboardableAgentNames(), token);
   const payload = {
     daemon: { state: "up", url: mcpUrl(port()), already_running: wasHealthy },
     token: { store: tokenStorePaths(CFG).tokenFile, env: EBRAIN_MCP_TOKEN_ENV },
+    config: configs.map(({ name, target, action }) => ({ name, path: target, action })),
     smoke,
     onboard: results,
   };
@@ -374,7 +437,12 @@ async function cmdUp(args: string[]): Promise<void> {
   } else {
     console.log(`ebrain up: daemon UP · ${mcpUrl(port())}`);
     console.log(`  token: ${EBRAIN_MCP_TOKEN_ENV} ready (${tokenStorePaths(CFG).tokenFile})`);
-    console.log(smoke.ok ? `  smoke: tools/list ok (${smoke.tools} tools)` : `  smoke: warning ${smoke.message}`);
+    // A hundredth `ebrain up` should not narrate configs it left alone; a first one must say
+    // where the file it just made lives, because the user is about to edit it.
+    for (const item of configs) {
+      if (item.action !== "kept") console.log(`  config: ${item.detail}`);
+    }
+    console.log(smoke.ok ? `  smoke: tools/list ok (${smoke.tools} tools)` : `  smoke: FAILED — ${smoke.message}`);
     console.log("  onboard:");
     printOnboard(results, false);
     console.log("  next:");
@@ -382,7 +450,23 @@ async function cmdUp(args: string[]): Promise<void> {
     console.log(`    ebrain q "what must happen before a migration merges?"       recall it`);
     console.log(`    ebrain                                                       open cockpit`);
   }
-  if (results.some((r) => r.status === "failed")) process.exit(1);
+  // `up` brings the SYSTEM up; `onboard` registers agents. Only the first is fatal here.
+  //
+  // A failed smoke means the daemon answers but exposes no usable tool surface: the product is
+  // not working, and reporting that as success is the silent half-broken install this phase
+  // exists to make impossible. A single adapter that would not register is a different thing —
+  // the brain is up, the CLI works, and four of five agents are wired — so it is reported
+  // loudly with the command that fixes it, and does not fail the install that just succeeded.
+  if (!smoke.ok) {
+    console.error("ebrain up: the daemon is running but tools/list failed, so agents would have no memory.");
+    console.error(`  Check 'ebrain daemon status' and ${daemonLogLocation()}, then run 'ebrain up' again.`);
+    process.exit(1);
+  }
+  const failed = results.filter((r) => r.status === "failed");
+  if (failed.length > 0 && !json) {
+    console.error(`  note: ${failed.length} agent(s) did not register: ${failed.map((r) => r.agent).join(", ")}`);
+    console.error(`  eBrain itself is up. Retry just those with: ebrain onboard <agent>`);
+  }
 }
 
 async function main(): Promise<void> {

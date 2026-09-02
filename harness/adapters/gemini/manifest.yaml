@@ -11,6 +11,7 @@ norms:
 hooks:
   config: ~/.gemini/hooks/hooks.json
   format: claude-json
+  root: null                      # events sit at the root of this config
   dir: ~/.gemini/hooks
   events:
     pre_tool_use: pre_tool_use
@@ -22,6 +23,13 @@ hooks:
     - { file: log-session.sh,    core: log-session.sh,    event: stop }
 mcp:
   register: "ebrain onboard gemini"
+  method: cli
+  binary: gemini
+  add: ["mcp", "add", "--scope", "user", "--transport", "stdio", "{name}", "{bridge}"]
+  remove: ["mcp", "remove", "{name}"]
+  config: ~/.gemini/settings.json
+  format: json
+  keys: [mcpServers]
 env:
   AGENT_NAME: gemini
 doctor: "gemini --version"

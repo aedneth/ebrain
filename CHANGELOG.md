@@ -4,6 +4,126 @@ Una línea por cambio estructural (disciplina Company Brain). El más reciente a
 
 ---
 
+## 2026-09-02 -- one brain, any provider, any agent CLI (#8)
+
+Universality, closed in five steps. The audit that opened it inverted the plan: there is no vendor
+SDK anywhere in eBrain — the sole production dependency is `zod`, and the whole repository makes
+exactly one LLM HTTP call, already in the OpenAI-compatible shape. So the work was never to build a
+provider abstraction. It was that the endpoint, the credential NAME, the request extras and the
+cost behaviour were spelled out inline for one provider, and `provider` was a literal TYPE in
+thirteen places — making a second provider a compile error rather than a config change. Suite
+**1091 pass / 0 fail** (was 991). A review of the change set found four defects; they are fixed here.
+
+- **A fresh clone could not route at all.** `routing.yaml` had four readers and no writer: `ebrain
+  route` died with "routing.yaml no existe", `ebrain profiles init` threw, and `doctor` told the
+  user `ebrain up` would create it — which nothing did. The template ships now, and `ebrain up`
+  materialises any missing user config atomically at 0600 before starting the daemon. It never
+  overwrites one that exists, including under two concurrent runs: a tuned routing table survives.
+- **The spend cap could silently stop existing.** `routing.yaml` was parsed by casting, so a typo in
+  `monthly_usd` produced `NaN` — and `NaN >= x` is false for every x, so `hard_stop` never fired.
+  The config is now parsed against a schema, by both paths that read it, and a bad file is rejected
+  with every problem named at once against its YAML path.
+- **Fifteen providers, selected by config.** A registry states what varies between endpoints:
+  where to POST, which env var NAMES may hold the credential, whether real USD comes back and
+  where, whether the endpoint does model failover itself, and which non-standard body keys it
+  understands. An id the registry has never heard of stays usable as long as the config supplies
+  the endpoint — gateways appear faster than any bundled list, and eBrain must not be the reason a
+  working one cannot be used. A config predating `provider.id` resolves through its `base_url`.
+- **Chain-walking for endpoints without server-side failover.** Without it the registry would have
+  been an empty promise: sending a `models` array to an endpoint expecting `model` is a 400. A 401,
+  403 or 429 stops the walk — those belong to the provider, and retrying a 429 pushes against a
+  limit that has already bitten.
+- **Spend is attributed to the provider that served it**, and the monthly cap is measured against
+  the provider `routing.yaml` actually points at. A non-default lane was previously billed against
+  the wrong budget. Records written before stamping keep their historical attribution rather than
+  being rewritten into "unknown".
+- **A new agent CLI is a manifest, not four edits.** Onboarding was the last place that enumerated
+  agents by name — a switch in `up.ts`, a table of config paths in `mcp-registration.ts`, two lists
+  in `uninstall.ts` — while five other consumers already discovered them by scanning the manifests.
+  The manifest now states the mechanism and one module reads it. Dropping in
+  `harness/adapters/<name>/manifest.yaml` is enough to be discovered, registered, verified and
+  uninstalled.
+- **The secret guard is wired, not just checked.** The installer wrote the guard wrapper to disk and
+  then told the user to add a JSON entry by hand. A guard that is installed but not wired protects
+  nothing, and after the first scroll that state looks exactly like a working one. Wiring is now
+  additive, idempotent and atomic: other hooks are never touched, an unparseable config is reported
+  rather than rewritten, and a hook the user wired themselves — including as `~/...`, which runs
+  fine through a shell — is recognised instead of duplicated into a second invocation per tool call.
+- **The manifest has a contract.** Unknown keys are rejected, so a mistyped `lauch:` is an error
+  rather than an adapter that quietly never launches, and `ebrain adapters validate` lets a
+  contributor check their YAML before opening a PR. `guard` is derived from mechanism, not
+  declaration: an adapter with no hook runtime cannot enforce anything, and saying otherwise would
+  claim protection that does not exist.
+- **New commands:** `ebrain providers <list|show>` (which endpoints are reachable, and whether each
+  credential is configured — presence only, never a value) and `ebrain adapters <list|show|validate>`.
+
+---
+
+## 2026-09-02 -- robustness at scale: supervision, recovery, and honest diagnostics (#8)
+
+The shared host is now supervised, recovers on its own, and every check that reports on it can
+actually fail. This phase started from a finding on a real machine: the daemon had been down for
+forty days, all five agents were still registered against a dead host, and `doctor` reported green
+the whole time. The single cause was that `ebrain up` was the only code path in the repository that
+could start the daemon. Suite **991 pass / 0 fail** (was 930). An independent review of the change
+set found a blocker in the new code and it is fixed here.
+
+- **The daemon control plane is a tested module, not a shell script.** `scripts/ebrain-daemon` is
+  now a thin wrapper over `cli/daemon-control.ts`, the same shape `ebrain-up` has always had. The
+  protocol it replaces had three defects that a resident process cannot afford: a pidfile believed
+  without checking what is running at that PID, a start with no mutual exclusion, and a "started"
+  that meant "the process was alive one second later" rather than "the host is serving".
+- **A pidfile is a claim, not a fact.** Liveness now verifies process identity (`comm` plus argv),
+  so a recycled PID no longer reports a long-dead daemon as UP, and a stale claim is reaped instead
+  of blocking every future start. A forty-day-old pidfile was on disk when this began.
+- **Starting is exclusive.** `start` runs under an atomic directory lock — staged and renamed into
+  place so the owner PID is part of the acquisition, not a follow-up write a racer can miss — and
+  re-checks health after acquiring it. N agents booting at once produce one host, with a test that
+  proves it.
+- **"Started" means serving.** `start` waits for `/health` and, when it never arrives, says why and
+  shows the host's own last lines instead of announcing success.
+- **The lock guard no longer fires on innocent bystanders.** It used `pgrep -f "cli.ts serve"`,
+  which matches any process whose command line merely mentions that string — an agent grepping the
+  logs, this project's own tooling, and the shared host itself. Both false-positive classes were
+  reproduced. Identity is now decided by what is executing, not by what a command line says.
+- **Supervision.** `ebrain daemon install-service` installs a systemd user unit (or a launchd agent)
+  that starts the host at login and restarts it if it dies. `status` reports the supervisor and
+  flags a unit whose launcher no longer exists, which is otherwise a silently disabled recovery.
+- **The bridge rides out a restart.** Tool calls retry with backoff, distinguish "the daemon is not
+  there" from "the tool returned nothing", carry an explicit deadline through the handshake as well
+  as the call, and can start a stopped host once per cooldown. An agent that loses its memory
+  mid-session is now told so, in a message that names the fix.
+- **Checks that can fail.** The adapter MCP verdict read the adapter's own manifest, so it printed
+  the same green line on every machine including one where onboarding had never run; it now reads
+  the agent's real configuration and distinguishes "not registered" from "could not verify". The
+  fleet `ok` field in `ebrain status --json` had the same defect and the same fix. `doctor` reports
+  the platform it is running on.
+- **`ebrain uninstall`.** An install writes into five agent configs, `$HOME`, a service manager and
+  PATH; until now nothing removed any of it. The command states its plan and does nothing without
+  `--yes`, names what it will delete including the provider keys in the config dotenv, and never
+  touches the brain store unless `--purge` is passed.
+- **Onboarding is no longer destructive on failure.** Re-registration used to remove the existing
+  entry before adding, so any failure left the user with nothing where a working entry had been; it
+  now removes only after a plain add has proved the name is taken. Agent configs are written
+  atomically through a symlink rather than over it, keeping a one-time backup.
+- **Secret scrubbing across a truncated capture window.** A private key straddling the bounded tmux
+  window leaked its base64 body in three of the four possible positions, including the one the code
+  claimed to cover. All three with a marker are closed, a key inside a diff is covered, and the scan
+  is linear — the regex that preceded it was quadratic and took about a second on a full window,
+  once per second of polling. Legitimate base64, JWTs, hashes and public certificates are untouched.
+- **Portability.** GNU-only spellings (`mktemp` with no template, `stat -c`, bare `timeout`, bash 4
+  associative arrays) are replaced by shared shims, and CI now checks every shell entrypoint and
+  rejects those spellings outside the shims. This is not a claim of macOS support: Linux is the only
+  platform tested in CI, and the README and `doctor` now say so.
+- **Smaller repairs.** A vanished workspace directory no longer makes the whole registry — including
+  the `remove` that would repair it — unreadable. `ebrain sessions` reports pane liveness and gains
+  `reap`. `embedder migrate` restarts the host between writing the new configuration and submitting
+  the re-embed, so the job cannot run under the old embedder and be stamped with the new signature.
+  The installer restarts a running host after an upgrade. The deny policy is read from both config
+  locations, because a policy that is silently not found is the same as no policy.
+
+---
+
 ## 2026-08-10 -- onboarding UX and an animated product demo on the site (#7)
 
 The real animated cockpit demo now ships at `ebrain.vercel.app/demo`, a brand-new user gets a first-run

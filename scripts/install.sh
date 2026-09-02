@@ -133,6 +133,18 @@ exec bash "\${EBRAIN_HOME:-$EBRAIN_HOME}/cli/ebrain" "\$@"
 EOF
 chmod +x "$LAUNCHER"
 
+# 5b. Re-running this script is how eBrain is UPGRADED: it pulls new code and re-pins the engine.
+# A host started from the previous revision keeps serving that revision, and `ebrain up` below
+# short-circuits on a healthy port — so without this the upgrade appears to succeed while every
+# agent still talks to the old code, and every diagnostic reports green. Restart what is running.
+if [ "${EBRAIN_SKIP_UP:-0}" != "1" ]; then
+  if EBRAIN_HOME="$EBRAIN_HOME" "$EBRAIN_HOME/scripts/ebrain-daemon" status >/dev/null 2>&1; then
+    say "Restarting the running host so the upgraded code is what serves"
+    EBRAIN_HOME="$EBRAIN_HOME" "$EBRAIN_HOME/scripts/ebrain-daemon" restart \
+      || die "could not restart the shared host after upgrading; run '$LAUNCHER_NAME daemon restart' to diagnose"
+  fi
+fi
+
 # 6. Bring the shared brain up (user default; skipped only for isolated tests)
 if [ "${EBRAIN_SKIP_UP:-0}" = "1" ]; then
   log "skipping 'ebrain up' (EBRAIN_SKIP_UP=1)"

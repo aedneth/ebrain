@@ -37,7 +37,18 @@ SOURCES=(
   "gstack|$HOME/.claude/skills|SKILL.md"
 )
 
-declare -A SEEN
+# First-wins dedup across sources. This was `declare -A SEEN`, a bash 4 associative array, under
+# `set -euo pipefail` — macOS ships bash 3.2, which rejects `-A`, so `ebrain federate skills`
+# aborted on the first line that mattered before doing any work. A delimited string with an exact
+# lookup does the same job in any POSIX-ish shell.
+# Delimiter is a TAB, not '|': a directory name may legally contain '|', and with '|' as the
+# separator a skill called `foo|bar` stored the line `foo|bar|harness`, so a later `foo` matched
+# field 1 and was silently dropped as a duplicate of a skill that does not exist.
+# And no `exit` in the awk program: exiting early closes the pipe, `printf` takes SIGPIPE once
+# SEEN outgrows the pipe buffer, and `set -euo pipefail` then aborts the whole federation with no
+# message and a half-written registry. Draining stdin costs nothing and keeps first-wins.
+SEEN=""
+seen_label() { printf '%s\n' "$SEEN" | awk -F'\t' -v n="$1" '$1 == n && !found { print $2; found = 1 }'; }
 echo "# registry.yaml — catálogo federado de skills canónicas (generado por skills-federate)" > "$REG"
 echo "# fuente de verdad para el skillpack que ebrain publica vía list_skills (MCP)." >> "$REG"
 echo "generated: $(date -u +%FT%TZ)" >> "$REG"
@@ -49,16 +60,21 @@ for entry in "${SOURCES[@]}"; do
   [ -d "$base" ] || { echo "  (source ausente: $base)" >&2; continue; }
   for d in "$base"/*/; do
     name="$(basename "$d")"
+    # A tab or a newline in a directory name would corrupt the dedup store's own framing.
+    # ANSI-C quoting, NOT `$(printf '\n')`: command substitution strips trailing newlines, so that
+    # spelling yields the empty string and the pattern `*""*` matches every name.
+    case "$name" in *$'\t'*|*$'\n'*) echo "  (nombre inválido, omitido: $d)" >&2; continue ;; esac
     src_file="$d$fname"
     [ -f "$src_file" ] || continue
-    if [ -n "${SEEN[$name]:-}" ]; then
+    winner="$(seen_label "$name")"
+    if [ -n "$winner" ]; then
       dupes=$((dupes+1))
       # COMENTARIO (no clave YAML): una línea `aliases:` acá se pegaría al último skill escrito y
-      # corromper­ía el registry. El ganador ya quedó registrado por ${SEEN[$name]}; esto solo anota el dup.
-      printf '  # (dup) %s también en %s — omitido (gana %s)\n' "$name" "$label" "${SEEN[$name]}" >> "$REG"
+      # corromper­ía el registry. El ganador ya quedó registrado; esto solo anota el dup.
+      printf '  # (dup) %s también en %s — omitido (gana %s)\n' "$name" "$label" "$winner" >> "$REG"
       continue
     fi
-    SEEN[$name]="$label"
+    SEEN="$(printf '%s\n%s\t%s' "$SEEN" "$name" "$label")"
     mkdir -p "$DST/$name"
     cp "$src_file" "$DST/$name/SKILL.md"
     # one-liner: description del frontmatter o el primer heading
