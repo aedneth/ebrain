@@ -1,0 +1,32 @@
+#!/bin/sh
+# post-commit.brain — syncs GRAPH_REPORT.md to CKIS vault after each commit,
+# and cadence-gates the expensive --obsidian rebuild for the Dev Brain vault.
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -z "$REPO_ROOT" ] && exit 0
+
+# ── Every commit: sync GRAPH_REPORT.md to CKIS vault ─────────────────────────
+(
+  LOG="$HOME/.cache/graphify-rebuild.log"
+  # Wait for graphify background rebuild to settle (mtime unchanged >=4s).
+  for i in $(seq 1 150); do
+    sleep 2
+    if [ -f "$LOG" ]; then
+      mtime=$(stat -c %Y "$LOG" 2>/dev/null || echo 0)
+      now=$(date +%s)
+      [ $((now - mtime)) -ge 4 ] && break
+    fi
+  done
+  bash "$REPO_ROOT/.brain/scripts/sync-graph-to-vault.sh"
+) > /dev/null 2>&1 &
+disown 2>/dev/null || true
+
+# ── Every Nth commit: rebuild --obsidian vault for Dev Brain ──────────────────
+COMMIT_COUNT="$(git rev-list --count HEAD 2>/dev/null || echo 0)"
+# Read cadence from config.sh (default 10 if not set).
+CADENCE="$(. "$REPO_ROOT/.brain/config.sh" 2>/dev/null; echo "${OBSIDIAN_GRAPH_CADENCE:-10}")"
+if [ "$COMMIT_COUNT" -gt 0 ] && [ $((COMMIT_COUNT % CADENCE)) -eq 0 ]; then
+  ( bash "$REPO_ROOT/.brain/scripts/sync-obsidian-graph.sh" ) > /dev/null 2>&1 &
+  disown 2>/dev/null || true
+fi
+
+exit 0

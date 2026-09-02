@@ -1,0 +1,27 @@
+# adapter: generic — PISO garantizado para cualquier agente SIN sistema de hooks. El guard, la
+# inyección de contexto y el write-back se cablean por otros medios (git hooks + CLI + cron), no por
+# eventos del runtime. Es la red de seguridad de la tesis: ningún agente queda sin harness por no
+# tener hooks. Las normas se entregan como doc (el agente debe leerlo / incluirlo en su system prompt).
+agent: generic
+class: light   # gobernador RAM (F6.4.6): 4GB Celeron — liviano, no cuenta contra "un heavy a la vez"
+description: Piso sin-hooks para cualquier agente. Guard/contexto/write-back vía git-hooks + CLI + cron; normas por doc.
+norms:
+  target: ~/.config/ebrain/generic-NORMS.md
+  mode: managed-block
+hooks:
+  config: null                    # sin runtime de hooks
+  format: none
+  dir: ~/.config/ebrain/generic-hooks
+  events: {}
+  wrappers:
+    - { file: guard-secrets.sh,  core: guard-secrets.sh, event: manual }
+    - { file: inject-context.sh, core: inject-context.sh, event: manual }
+    - { file: log-session.sh,    core: log-session.sh,    event: git-post-commit }
+mcp:
+  # No MCP surface to register. A real answer, not a gap.
+  register: null
+  method: none
+env:
+  AGENT_NAME: generic
+doctor: null
+launch: bash   # SPRINT-TUI 6.1.6 — sin CLI propio (piso no-hook): shell interactivo simple

@@ -1,0 +1,35 @@
+# adapter: codex — Codex CLI, driver primario. Hooks Claude-compatibles (snake_case).
+# Migra el antiguo overlay/codex-harness a esta capa canónica: los hooks pasan a ser wrappers
+# de los scripts core del harness. install = idempotente, zero-behavior-change (ya estaba cableado).
+agent: codex
+class: heavy   # gobernador RAM (F6.4.6): 4GB Celeron, "un heavy a la vez"
+description: Codex CLI — cerebro/driver primario. Adapter completo (guard + contexto + write-back + normas + MCP).
+norms:
+  target: ~/.codex/AGENTS.md
+  mode: managed-block
+hooks:
+  config: ~/.codex/hooks/hooks.json
+  format: claude-json
+  root: null                      # events sit at the root of this config
+  dir: ~/.codex/hooks
+  events:
+    pre_tool_use: pre_tool_use
+    session_start: session_start
+    stop: subagent_stop        # Codex no tiene evento `stop`; usa subagent_stop
+  wrappers:
+    - { file: block-secret-read.sh, core: guard-secrets.sh, event: pre_tool_use }
+    - { file: session-context.sh,   core: inject-context.sh, event: session_start }
+    - { file: log-session.sh,       core: log-session.sh,    event: stop }
+mcp:
+  register: "ebrain onboard codex"
+  method: cli
+  binary: codex
+  add: ["mcp", "add", "{name}", "--", "{bridge}"]
+  remove: ["mcp", "remove", "{name}"]
+  config: ~/.codex/config.toml
+  format: toml
+  keys: [mcp_servers]
+env:
+  AGENT_NAME: codex
+doctor: "codex doctor"
+launch: codex --dangerously-bypass-approvals-and-sandbox   # F6.6 — arranca en danger-full-access por diseño: aislamiento por dir + normas + guard de secretos gobiernan, no gates de aprobación

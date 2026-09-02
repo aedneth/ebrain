@@ -1,0 +1,1 @@
+{"hook_event_name":"pre_tool_use","tool_name":"read_file","tool_input":{"path":"config/settings.json"}}

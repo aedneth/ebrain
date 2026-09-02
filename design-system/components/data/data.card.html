@@ -1,0 +1,39 @@
+<!-- @dsCard group="Components" viewport="700x300" name="Table · ScrollList · SessionCard" subtitle="tablas, listas con scrollbar, filas de sesion" -->
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>body{margin:0;background:var(--bg-void);font-family:var(--font-mono);font-size:15px;line-height:1.2;color:var(--text-1)}#root{padding:14px 16px}.lbl{color:var(--text-3);font-size:15px;margin:0 0 4px}.row{margin-bottom:12px}</style></head><body><div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { Table, ScrollList, SessionCard, Badge } = window.EbrainDesignSystem_04bce4;
+const sessions = [
+  {agent:'claude',name:'ebr-claude-korvex',uptime:'02:41',state:'running'},
+  {agent:'gemini',name:'ebr-gem-web',uptime:'00:12',state:'waiting'},
+  {agent:'codex',name:'ebr-codex-tests',uptime:'01:03',state:'idle'},
+  {agent:'opencode',name:'ebr-oc-docs',uptime:'00:48',state:'done'},
+];
+function Card(){
+  return (
+    <div>
+      <p className="lbl">SessionCard (badge + estado)</p>
+      <div className="row">{sessions.slice(0,2).map((s,i)=><SessionCard key={i} {...s} selected={i===0} detail={i===1?'esperando confirmacion frontier':undefined} />)}</div>
+      <p className="lbl">ScrollList (marcador \u25B8 + scrollbar)</p>
+      <div className="row" style={{background:'var(--surface-1)'}}>
+        <ScrollList items={sessions} selected={1} height={3} total={12}
+          renderItem={(s)=><span><Badge agent={s.agent} /><span style={{color:'var(--text-3)'}}>{'  '+s.uptime}</span></span>} />
+      </div>
+      <p className="lbl">Table (ledger)</p>
+      <div className="row"><Table
+        columns={[{key:'hora',label:'hora',width:8},{key:'agente',label:'agente',width:14},{key:'cap',label:'cap'},{key:'costo',label:'costo',width:8,align:'right'}]}
+        rows={[
+          {hora:'14:32',agente:<Badge agent="claude"/>,cap:'coding',costo:'$0.42'},
+          {hora:'14:28',agente:<Badge agent="gemini"/>,cap:'web',costo:'$0.03'},
+          {hora:'14:19',agente:<Badge agent="route"/>,cap:'agentic',costo:'$0.11'},
+        ]} selected={0} /></div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<Card/>);
+</script></body></html>

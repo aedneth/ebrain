@@ -1,0 +1,8 @@
+/* ebrain — spacing. Todo en celdas de carácter: 1, 2, 4. Vertical en filas. */
+:root {
+  --sp-1: 1ch;
+  --sp-2: 2ch;
+  --sp-4: 4ch;
+  --sp-row-1: var(--row-h);
+  --sp-row-2: calc(var(--row-h) * 2);
+}

@@ -1,0 +1,21 @@
+# Only the documentation website is built here. Everything below is either irrelevant to that build
+# or must never leave this machine — keep the upload minimal rather than trusting the build to
+# ignore it. The website renders docs/** and the repo-root assets/, so those must stay.
+#
+# Every path is anchored with a leading slash. An unanchored `memory` also matches `docs/memory/`,
+# which silently dropped three documentation pages from the build — caught only because
+# website/scripts/verify-build.ts asserts every expected route exists.
+/.git
+/node_modules
+/website/node_modules
+/website/dist
+/vendor
+/memory
+/.brain
+/.claude
+/overlay
+/tui
+/harness
+/templates
+/scripts/systemd
+*.log

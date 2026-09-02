@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# sessions-federate — hermano de skills-federate. Barre los session/decision files NUEVOS de los
+# `.brain/` PROPIOS hacia el repo `agent-memory` (~/eBrain/memory), luego `gbrain sync`. Así la memoria
+# de sesión de CUALQUIER agente (Claude, Codex, …) se acumula cross-agente y queda buscable en ebrain.
+# Filtros de seguridad: (1) trust-policy — repos de cliente NUNCA se barren; (2) redact — páginas con
+# un secreto obvio se saltan. Idempotente (dedup por nombre + mtime). Candidato a cron / pre-dream-cycle.
+set -euo pipefail
+
+# Resolve our own symlink FIRST: a launcher symlinked onto PATH has a BASH_SOURCE pointing at the
+# symlink, so `dirname`/../harness would look for the resolver next to the link, not next to the
+# real script, and the source would fail before the resolver could do anything (pass 5, F-S3).
+# `readlink -f` is coreutils; where it is absent this degrades to the previous behaviour.
+EBRAIN_SELF="${BASH_SOURCE[0]}"
+# `|| true` and an `if` rather than an `&&` chain: under `set -e` a trailing failed `&&` would
+# abort the launcher on any system where readlink lacks -f, turning a graceful degradation into
+# a hard failure.
+EBRAIN_REAL="$(readlink -f -- "$EBRAIN_SELF" 2>/dev/null || true)"
+if [ -n "$EBRAIN_REAL" ]; then EBRAIN_SELF="$EBRAIN_REAL"; fi
+. "$(dirname -- "$EBRAIN_SELF")/../harness/core/ebrain-home.sh"
+ebrain_export_home "$EBRAIN_SELF"
+
+MEM="$EBRAIN_HOME/memory"
+SESSIONS="$MEM/sessions"
+mkdir -p "$SESSIONS"
+
+# Política de confianza (DEFAULT-DENY) desde la fuente única del harness.
+. "$EBRAIN_HOME/harness/core/trust.sh"
+
+count=0; skipped=0; denied=0
+UPDATED_LIST="$(ebrain_mktemp)"
+trap 'rm -f "$UPDATED_LIST"' EXIT
+while IFS= read -r sdir; do
+  repo="$(dirname "$(dirname "$sdir")")"
+  slug="$(basename "$repo")"
+  if [ -f "$repo/.brain/config.sh" ]; then
+    PROJECT_SLUG=""; . "$repo/.brain/config.sh" 2>/dev/null || true
+    [ -n "${PROJECT_SLUG:-}" ] && slug="$PROJECT_SLUG"
+  fi
+  # allow-list: solo repos demostrablemente de Eduardo (remote propio o slug local-only)
+  if ! trust_federate_ok "$repo" "$slug"; then denied=$((denied+1)); continue; fi
+
+  dst="$SESSIONS/$slug"; mkdir -p "$dst"
+  for f in "$sdir"/*.md; do
+    [ -f "$f" ] || continue
+    b="$(basename "$f")"
+    if [ ! -f "$dst/$b" ] || [ "$f" -nt "$dst/$b" ]; then
+      if trust_redact_hit "$f"; then
+        echo "  ⚠ skip (posible secreto): $f" >&2; skipped=$((skipped+1)); continue
+      fi
+      cp "$f" "$dst/$b"; printf '%s\t%s\n' "$slug" "$dst/$b" >> "$UPDATED_LIST"; count=$((count+1))
+    fi
+  done
+done < <(find "$HOME" -maxdepth 6 -type d -path '*/.brain/sessions' 2>/dev/null)
+[ "$denied" -gt 0 ] && echo "  (trust: $denied repos no-propios omitidos por default-deny)" >&2
+
+echo "sessions-federate: $count nuevos/actualizados, $skipped saltados → $SESSIONS"
+
+# commit local del repo agent-memory (add específico, nunca cerca de archivos de entorno)
+if [ -d "$MEM/.git" ]; then
+  git -C "$MEM" add sessions/ 2>/dev/null || true
+  git -C "$MEM" commit -q -m "sessions-federate: sweep $(date -u +%FT%TZ) (+$count)" 2>/dev/null || true
+fi
+
+# Write-through por MCP al daemon; evita abrir PGLite directo mientras el host está UP.
+REMOTE="$EBRAIN_HOME/cli/remote-tools.ts"
+BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN_BIN=bun
+synced=0; sync_failed=0
+if [ -s "$UPDATED_LIST" ] && [ -f "$REMOTE" ]; then
+  while IFS=$'\t' read -r slug f; do
+    b="$(basename "$f" .md)"
+    if "$BUN_BIN" run "$REMOTE" put-page --source agent-memory --slug "sessions/$slug/$b" --file "$f" >/dev/null 2>&1; then
+      synced=$((synced+1))
+    else
+      sync_failed=$((sync_failed+1))
+    fi
+  done < "$UPDATED_LIST"
+fi
+[ "$synced" -gt 0 ] && echo "  MCP put_page sessions ✓ ($synced)"
+[ "$sync_failed" -gt 0 ] && echo "  WARN: $sync_failed sesiones quedaron en disco pero no entraron al daemon MCP aún"

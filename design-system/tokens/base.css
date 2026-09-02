@@ -1,0 +1,30 @@
+/* ebrain — base TUI. Clases utilitarias para renderizar la retícula en HTML. */
+* { box-sizing: border-box; }
+
+.ebr-screen {
+  background: var(--bg-void);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: var(--font-size);
+  line-height: var(--line-h);
+  font-variant-ligatures: none;
+}
+
+.ebr-pre { white-space: pre; margin: 0; font: inherit; }
+
+/* jerarquía: solo peso y tono */
+.ebr-b   { font-weight: 700; }
+.ebr-t1  { color: var(--text-1); }
+.ebr-t2  { color: var(--text-2); }
+.ebr-t3  { color: var(--text-3); }
+.ebr-accent { color: var(--accent); }
+.ebr-memory { color: var(--memory); }
+.ebr-ok     { color: var(--ok); }
+.ebr-warn   { color: var(--warn); }
+.ebr-error  { color: var(--error); }
+.ebr-info   { color: var(--info); }
+
+/* selección de fila: fondo elevado, sin radius */
+.ebr-selected { background: var(--surface-2); color: var(--text-1); }
+
+::selection { background: var(--surface-2); color: var(--accent); }

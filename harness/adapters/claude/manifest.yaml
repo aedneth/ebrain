@@ -1,0 +1,35 @@
+# adapter: claude — Claude Code, orquestador/auditor (Opus). El harness gestiona SOLO el guard de
+# secretos + el bloque de normas. El contexto de sesión y el session-logging los maneja CKIS (hooks
+# propios del vault) → el harness NO los toca. Por eso `install claude` = verificación + zero cambio.
+agent: claude
+class: heavy   # gobernador RAM (F6.4.6): 4GB Celeron, "un heavy a la vez"
+description: Claude Code — orquestador/auditor. Guard + normas gestionados por el harness; contexto y write-back los maneja CKIS.
+norms:
+  target: ~/.claude/CLAUDE.md
+  mode: managed-block
+hooks:
+  config: ~/.claude/settings.json
+  format: claude-json
+  root: hooks                     # Claude nests its events under a top-level "hooks" key
+  dir: ~/.claude/hooks
+  events:
+    pre_tool_use: PreToolUse
+  wrappers:
+    - { file: block-env-read.sh, core: guard-secrets.sh, event: pre_tool_use, matcher: Bash }
+  external:                       # gestionado por CKIS, el harness no interviene
+    - "SessionStart: banner de contexto CKIS"
+    - "session logging: hooks del vault CKIS"
+mcp:
+  # How this agent is wired to the brain. Read by cli/mcp-manifest.ts — the only place that knows.
+  register: "ebrain onboard claude"
+  method: cli                     # Claude Code owns its MCP registry; let it write, don't edit its file
+  binary: claude
+  add: ["mcp", "add", "--scope", "user", "{name}", "--", "{bridge}"]
+  remove: ["mcp", "remove", "{name}"]
+  config: ~/.claude.json          # where a real registration can be verified
+  format: json
+  keys: [mcpServers]
+env:
+  AGENT_NAME: claude
+doctor: null
+launch: claude --dangerously-skip-permissions   # F6.6 — arranca en full-access (⏵⏵ bypass permissions on) por diseño: aislamiento por dir + normas + guard de secretos gobiernan, no gates de aprobación

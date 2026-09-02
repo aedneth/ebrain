@@ -1,0 +1,29 @@
+name: Feature request
+description: Propose a developer workflow or product improvement.
+title: "feat: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the developer outcome, not only an implementation. Do not include private
+        prompts, credentials, or proprietary source material.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      placeholder: What repetitive or unsafe developer workflow is difficult today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed workflow
+      placeholder: What should a developer be able to do, and what should remain explicit or reviewed?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      placeholder: What existing CLI, TUI, or manual path have you tried?

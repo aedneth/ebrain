@@ -1,0 +1,17 @@
+# Task Profile (ADR-005) — clasificacion EXPLICABLE de texto en capacidades.
+# No define agentes, modelos, precios, benchmarks ni orden de preferencia. El usuario elige
+# target/perfil en el Launch Wizard; esta configuracion solo hace visibles las senales detectadas.
+
+capabilities:
+  coding:
+    keywords: [code, function, bug, refactor, script, typescript, python, test, api, regex, fix]
+  agentic:
+    keywords: [agent, tool-call, multi-step, orchestrate, workflow, loop, autonomous, scrape, crawl]
+  web_design:
+    keywords: [component, ui, tailwind, css, design, layout, frontend, react, next.js]
+  long_context:
+    keywords: [summarize, digest, "whole repo", long, transcript, entire, ingest, batch]
+  terminal:
+    keywords: [bash, shell, terminal, command, cli, pipeline, ffmpeg]
+  general:
+    keywords: []

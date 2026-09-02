@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+# ebrain — unified CLI for the harness/knowledge layer. Thin dispatcher over the canonical pieces.
+# Installed as ~/.local/bin/ebrain (launcher) → this file. Everything lives under $EBRAIN_HOME.
+set -uo pipefail
+
+# Default to this dispatcher's own checkout ($EBRAIN_HOME/cli/ebrain → up one level) rather than a
+# "$HOME/eBrain" literal, so a checkout at any path works when invoked directly.
+# Export it: every child script (harness/core/*.sh, scripts/*) derives its own paths from this, so
+# a checkout at a non-default location stays consistent instead of each script guessing again.
+export EBRAIN_HOME="${EBRAIN_HOME:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)}"
+CORE="$EBRAIN_HOME/harness/core"
+SCRIPTS="$EBRAIN_HOME/scripts"
+CFG="$HOME/.config/ebrain"
+
+# `run_bun` hace `cd` a un dir neutral ANTES de correr el script (ver comentario abajo) — eso pisa
+# `process.cwd()` dentro del script bun. `sessions new` (SPRINT-TUI 6.1.6) SÍ le importa el cwd real
+# desde donde se invocó `ebrain` (default de la sesión tmux si no se pasa --cwd explícito) → lo
+# capturamos ACÁ, antes de cualquier cd, y lo exportamos para que sessions.ts pueda usarlo como
+# fallback. Inofensivo para spend/fleet/memory (no leen esta var).
+export EBRAIN_CALLER_CWD="$PWD"
+
+run() { local f="$1"; shift; if [ -x "$f" ] || [ -f "$f" ]; then bash "$f" "$@"; else echo "ebrain: '$f' does not exist yet (pending phase?)." >&2; return 127; fi; }
+
+# run_bun <script.ts> [args...] — corre un cli/*.ts (bun) desde un cwd neutral (~/.config/ebrain/wd,
+# el mismo que usan gbrain-run/ebrain-route): Bun auto-carga un .env del cwd, y `ebrain` puede
+# invocarse desde CUALQUIER directorio (incl. uno de cliente con su propio .env) — este cd evita
+# que ese .env ajeno entre al proceso. Los cli/*.ts nuevos (spend/fleet/memory) no tocan secretos,
+# pero el patrón se mantiene por consistencia y defensa en profundidad.
+BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN_BIN=bun
+run_bun() {
+  local f="$1"; shift
+  if [ ! -f "$f" ]; then echo "ebrain: '$f' does not exist yet (pending phase?)." >&2; return 127; fi
+  if ! command -v "$BUN_BIN" >/dev/null 2>&1; then echo "ebrain: 'bun' not available ($BUN_BIN)." >&2; return 127; fi
+  (cd "$CFG/wd" 2>/dev/null || cd /tmp; exec "$BUN_BIN" run "$f" "$@")
+}
+
+# A bare `ebrain` is the daily interactive entry point, but only when both ends are real
+# terminals. Piped/cron/CI invocations must keep the historical help output rather than hang or
+# emit an alternate-screen UI. `TERM=dumb` is likewise not a usable terminal for the TUI.
+interactive_tui() {
+  [ -t 0 ] && [ -t 1 ] && [ -n "${TERM:-}" ] && [ "$TERM" != "dumb" ]
+}
+
+run_ui() {
+  if ! interactive_tui; then
+    echo "ebrain ui: needs a real interactive terminal (stdin/stdout TTY and TERM not 'dumb')." >&2
+    exit 1
+  fi
+  run_bun "$EBRAIN_HOME/tui/src/app.ts" "$@"
+}
+
+usage() {
+  cat <<'EOF'
+ebrain — unified harness + agentic-memory layer (provider-agnostic)
+
+  ebrain remember [--project S] [--tags a,b] "<learning>"   write to permanent agentic memory
+  ebrain q "<question>" [--json]                             search (cross-source fan-out)
+  ebrain route --cap <cap> "<prompt>"                        routed one-shot (capped OpenRouter stack)
+  ebrain harness install <agent>                             install/update one agent's harness
+  ebrain harness doctor [agent]                              verify ONE agent's harness (guard/hooks/mcp)
+  ebrain harness status                                      harness fleet status + MCP mode
+  ebrain doctor [--json]                                     full CKIS health (launchers/config/contract/sources/spend)
+  ebrain status [--json]                                     quick snapshot (brain/spend/fleet/memory)
+  ebrain                                                       interactive TUI on a real terminal (non-TTY: this help)
+  ebrain ui                                                    compatible explicit TUI alias
+  ebrain spend [--json]                                      MTD spend per capability vs routing.yaml cap
+  ebrain routing [--json]                                    OpenRouter stack: chains, models and spend
+  ebrain cost [--json]                                       unified ledger by provider/agent/model/session/workflow
+  ebrain embedder status|migrate [--to P:M@D] [--dry-run] [--yes]  show or switch the memory embedder (migrate previews cost, then confirms)
+  ebrain dream [--dry-run] [--at-cap] [--keyless]            submit the memory maintenance cycle to the running daemon
+  ebrain context <list|proposals|init|get|update|propose|review> [--json] reviewed local operating context packs
+  ebrain episodes <list|get|recall|record> [--json]          bounded local episode recall (no raw transcripts)
+  ebrain procedures <list|show|use|review> [--json]          reviewed lifecycle for local workflows/skills
+  ebrain providers <list|show> [--json]                      model providers eBrain can route to, and which are configured
+  ebrain adapters <list|show|validate> [--json]              agent adapters: how each is wired, and whether its manifest is valid
+  ebrain profiles <list|show|validate|init|catalog-add|create> [--json] user-chosen local execution profiles
+  ebrain workspaces <list|add|rename|remove> [--json]            validated local directory registry
+  ebrain targets <list|plan|launch> [--json]                  adapter targets with a declared model selector
+  ebrain workflows <list|search|show|run|capture|skillify>   local workflows/SOPs + skillify with approval
+  ebrain fleet [--json]                                      health + RAM class (heavy|light) of the 6 adapters
+  ebrain memory recent [--json] [--limit N]                  latest learnings + sessions (agent-memory + Dev Brain)
+  ebrain sessions list [--json]                               active ebr-* tmux sessions
+  ebrain sessions new <agent> <slug> [--cwd D] [--json]       new tmux session (harness env injected; client deny-list)
+  ebrain sessions peek <name> [--lines N] [--json]            capture-pane (scrubbed — no raw secrets)
+  ebrain sessions send <name> "<text>" --yes [--json]         send-keys (requires --yes)
+  ebrain sessions kill <name> --yes [--json]                  kill-session (requires --yes)
+  ebrain task-profile "<task>" [--json]                       explainable signals/capability (does not pick model/agent)
+  ebrain advise "<task>" [--json]                             compatible alias of task-profile
+  ebrain up [--json]                                          plug-and-play boot: daemon + token + onboard + smoke
+  ebrain onboard [--all|agent] [--json]                       register HTTP MCP for detected agents
+  ebrain daemon {start|stop|status|restart|ensure}           shared-brain HTTP-MCP host (:8541 loopback, owns the lock)
+  ebrain daemon install-service|uninstall-service            keep the host running across reboots and crashes
+  ebrain uninstall [--dry-run] [--purge]                     remove eBrain: agent entries, launcher, service, config
+  ebrain norms render <file>                                 render the managed norms block
+  ebrain federate sessions|skills                            sweep .brain/ or skills into federated memory
+  ebrain help
+
+Agents supported by install: claude · codex · gemini · generic
+EOF
+}
+
+if [ "$#" -eq 0 ]; then
+  if interactive_tui; then
+    run_ui
+    exit $?
+  fi
+  usage
+  exit 0
+fi
+
+cmd="$1"; shift
+case "$cmd" in
+  remember)  run "$CORE/remember.sh" "$@" ;;
+  q|query)   run "$SCRIPTS/ebrain-q" "$@" ;;
+  doctor)    run "$CORE/doctor.sh" "$@" ;;
+  status)    run "$CORE/status.sh" "$@" ;;
+  spend)     run_bun "$EBRAIN_HOME/cli/spend.ts" "$@" ;;
+  routing)   run_bun "$EBRAIN_HOME/cli/routing.ts" "$@" ;;
+  cost)      run_bun "$EBRAIN_HOME/cli/cost.ts" "$@" ;;
+  context)   run_bun "$EBRAIN_HOME/cli/context.ts" "$@" ;;
+  episodes)  run_bun "$EBRAIN_HOME/cli/episodes.ts" "$@" ;;
+  procedures) run_bun "$EBRAIN_HOME/cli/procedures.ts" "$@" ;;
+  providers) run_bun "$EBRAIN_HOME/cli/providers.ts" "$@" ;;
+  adapters)  run_bun "$EBRAIN_HOME/cli/adapters.ts" "$@" ;;
+  profiles)  run_bun "$EBRAIN_HOME/cli/profiles.ts" "$@" ;;
+  workspaces) run_bun "$EBRAIN_HOME/cli/workspaces.ts" "$@" ;;
+  targets)   run_bun "$EBRAIN_HOME/cli/targets.ts" "$@" ;;
+  workflows) run_bun "$EBRAIN_HOME/cli/workflows.ts" "$@" ;;
+  fleet)     run_bun "$EBRAIN_HOME/cli/fleet.ts" "$@" ;;
+  memory)    run_bun "$EBRAIN_HOME/cli/memory.ts" "$@" ;;
+  sessions)  run_bun "$EBRAIN_HOME/cli/sessions.ts" "$@" ;;
+  task-profile) run_bun "$EBRAIN_HOME/cli/task-profile.ts" "$@" ;;
+  advise)    run_bun "$EBRAIN_HOME/cli/advise.ts" "$@" ;;
+  dream)     run_bun "$EBRAIN_HOME/cli/dream.ts" "$@" ;;
+  embedder)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      migrate)          run_bun "$EBRAIN_HOME/cli/embedder-migrate.ts" "$@" ;;
+      status|detect|"") run_bun "$EBRAIN_HOME/cli/embedder-detect.ts" "$@" ;;
+      *) echo "ebrain embedder: use 'status' or 'migrate'." >&2; exit 2 ;;
+    esac ;;
+  up)         run "$SCRIPTS/ebrain-up" up "$@" ;;
+  onboard)    run "$SCRIPTS/ebrain-up" onboard "$@" ;;
+  daemon)    run "$SCRIPTS/ebrain-daemon" "$@" ;;
+  uninstall) run_bun "$EBRAIN_HOME/cli/uninstall.ts" "$@" ;;
+  route)     if [ -x "$CFG/ebrain-route" ]; then "$CFG/ebrain-route" "$@"; else run "$SCRIPTS/ebrain-route" "$@"; fi ;;
+  ui)       run_ui "$@" ;;
+  harness)
+    sub="${1:-}"; shift || true
+    all_agents() { for m in "$EBRAIN_HOME"/harness/adapters/*/manifest.yaml; do [ -f "$m" ] && basename "$(dirname "$m")"; done; }
+    case "$sub" in
+      install)
+        if [ "${1:-}" = "--all" ]; then
+          shift; rc=0; for a in $(all_agents); do echo "### install $a ###"; bash "$CORE/install.sh" "$@" "$a" || rc=1; done; exit $rc
+        else run "$CORE/install.sh" "$@"; fi ;;
+      doctor)
+        # sin agente o --all → toda la flota (ideal para cron: rc=1 si alguno tiene pendientes)
+        if [ -z "${1:-}" ] || [ "${1:-}" = "--all" ]; then
+          rc=0; for a in $(all_agents); do bash "$CORE/install.sh" --doctor "$a" || rc=1; done
+          echo "── fleet: $([ "$rc" = 0 ] && echo 'all OK' || echo 'has pending (rc=1)') ──"; exit $rc
+        else run "$CORE/install.sh" --doctor "$@"; fi ;;
+      status)
+        rc=0; for a in $(all_agents); do bash "$CORE/install.sh" --doctor "$a" || rc=1; done
+        echo "── fleet: $([ "$rc" = 0 ] && echo 'all OK' || echo 'has pending (rc=1)') ──"; exit $rc ;;
+      *) echo "ebrain harness: use 'install <agent>|--all', 'doctor [agent|--all]' or 'status'." >&2; exit 2 ;;
+    esac ;;
+  norms)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      render) run "$CORE/render-norms.sh" "$@" ;;
+      *) echo "ebrain norms: use 'render <file>'." >&2; exit 2 ;;
+    esac ;;
+  federate)
+    sub="${1:-}"; shift || true
+    case "$sub" in
+      sessions) run "$SCRIPTS/sessions-federate" "$@" ;;
+      skills)   run "$SCRIPTS/skills-federate" "$@" ;;
+      *) echo "ebrain federate: use 'sessions' or 'skills'." >&2; exit 2 ;;
+    esac ;;
+  help|-h|--help) usage ;;
+  *) echo "ebrain: unknown subcommand '$cmd'." >&2; usage; exit 2 ;;
+esac

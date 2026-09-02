@@ -1,0 +1,118 @@
+#!/bin/sh
+# ── Security Pre-Commit Hook ────────────────────────────────────────────────
+# Blocks commits that introduce supply chain risks:
+#   1. Missing lockfile
+#   2. .npmrc missing ignore-scripts=true
+#   3. New packages with dangerous lifecycle scripts (postinstall/preinstall)
+#   4. High/critical npm audit findings in newly added deps
+
+set -e
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+FAIL=0
+WARNINGS=""
+
+# ── Check 1: Lockfile must exist ────────────────────────────────────────────
+# bun.lock/bun.lockb accepted alongside the npm-ecosystem lockfiles — several projects
+# (ebrain, the CLI suite) are bun-native and have no package-lock.json by design.
+if [ -f "package.json" ] && ! [ -f "package-lock.json" ] && ! [ -f "pnpm-lock.yaml" ] && ! [ -f "yarn.lock" ] && ! [ -f "bun.lock" ] && ! [ -f "bun.lockb" ]; then
+  echo "🔴 SECURITY BLOCK: No lockfile found (package-lock.json / pnpm-lock.yaml / yarn.lock / bun.lock)."
+  echo "   Run 'npm install' / 'pnpm install' / 'bun install' to generate one and commit it."
+  FAIL=1
+fi
+
+# ── Check 2: .npmrc must have ignore-scripts=true ──────────────────────────
+if [ -f ".npmrc" ]; then
+  if ! grep -q "^ignore-scripts=true" .npmrc; then
+    echo "🔴 SECURITY BLOCK: .npmrc exists but ignore-scripts=true is missing."
+    echo "   Add 'ignore-scripts=true' to .npmrc to block postinstall worms."
+    FAIL=1
+  fi
+else
+  echo "🟡 WARNING: .npmrc not found. Recommended: create .npmrc with ignore-scripts=true."
+  # Not a hard block — warn only (new repos may not have it yet)
+fi
+
+# ── Check 3: Scan newly staged packages for dangerous lifecycle scripts ──────
+# Get list of newly added/modified package.json deps in this commit
+STAGED_PKG=$(git diff --cached --name-only | grep "package.json$" | grep -v "node_modules" | head -5)
+
+if [ -n "$STAGED_PKG" ]; then
+  for PKG_FILE in $STAGED_PKG; do
+    if [ -f "$PKG_FILE" ]; then
+      # Extract new/changed dep names from the staged diff
+      NEW_DEPS=$(git diff --cached "$PKG_FILE" | grep "^+" | grep -E '"[a-z@][^"]*":\s*"[^"]*"' | \
+        grep -v '"version"\|"description"\|"name"\|"license"\|"author"\|"main"\|"type"\|"bin"\|"files"\|"keywords"\|"homepage"\|"repository"\|"bugs"\|"engines"\|"scripts"\|"peerDependencies"' | \
+        sed 's/.*"\([^"]*\)":.*/\1/' | tr -d '+ ' | head -20)
+      
+      if [ -n "$NEW_DEPS" ]; then
+        for DEP in $NEW_DEPS; do
+          # Skip if it's a workspace package or clearly not a real package name
+          case "$DEP" in
+            @* | [a-z]*) ;;
+            *) continue ;;
+          esac
+          # Check if the package has postinstall/preinstall scripts in node_modules
+          DEP_PKG="node_modules/$DEP/package.json"
+          if [ -f "$DEP_PKG" ]; then
+            HAS_HOOK=$(node -e "
+try {
+  const p = require('./$DEP_PKG');
+  const s = p.scripts || {};
+  const dangerous = ['postinstall','preinstall','install','prepack','postpack','prepare'].filter(k => s[k]);
+  if (dangerous.length > 0) {
+    console.log('HAS_SCRIPTS:' + dangerous.join(',') + ':' + (s.postinstall || s.preinstall || s.install || ''));
+  }
+} catch(e) {}
+" 2>/dev/null || true)
+            if echo "$HAS_HOOK" | grep -q "HAS_SCRIPTS"; then
+              SCRIPT_INFO=$(echo "$HAS_HOOK" | sed 's/HAS_SCRIPTS://')
+              echo "🟡 WARNING: '$DEP' has lifecycle scripts: $SCRIPT_INFO"
+              echo "   Review this package carefully before allowing. With ignore-scripts=true these"
+              echo "   scripts will NOT run on npm ci — this is intentional and safe."
+              WARNINGS="$WARNINGS\n  - $DEP: $SCRIPT_INFO"
+            fi
+          fi
+        done
+      fi
+    fi
+  done
+fi
+
+# ── Check 4: Audit newly staged package.json changes for critical vulns ─────
+if [ -n "$STAGED_PKG" ] && command -v npm >/dev/null 2>&1; then
+  AUDIT_OUT=$(npm audit --audit-level=critical --json 2>/dev/null || true)
+  CRITICAL_COUNT=$(echo "$AUDIT_OUT" | python3 -c "
+import json, sys
+try:
+  d = json.load(sys.stdin)
+  print(d.get('metadata',{}).get('vulnerabilities',{}).get('critical', 0))
+except: print(0)
+" 2>/dev/null || echo "0")
+  
+  if [ "$CRITICAL_COUNT" -gt "0" ]; then
+    echo "🔴 SECURITY BLOCK: $CRITICAL_COUNT CRITICAL vulnerability(ies) found in dependencies."
+    echo "   Run 'npm audit' to see details. Fix before committing."
+    npm audit --audit-level=critical 2>/dev/null | grep -A2 "CRITICAL" | head -20
+    FAIL=1
+  fi
+fi
+
+# ── Final verdict ───────────────────────────────────────────────────────────
+if [ "$FAIL" -eq "1" ]; then
+  echo ""
+  echo "❌ Commit blocked by security hook. Fix the issues above and try again."
+  echo "   To bypass in exceptional cases (document why): git commit --no-verify"
+  exit 1
+fi
+
+if [ -n "$WARNINGS" ]; then
+  echo ""
+  echo "⚠️  Security warnings (non-blocking):"
+  printf "$WARNINGS\n"
+  echo "   These packages have lifecycle scripts. With ignore-scripts=true they are blocked."
+  echo "   This is intentional — review the above if you did NOT expect these scripts."
+fi
+
+exit 0

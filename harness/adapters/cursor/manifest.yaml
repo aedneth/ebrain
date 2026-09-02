@@ -1,0 +1,30 @@
+# adapter: cursor — Cursor CLI (binario `agent`/`cursor-agent`). Rol: edición visual + CLI scriptable
+# (`agent -p "..." --output-format text`), con su propia cuenta/modelos Anthropic ($50 créditos). NO
+# tiene runtime de hooks → CLASE NO-HOOK: la unificación es el bus MCP de memoria (~/.cursor/mcp.json)
+# + normas como Cursor rule + guard ADVISORY. El auto-load de reglas globales por el CLI no está
+# verificado (como el hooks.json de gemini) → el doctor reporta "presente", no "cargado".
+agent: cursor
+class: heavy   # gobernador RAM (F6.4.6): 4GB Celeron, "un heavy a la vez"
+description: Cursor CLI (agent) — edición visual + CLI scriptable con modelos Anthropic. Clase no-hook (MCP + rule + guard advisory).
+norms:
+  target: ~/.cursor/rules/ebrain-norms.mdc
+  mode: managed-block
+hooks:
+  config: null
+  format: none
+  dir: null
+  events: {}
+  wrappers: []
+mcp:
+  register: "ebrain onboard cursor"
+  method: json                    # no `mcp add` subcommand — eBrain merges its own entry in
+  binary: agent
+  config: ~/.cursor/mcp.json
+  format: json
+  keys: [mcpServers]
+  entry: command-args
+env:
+  AGENT_NAME: cursor
+doctor: "agent --version"
+guard: advisory
+launch: agent --force   # F6.6 — binario real es `agent` (alias cursor-agent); `--force` (YOLO) arranca en full-access por diseño: aislamiento por dir + normas gobiernan, no gates

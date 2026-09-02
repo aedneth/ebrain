@@ -1,0 +1,321 @@
+#!/usr/bin/env bun
+/**
+ * ebrain design-sync-tui — genera tui/src/theme.ts a partir de design-system/tokens/ebrain.tokens.json
+ * (spec: docs/SPRINT-TUI.md 6.2.2).
+ *
+ * design-system/tokens/ebrain.tokens.json es la ÚNICA fuente de verdad de color/glifos/spacing/
+ * estados de la TUI (vendored desde el export de Claude Design, ver 6.2.1). Este script la parsea
+ * y GENERA tui/src/theme.ts — ese archivo NUNCA se edita a mano.
+ *
+ * Idempotente por construcción: sin Date.now()/timestamps/Math.random(), y las claves se recorren
+ * en el ORDEN FIJO declarado abajo (nunca Object.keys() del JSON — el orden de un objeto JSON no
+ * es un contrato). Correr el script N veces sobre el mismo tokens.json produce bytes idénticos.
+ *
+ * Uso:
+ *   bun run scripts/design-sync-tui
+ */
+import { mkdir } from "fs/promises";
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const TOKENS_PATH = join(REPO_ROOT, "design-system", "tokens", "ebrain.tokens.json");
+const OUT_PATH = join(REPO_ROOT, "tui", "src", "theme.ts");
+
+function die(msg: string, code = 1): never {
+  console.error(`design-sync-tui: ${msg}`);
+  process.exit(code);
+}
+
+// --- orden fijo de claves (contrato del generador — independiente del orden del JSON fuente) ----
+const COLOR_GROUP_ORDER = ["background", "text", "accent", "memory", "semantic", "agents"] as const;
+const COLOR_GROUPS: Record<(typeof COLOR_GROUP_ORDER)[number], readonly string[]> = {
+  background: ["void", "surface", "raised", "border"],
+  text: ["primary", "secondary", "muted"],
+  accent: ["teal", "tealDim"],
+  memory: ["violet"],
+  semantic: ["ok", "warn", "error", "info"],
+  agents: ["claude", "codex", "gemini", "opencode", "cursor", "route", "generic", "free"],
+};
+
+const GLYPH_GROUPS = [
+  "panelBorder", "dialogBorder", "heavyLeft", "gauge", "blocks",
+  "scrollbar", "spinner", "separators", "badgeDot", "caret", "arrows",
+] as const;
+
+interface RawTokenColor { hex: string; xterm256: number; }
+interface RawGlyph { chars?: string; frames?: string; asciiFallback: string; }
+interface RawTokens {
+  color: Record<string, Record<string, RawTokenColor>>;
+  spacing: { scale: number[] };
+  glyphs: Record<string, RawGlyph>;
+  states: {
+    focus: { border: string };
+    blur: { border: string };
+    selected: { background: string };
+    disabled: { text: string };
+  };
+}
+
+function need<T>(v: T | undefined | null, path: string): T {
+  if (v === undefined || v === null) {
+    die(`token faltante: ${path} — design-system/tokens/ebrain.tokens.json desalineado con el generador`);
+  }
+  return v as T;
+}
+
+// JSON.stringify alcanza: escapa comillas/backslash/control chars y preserva unicode literal
+// (box-drawing/bloques/braille quedan legibles en el .ts generado, no como \uXXXX).
+function j(v: unknown): string {
+  return JSON.stringify(v);
+}
+
+async function main(): Promise<void> {
+  const tokensFile = Bun.file(TOKENS_PATH);
+  if (!(await tokensFile.exists())) die(`tokens no encontrados: ${TOKENS_PATH}`);
+  const raw = JSON.parse(await tokensFile.text()) as RawTokens;
+
+  const lines: string[] = [];
+  const push = (s = "") => lines.push(s);
+
+  // ---- header (SIN contenido variable — requisito de idempotencia) --------------------------
+  push("/**");
+  push(" * tui/src/theme.ts — GENERATED FILE. DO NOT EDIT — regenerate via `bun run scripts/design-sync-tui`.");
+  push(" *");
+  push(" * Source of truth: design-system/tokens/ebrain.tokens.json (SPRINT-TUI 6.2.2).");
+  push(" * Bridges the ebrain color / glyph / spacing / state tokens to the ANSI escape strings");
+  push(" * consumed by the kit's drawing primitives (tui/src/kit/draw.ts), whose primitives accept");
+  push(" * an optional `color?: string` that is a raw ANSI escape sequence.");
+  push(" */");
+  push();
+
+  // ---- raw color roles --------------------------------------------------------------------
+  push("// ---------------------------------------------------------------------------");
+  push("// Raw token data (hex + xterm-256 fallback per role)");
+  push("// ---------------------------------------------------------------------------");
+  push();
+  push("/** Hex + xterm-256 pair for a single token color. */");
+  push("export interface TokenColor {");
+  push("  readonly hex: string;");
+  push("  readonly xterm256: number;");
+  push("}");
+  push();
+  push("export const colors = {");
+  for (const group of COLOR_GROUP_ORDER) {
+    push(`  ${group}: {`);
+    for (const key of COLOR_GROUPS[group]) {
+      const tok = need(raw.color?.[group]?.[key], `color.${group}.${key}`);
+      const hex = need(tok.hex, `color.${group}.${key}.hex`);
+      const xterm256 = need(tok.xterm256, `color.${group}.${key}.xterm256`);
+      push(`    ${key}: { hex: ${j(hex)}, xterm256: ${j(xterm256)} },`);
+    }
+    push("  },");
+  }
+  push("} as const;");
+  push();
+  push("export type AgentName = keyof typeof colors.agents;");
+  push();
+
+  // ---- glyphs -------------------------------------------------------------------------------
+  push("// ---------------------------------------------------------------------------");
+  push("// Glyphs (unicode + pure-ASCII fallback)");
+  push("// ---------------------------------------------------------------------------");
+  push();
+  push("/** A glyph group: unicode chars plus its pure-ASCII fallback. */");
+  push("export interface GlyphDef {");
+  push("  readonly chars: string;");
+  push("  readonly asciiFallback: string;");
+  push("}");
+  push();
+  push("export const glyphs = {");
+  for (const g of GLYPH_GROUPS) {
+    const tok = need(raw.glyphs?.[g], `glyphs.${g}`);
+    // El token "spinner" usa la clave "frames" en vez de "chars" en la fuente — se normaliza a
+    // "chars" acá para que el esquema del theme sea uniforme entre todos los grupos de glifos.
+    const chars = tok.chars ?? tok.frames;
+    if (chars === undefined) die(`glyphs.${g} no tiene 'chars' ni 'frames' en ${TOKENS_PATH}`);
+    const ascii = need(tok.asciiFallback, `glyphs.${g}.asciiFallback`);
+    push(`  ${g}: { chars: ${j(chars)}, asciiFallback: ${j(ascii)} },`);
+  }
+  push("} as const;");
+  push();
+  push("export type GlyphGroup = keyof typeof glyphs;");
+  push();
+
+  // ---- spacing ------------------------------------------------------------------------------
+  push("// ---------------------------------------------------------------------------");
+  push("// Spacing scale (character cells)");
+  push("// ---------------------------------------------------------------------------");
+  push();
+  const scale = need(raw.spacing?.scale, "spacing.scale");
+  push("export const spacing = {");
+  push(`  scale: ${j(scale)} as readonly number[],`);
+  push("} as const;");
+  push();
+
+  // ---- states (mirrors tokens.states — only the 4 fields the theme exposes) -----------------
+  const focusBorder = need(raw.states?.focus?.border, "states.focus.border");
+  const blurBorder = need(raw.states?.blur?.border, "states.blur.border");
+  const selectedBg = need(raw.states?.selected?.background, "states.selected.background");
+  const disabledText = need(raw.states?.disabled?.text, "states.disabled.text");
+  push("// ---------------------------------------------------------------------------");
+  push("// States (mirrors tokens `states` block: focus/blur/selected/disabled)");
+  push("// ---------------------------------------------------------------------------");
+  push();
+  push("const STATE_HEX = {");
+  push(`  focusBorder: ${j(focusBorder)},`);
+  push(`  blurBorder: ${j(blurBorder)},`);
+  push(`  selectedBg: ${j(selectedBg)},`);
+  push(`  disabledText: ${j(disabledText)},`);
+  push("} as const;");
+  push();
+
+  // ---- ColorRole union (dotted paths over every role generated above) -----------------------
+  push("// ---------------------------------------------------------------------------");
+  push("// Theme factory");
+  push("// ---------------------------------------------------------------------------");
+  push();
+  push("/** ANSI reset. */");
+  push('export const RESET = "\\x1b[0m";');
+  push();
+  const roleLiterals: string[] = [];
+  for (const group of COLOR_GROUP_ORDER) {
+    for (const key of COLOR_GROUPS[group]) roleLiterals.push(`${group}.${key}`);
+  }
+  push("/** Dotted color-role path (e.g. \"accent.teal\", \"text.primary\") or a raw \"#rrggbb\" hex. */");
+  push("export type ColorRole =");
+  for (const role of roleLiterals) push(`  | ${j(role)}`);
+  push("  | (string & {});");
+  push();
+
+  // ---- static tail: options/interface/helpers/factory (no token-derived content) ------------
+  push("export interface ThemeOptions {");
+  push("  /** Force truecolor (24-bit) escapes. Default: auto-detect (see detectTrueColor below). */");
+  push("  trueColor?: boolean;");
+  push("  /** Force ASCII-only glyph fallbacks. Default: auto-detect (see detectAscii below). */");
+  push("  ascii?: boolean;");
+  push("}");
+  push();
+  push("export interface Theme {");
+  push("  readonly trueColor: boolean;");
+  push("  readonly ascii: boolean;");
+  push("  /** ANSI reset (same value as the exported RESET constant). */");
+  push("  readonly reset: string;");
+  push("  /** Foreground ANSI escape for a color role or raw \"#rrggbb\" hex. */");
+  push("  fg(role: ColorRole): string;");
+  push("  /** Background ANSI escape for a color role or raw \"#rrggbb\" hex. */");
+  push("  bg(role: ColorRole): string;");
+  push("  /** Foreground ANSI escape for one of the 8 agent colors. */");
+  push("  agent(name: AgentName): string;");
+  push("  /** Unicode chars, or ASCII fallback when theme.ascii is true, for a glyph group. */");
+  push("  glyph(group: GlyphGroup): string;");
+  push("  readonly focusBorder: string;");
+  push("  readonly blurBorder: string;");
+  push("  readonly selectedBg: string;");
+  push("  readonly disabledText: string;");
+  push("}");
+  push();
+  push("function hexToRgb(hex: string): readonly [number, number, number] {");
+  push('  const h = hex.replace("#", "");');
+  push("  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];");
+  push("}");
+  push();
+  push("/**");
+  push(" * Approximate an arbitrary hex color to an xterm-256 index (6x6x6 color cube + grayscale");
+  push(" * ramp). Only used for raw #rrggbb roles that are NOT one of the named tokens above —");
+  push(" * token-defined roles always use their curated `xterm256` value instead of this estimate.");
+  push(" */");
+  push("function hexToXterm256(hex: string): number {");
+  push("  const [r, g, b] = hexToRgb(hex);");
+  push("  if (r === g && g === b) {");
+  push("    if (r < 8) return 16;");
+  push("    if (r > 248) return 231;");
+  push("    return Math.round(((r - 8) / 247) * 24) + 232;");
+  push("  }");
+  push("  const idx = (v: number) => Math.round((v / 255) * 5);");
+  push("  return 16 + 36 * idx(r) + 6 * idx(g) + idx(b);");
+  push("}");
+  push();
+  push("function resolveColor(role: string): TokenColor {");
+  push('  if (role.startsWith("#")) return { hex: role, xterm256: hexToXterm256(role) };');
+  push('  const parts = role.split(".");');
+  push("  let node: unknown = colors;");
+  push("  for (const p of parts) node = (node as Record<string, unknown> | undefined)?.[p];");
+  push("  const c = node as Partial<TokenColor> | undefined;");
+  push('  if (!c || typeof c.hex !== "string" || typeof c.xterm256 !== "number") {');
+  push('    throw new Error(`ebrain/tui theme: unknown color role "${role}"`);');
+  push("  }");
+  push("  return c as TokenColor;");
+  push("}");
+  push();
+  push("function ansiFg(c: TokenColor, trueColor: boolean): string {");
+  push("  if (trueColor) {");
+  push("    const [r, g, b] = hexToRgb(c.hex);");
+  push('    return `\\x1b[38;2;${r};${g};${b}m`;');
+  push("  }");
+  push('  return `\\x1b[38;5;${c.xterm256}m`;');
+  push("}");
+  push();
+  push("function ansiBg(c: TokenColor, trueColor: boolean): string {");
+  push("  if (trueColor) {");
+  push("    const [r, g, b] = hexToRgb(c.hex);");
+  push('    return `\\x1b[48;2;${r};${g};${b}m`;');
+  push("  }");
+  push('  return `\\x1b[48;5;${c.xterm256}m`;');
+  push("}");
+  push();
+  push("/**");
+  push(" * Auto-detected truecolor default. Explicit EBRAIN_TUI_TRUECOLOR wins (\"1\" forces on, \"0\"");
+  push(" * forces off); otherwise infer from COLORTERM containing \"truecolor\" or \"24bit\".");
+  push(" */");
+  push("function detectTrueColor(): boolean {");
+  push('  return (');
+  push('    process.env.EBRAIN_TUI_TRUECOLOR === "1" ||');
+  push('    (process.env.EBRAIN_TUI_TRUECOLOR !== "0" && /truecolor|24bit/.test(process.env.COLORTERM ?? ""))');
+  push("  );");
+  push("}");
+  push();
+  push("/**");
+  push(" * Auto-detected ASCII default. Explicit EBRAIN_TUI_ASCII=\"1\" forces ASCII glyphs on;");
+  push(" * otherwise infer from a non-UTF-8 LANG/LC_ALL (ascii=true when the locale isn't utf-8).");
+  push(" * Note: unlike detectTrueColor, there is no \"=== \\\"0\\\"\" override here by design (spec");
+  push(" * SPRINT-TUI 6.2.2) — a non-UTF-8 locale always forces ASCII regardless of the env var.");
+  push(" */");
+  push("function detectAscii(): boolean {");
+  push('  return (');
+  push('    process.env.EBRAIN_TUI_ASCII === "1" ||');
+  push('    !/utf-?8/i.test(process.env.LANG ?? process.env.LC_ALL ?? "")');
+  push("  );");
+  push("}");
+  push();
+  push("/** Build a Theme bound to truecolor/ascii mode (auto-detected from env unless overridden). */");
+  push("export function makeTheme(opts: ThemeOptions = {}): Theme {");
+  push("  const trueColor = opts.trueColor ?? detectTrueColor();");
+  push("  const ascii = opts.ascii ?? detectAscii();");
+  push();
+  push("  const fg = (role: ColorRole): string => ansiFg(resolveColor(role), trueColor);");
+  push("  const bg = (role: ColorRole): string => ansiBg(resolveColor(role), trueColor);");
+  push();
+  push("  return {");
+  push("    trueColor,");
+  push("    ascii,");
+  push("    reset: RESET,");
+  push("    fg,");
+  push("    bg,");
+  push('    agent: (name: AgentName): string => fg(`agents.${name}`),');
+  push("    glyph: (group: GlyphGroup): string => (ascii ? glyphs[group].asciiFallback : glyphs[group].chars),");
+  push("    focusBorder: fg(STATE_HEX.focusBorder),");
+  push("    blurBorder: fg(STATE_HEX.blurBorder),");
+  push("    selectedBg: bg(STATE_HEX.selectedBg),");
+  push("    disabledText: fg(STATE_HEX.disabledText),");
+  push("  };");
+  push("}");
+  push();
+
+  const out = lines.join("\n");
+  await mkdir(dirname(OUT_PATH), { recursive: true });
+  await Bun.write(OUT_PATH, out);
+  console.error(`tui/src/theme.ts generado desde design-system/tokens/ebrain.tokens.json`);
+}
+
+if (import.meta.main) main().catch((e) => die(String(e?.message ?? e)));

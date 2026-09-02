@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# skills-federate — agrega las skills canónicas (gstack + ckis-skills + company)
+# en un skills-dir único que gbrain publica vía list_skills (MCP, agent-agnostic,
+# opcional). Dedup por nombre (prioridad ckis > company > global). Idempotente.
+#
+# gbrain confina el skills-dir + exige archivos 'SKILL.md' → se COPIA el contenido
+# (symlinks cross-dir los rechaza la confinación). Re-correr para refrescar drift.
+#
+# Salida: ~/.config/ebrain/skills/<name>/SKILL.md  +  overlay/skills/registry.yaml
+set -euo pipefail
+
+# Resolve our own symlink FIRST: a launcher symlinked onto PATH has a BASH_SOURCE pointing at the
+# symlink, so `dirname`/../harness would look for the resolver next to the link, not next to the
+# real script, and the source would fail before the resolver could do anything (pass 5, F-S3).
+# `readlink -f` is coreutils; where it is absent this degrades to the previous behaviour.
+EBRAIN_SELF="${BASH_SOURCE[0]}"
+# `|| true` and an `if` rather than an `&&` chain: under `set -e` a trailing failed `&&` would
+# abort the launcher on any system where readlink lacks -f, turning a graceful degradation into
+# a hard failure.
+EBRAIN_REAL="$(readlink -f -- "$EBRAIN_SELF" 2>/dev/null || true)"
+if [ -n "$EBRAIN_REAL" ]; then EBRAIN_SELF="$EBRAIN_REAL"; fi
+. "$(dirname -- "$EBRAIN_SELF")/../harness/core/ebrain-home.sh"
+ebrain_export_home "$EBRAIN_SELF"
+
+DST="$HOME/.config/ebrain/skills"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REG="$REPO/overlay/skills/registry.yaml"
+mkdir -p "$DST" "$(dirname "$REG")"
+
+# Fuentes en orden de prioridad (first-wins en colisión de nombre).
+# formato: "etiqueta_source|dir_base|nombre_archivo"
+# harness va primero: sus skills nativas (p.ej. `remember`) son el canon y ganan cualquier colisión.
+SOURCES=(
+  "harness|$EBRAIN_HOME/harness/skills|SKILL.md"
+  "ckis|$HOME/Documents/Second Brain/.claude/ckis-skills|skill.md"
+  "company|$HOME/Documents/Company Brain/.claude/skills|skill.md"
+  "gstack|$HOME/.claude/skills|SKILL.md"
+)
+
+# First-wins dedup across sources. This was `declare -A SEEN`, a bash 4 associative array, under
+# `set -euo pipefail` — macOS ships bash 3.2, which rejects `-A`, so `ebrain federate skills`
+# aborted on the first line that mattered before doing any work. A delimited string with an exact
+# lookup does the same job in any POSIX-ish shell.
+# Delimiter is a TAB, not '|': a directory name may legally contain '|', and with '|' as the
+# separator a skill called `foo|bar` stored the line `foo|bar|harness`, so a later `foo` matched
+# field 1 and was silently dropped as a duplicate of a skill that does not exist.
+# And no `exit` in the awk program: exiting early closes the pipe, `printf` takes SIGPIPE once
+# SEEN outgrows the pipe buffer, and `set -euo pipefail` then aborts the whole federation with no
+# message and a half-written registry. Draining stdin costs nothing and keeps first-wins.
+SEEN=""
+seen_label() { printf '%s\n' "$SEEN" | awk -F'\t' -v n="$1" '$1 == n && !found { print $2; found = 1 }'; }
+echo "# registry.yaml — catálogo federado de skills canónicas (generado por skills-federate)" > "$REG"
+echo "# fuente de verdad para el skillpack que ebrain publica vía list_skills (MCP)." >> "$REG"
+echo "generated: $(date -u +%FT%TZ)" >> "$REG"
+echo "skills:" >> "$REG"
+
+count=0; dupes=0
+for entry in "${SOURCES[@]}"; do
+  IFS='|' read -r label base fname <<< "$entry"
+  [ -d "$base" ] || { echo "  (source ausente: $base)" >&2; continue; }
+  for d in "$base"/*/; do
+    name="$(basename "$d")"
+    # A tab or a newline in a directory name would corrupt the dedup store's own framing.
+    # ANSI-C quoting, NOT `$(printf '\n')`: command substitution strips trailing newlines, so that
+    # spelling yields the empty string and the pattern `*""*` matches every name.
+    case "$name" in *$'\t'*|*$'\n'*) echo "  (nombre inválido, omitido: $d)" >&2; continue ;; esac
+    src_file="$d$fname"
+    [ -f "$src_file" ] || continue
+    winner="$(seen_label "$name")"
+    if [ -n "$winner" ]; then
+      dupes=$((dupes+1))
+      # COMENTARIO (no clave YAML): una línea `aliases:` acá se pegaría al último skill escrito y
+      # corromper­ía el registry. El ganador ya quedó registrado; esto solo anota el dup.
+      printf '  # (dup) %s también en %s — omitido (gana %s)\n' "$name" "$label" "$winner" >> "$REG"
+      continue
+    fi
+    SEEN="$(printf '%s\n%s\t%s' "$SEEN" "$name" "$label")"
+    mkdir -p "$DST/$name"
+    cp "$src_file" "$DST/$name/SKILL.md"
+    # one-liner: description del frontmatter o el primer heading
+    desc="$(awk -F': *' '/^description:/{sub(/^description: */,"");gsub(/"/,"");print;exit}' "$src_file" 2>/dev/null)"
+    [ -z "$desc" ] && desc="$(awk '/^# /{sub(/^# */,"");print;exit}' "$src_file" 2>/dev/null)"
+    trig="$(awk -F': *' '/^trigger:/{sub(/^trigger: */,"");gsub(/"/,"");print;exit}' "$src_file" 2>/dev/null)"
+    {
+      printf '  - name: %s\n' "$name"
+      printf '    source: %s\n' "$label"
+      [ -n "$trig" ] && printf '    trigger: "%s"\n' "$trig"
+      printf '    one_line: "%s"\n' "${desc:0:120}"
+      printf '    optional: true\n'
+    } >> "$REG"
+    count=$((count+1))
+  done
+done
+
+echo "federadas: $count skills únicas (+$dupes duplicados omitidos) → $DST"
+echo "registry:  $REG"

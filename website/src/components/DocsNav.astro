@@ -1,0 +1,25 @@
+---
+import { DOC_SECTIONS, docRoute } from "../lib/navigation";
+
+interface Props {
+  activeId?: string;
+  mobile?: boolean;
+}
+
+const { activeId, mobile = false } = Astro.props;
+---
+
+<nav class:list={["docs-nav", mobile && "docs-nav--mobile"]} aria-label="Documentation navigation">
+  {DOC_SECTIONS.map((section) => (
+    <section class="docs-nav__section" aria-labelledby={`nav-${section.title.toLowerCase().replaceAll(" ", "-")}`}>
+      <h2 id={`nav-${section.title.toLowerCase().replaceAll(" ", "-")}`}>{section.title}</h2>
+      <ul>
+        {section.links.map((doc) => (
+          <li>
+            <a href={docRoute(doc.id)} aria-current={doc.id === activeId ? "page" : undefined}>{doc.title}</a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  ))}
+</nav>

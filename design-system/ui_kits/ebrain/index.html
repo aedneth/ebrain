@@ -1,0 +1,133 @@
+<!-- @dsCard group="Ebrain UI Kit" viewport="1200x760" name="ebrain — cockpit interactivo" subtitle="7 vistas TUI navegables (1-6, /, k) · overlays" -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ebrain — cockpit</title>
+<link rel="stylesheet" href="../../styles.css">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../_ds_bundle.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: var(--bg-void); }
+  #root { position: fixed; inset: 0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="shell.jsx" type="text/babel" data-presets="react"></script>
+<script src="screens-a.jsx" type="text/babel" data-presets="react"></script>
+<script src="screens-b.jsx" type="text/babel" data-presets="react"></script>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
+const VIEW_TABS = window.TABS;
+
+const PALETTE_ITEMS = [
+  { label: 'home: overview', hint: '1' },
+  { label: 'launch: nueva sesion', hint: 'l' },
+  { label: 'sessions: attach', hint: 'a' },
+  { label: 'memory: buscar', hint: 'm' },
+  { label: 'routing: ver caps', hint: '5' },
+  { label: 'doctor: re-run', hint: 'r' },
+];
+
+function App() {
+  const [tab, setTab] = useState('home');
+  const [sessSel, setSessSel] = useState(0);
+  const [palette, setPalette] = useState(false);
+  const [pq, setPq] = useState('');
+  const [confirm, setConfirm] = useState(false);
+  const [toast, setToast] = useState(false);
+  const [banner, setBanner] = useState(false);
+  const [docRun, setDocRun] = useState(false);
+
+  useEffect(function () {
+    function onKey(e) {
+      if (e.key === 'Escape') { setPalette(false); setConfirm(false); return; }
+      if (palette || confirm) return;
+      if (e.key === '/') { e.preventDefault(); setPalette(true); setPq(''); return; }
+      const n = parseInt(e.key, 10);
+      if (n >= 1 && n <= 6) { setTab(VIEW_TABS[n - 1]); return; }
+      if (e.key === 'l') setTab('launch');
+      else if (e.key === 'm') setTab('memory');
+      else if (e.key === 'a') setTab('sessions');
+      else if (e.key === 'k' && tab === 'sessions') setConfirm(true);
+      else if (e.key === 'r' && tab === 'doctor') { setDocRun(true); setTimeout(function(){ setDocRun(false); }, 2200); }
+    }
+    window.addEventListener('keydown', onKey);
+    return function () { window.removeEventListener('keydown', onKey); };
+  }, [palette, confirm, tab]);
+
+  var screen = null;
+  if (tab === 'home') screen = <window.HomeScreen />;
+  else if (tab === 'sessions') screen = <window.SessionsScreen selected={sessSel} onSelect={setSessSel} />;
+  else if (tab === 'launch') screen = <window.LaunchScreen />;
+  else if (tab === 'memory') screen = <window.MemoryScreen />;
+  else if (tab === 'routing') screen = <window.RoutingScreen />;
+  else if (tab === 'doctor') screen = <window.DoctorScreen running={docRun} />;
+
+  const scrim = { position: 'absolute', inset: 0, background: 'rgba(11,14,20,0.6)', display: 'flex', zIndex: 10 };
+
+  return (
+    <window.TermFrame>
+      {screen}
+      {banner && (
+        <div style={{ position: 'absolute', top: 'calc(var(--row-h) * 2)', left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 8 }}>
+          <div style={{ background: 'var(--surface-2)', border: '0', whiteSpace: 'pre', padding: '0 1ch' }}>
+            <span style={{ color: 'var(--warn)', fontWeight: 700 }}>{'\u2503 '}</span>
+            <span style={{ color: 'var(--text-1)' }}>brain locked by MCP</span>
+            <span style={{ color: 'var(--text-3)' }}>{' \u2014 datos en cache 14:32'}</span>
+          </div>
+        </div>
+      )}
+      {toast && (
+        <div style={{ position: 'absolute', bottom: 'calc(var(--row-h) * 3)', right: '2ch', zIndex: 9 }}>
+          <window.Toast tone="error" width="46ch">deepseek down \u2014 fallback a claude</window.Toast>
+        </div>
+      )}
+      {palette && (
+        <div style={Object.assign({}, scrim, { alignItems: 'flex-start', justifyContent: 'center', paddingTop: 'calc(var(--row-h) * 5)' })}>
+          <div style={{ cursor: 'text' }}>
+            <window.CommandPalette query={pq} selected={0}
+              items={PALETTE_ITEMS.filter(function (it) { return fuzzy(it.label, pq); })} width="64ch" />
+            <div style={{ textAlign: 'center', color: 'var(--text-3)', marginTop: 'var(--row-h)', whiteSpace: 'pre' }}>escribe para filtrar \u00b7 esc cierra</div>
+            <input autoFocus value={pq} onChange={function (e) { setPq(e.target.value); }}
+              style={{ position: 'absolute', opacity: 0, pointerEvents: 'none' }} />
+          </div>
+        </div>
+      )}
+      {confirm && (
+        <div style={Object.assign({}, scrim, { alignItems: 'center', justifyContent: 'center' })}>
+          <div onClick={function () { setConfirm(false); }}>
+            <window.ConfirmDialog danger title="kill session"
+              message={'terminar ' + window.SESSIONS[sessSel].name + '?\nEl agente pierde su contexto de trabajo.'}
+              confirmKey="y" confirmLabel="kill" cancelKey="n" cancelLabel="cancelar" width="56ch" />
+          </div>
+        </div>
+      )}
+      {/* dev toggles for overlay states — no emoji, plain text controls */}
+      <div style={{ position: 'absolute', top: 'calc(var(--row-h) * 2 + 3px)', right: '2ch', display: 'flex', gap: '2ch', zIndex: 20, background: 'var(--surface-2)', padding: '0 1ch', fontFamily: 'var(--font-mono)', fontSize: '13px', whiteSpace: 'pre' }}>
+        <span style={{ color: 'var(--text-3)' }}>demo:</span>
+        {[['palette', function(){setPalette(true);setPq('');}], ['toast', function(){setToast(!toast);}], ['banner', function(){setBanner(!banner);}], ['kill', function(){setConfirm(true);}]].map(function (b) {
+          return <span key={b[0]} onClick={b[1]} style={{ color: 'var(--accent)', cursor: 'pointer' }}>{b[0]}</span>;
+        })}
+      </div>
+    </window.TermFrame>
+  );
+}
+
+function fuzzy(label, q) {
+  if (!q) return true;
+  var qi = 0;
+  for (var i = 0; i < label.length && qi < q.length; i++) {
+    if (label[i].toLowerCase() === q[qi].toLowerCase()) qi++;
+  }
+  return qi === q.length;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+# Per-project .brain/ configuration — rendered by brain-init from config.sh.tmpl
+# Sourced by every script in .brain/scripts/.
+
+# Project identity
+PROJECT_SLUG="__PROJECT_SLUG__"
+PROJECT_NAME="__PROJECT_NAME__"
+
+# CKIS vault paths (absolute — adjust per machine if vault relocates)
+CKIS_VAULT="$HOME/Documents/Second Brain"
+CKIS_MEMORY="$CKIS_VAULT/00-inbox/_MEMORY.md"
+CKIS_PROJECT_OVERVIEW="$CKIS_VAULT/03-projects/$PROJECT_SLUG/_overview.md"
+CKIS_ARCHITECTURE_NOTE="$CKIS_VAULT/05-knowledge/permanent-notes/per-project-second-brain.md"
+
+# Brain paths (relative to repo root)
+BRAIN_DIR=".brain"
+SESSIONS_DIR="$BRAIN_DIR/sessions"
+DECISIONS_DIR="$BRAIN_DIR/decisions"
+BUGS_DIR="$BRAIN_DIR/bugs"
+GRAPH_DIR="$BRAIN_DIR/graph"
+CONTEXT_FILE="$BRAIN_DIR/_CONTEXT.md"
+SESSION_STATE="$BRAIN_DIR/.session-state"
+
+# How many recent session summaries to inline in _CONTEXT.md
+RECENT_SESSIONS_LIMIT=3
+
+# Dev Brain vault (Obsidian — code graph + wiki layer, separate from CKIS)
+DEV_BRAIN_VAULT="$HOME/Documents/Dev Brain"
+# Rebuild --obsidian vault every N commits (expensive: one .md per node)
+OBSIDIAN_GRAPH_CADENCE=10
+
+# Model routing (multi-provider — resolved by ebrain F4 routing; brain-init seeds defaults).
+# These parametrize ORCHESTRATOR_BOOTSTRAP.md so the brain is NOT Anthropic-locked.
+ORCHESTRATOR_MODEL="__ORCHESTRATOR_MODEL__"
+WORKER_MODEL="__WORKER_MODEL__"
+
+# Trust: 'own' (read-write) | 'client' (deny — never federated into ebrain).
+BRAIN_TRUST="__BRAIN_TRUST__"

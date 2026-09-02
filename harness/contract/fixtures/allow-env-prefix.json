@@ -1,0 +1,1 @@
+{"hook_event_name":"pre_tool_use","tool_name":"shell","tool_input":{"command":"env NODE_ENV=prod node app.js"}}

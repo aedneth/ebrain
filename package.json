@@ -1,0 +1,34 @@
+{
+  "name": "ebrain",
+  "version": "0.1.0",
+  "description": "One permanent memory for every AI coding agent — a unified agentic harness with shared memory and capability-based multi-provider routing, local-first.",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "bin": {
+    "ebrain": "cli/ebrain"
+  },
+  "engines": {
+    "bun": ">=1.3.0"
+  },
+  "scripts": {
+    "test": "bun test ./cli/ ./tui/test/",
+    "test:cli": "bun test ./cli/",
+    "test:tui": "bun test ./tui/test/",
+    "docs:assets": "bun run scripts/generate-doc-assets.ts",
+    "website:build": "bun run --cwd website build",
+    "doctor": "bun run cli/ebrain doctor"
+  },
+  "keywords": [
+    "mcp",
+    "agentic",
+    "memory",
+    "multi-agent",
+    "developer-tools",
+    "claude-code",
+    "codex",
+    "llm-routing"
+  ],
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}

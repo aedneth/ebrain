@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1018" height="533" viewBox="0 0 1018 533" role="img" aria-labelledby="title desc">
+  <title id="title">eBrain terminal cockpit</title>
+  <desc id="desc">A sanitized eBrain TUI home frame generated from the production renderer.</desc>
+  <rect width="1018" height="533" fill="#101317"/>
+  <rect x="1" y="1" width="1016" height="531" fill="none" stroke="#2dd4bf" stroke-opacity="0.45"/>
+  <g fill="#d9e1e8" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13" xml:space="preserve">
+  <text x="20" y="36"> ebrain                                                                                brain UP · fleet 5/5 · $0.42/$10 </text>
+  <text x="20" y="51.4">  1:home   2:launch   3:sessions   4:workspaces   5:memory   6:routing   7:doctor                                       </text>
+  <text x="20" y="66.8"> ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── </text>
+  <text x="20" y="82.2">                                               ▄▀▀█ █    ▄ ▄▄ ▄▀▀█ ▀ ▄ ▄                                                </text>
+  <text x="20" y="97.6">                                               █▀▀▀ █▀▀▄ █▀   █▀▀█ █ █▀ █                                               </text>
+  <text x="20" y="113">                                                ▀▀▀ ▀▀▀  ▀    ▀  ▀ ▀ ▀  ▀                                               </text>
+  <text x="20" y="128.4">                                                                                                                        </text>
+  <text x="20" y="143.8">╭─ system ───────────────────────────────────╮  ╭─ active sessions · 1 ────────────────────────────────────────────────╮</text>
+  <text x="20" y="159.2">│ brain       UP  mcp:loopback               │  │ ● codex    ebr-codex-docs · demo-app                           00:42 │</text>
+  <text x="20" y="174.6">│                                            │  │                                                                      │</text>
+  <text x="20" y="190">│ spend       ▓░░░░░░░░░░░░░░░ $0.42/$10     │  │                                                                      │</text>
+  <text x="20" y="205.4">│                                            │  │                                                                      │</text>
+  <text x="20" y="220.8">│ fleet       5/5 online                     │  │                                                                      │</text>
+  <text x="20" y="236.20000000000002">│ memory      12 learnings · 3 sessions      │  │                                                                      │</text>
+  <text x="20" y="251.6">│                                            │  │                                                                      │</text>
+  <text x="20" y="267">│                                            │  │                                                                      │</text>
+  <text x="20" y="282.4">│                                            │  │                                                                      │</text>
+  <text x="20" y="297.8">│                                            │  │                                                                      │</text>
+  <text x="20" y="313.2">│                                            │  │                                                                      │</text>
+  <text x="20" y="328.6">│                                            │  │                                                                      │</text>
+  <text x="20" y="344">│                                            │  │                                                                      │</text>
+  <text x="20" y="359.40000000000003">│                                            │  │                                                                      │</text>
+  <text x="20" y="374.8">│                                            │  │                                                                      │</text>
+  <text x="20" y="390.2">╰────────────────────────────────────────────╯  ╰──────────────────────────────────────────────────────────────────────╯</text>
+  <text x="20" y="405.6">                                                                                                                        </text>
+  <text x="20" y="421">╭─ latest memories ────────────────────────────────────────────────────────────────────────────────────────────────────╮</text>
+  <text x="20" y="436.40000000000003">│ ● Store reviewed decisions as durable memory.                                                                   demo │</text>
+  <text x="20" y="451.8">│                                                                                                                      │</text>
+  <text x="20" y="467.2">│                                                                                                                      │</text>
+  <text x="20" y="482.6">╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯</text>
+  <text x="20" y="498">                           [1-7] views  [tab] focus box  [↑↓] select  [enter] open  [?] help                            </text>
+  <text x="20" y="513.4000000000001"> Current directory · validating…                                                                       ebrain 0.1.0-dev </text>
+  </g>
+</svg>
