@@ -15,6 +15,7 @@ import {
   sparkline,
   kv,
   gauge,
+  ellipsize,
 } from "../../src/kit/draw.js";
 
 // ---------------------------------------------------------------------------
@@ -377,3 +378,27 @@ function stripAnsi(s: string): string {
   // eslint-disable-next-line no-control-regex
   return s.replace(/\x1b(?:\[[0-9;]*[A-Za-z]|\][^\x07\x1b]*(?:\x07|\x1b\\))/g, "");
 }
+
+describe("ellipsize", () => {
+  it("returns the string unchanged when it fits", () => {
+    expect(ellipsize("hello", 5)).toBe("hello");
+  });
+
+  it("cuts to width and marks the cut with an ellipsis that counts toward the width", () => {
+    const out = ellipsize("the audit inverted the plan", 12);
+    expect(out).toBe("the audit i…");
+    expect(displayWidth(out)).toBe(12);
+  });
+
+  it("is ANSI-aware: the ellipsis lands after the visible cut, colour is reset", () => {
+    const out = ellipsize("\x1b[31mred text here\x1b[0m", 6);
+    expect(displayWidth(out)).toBe(6);
+    expect(out.endsWith("…")).toBe(true);
+    expect(out).toContain("\x1b[31m");
+  });
+
+  it("degrades to a custom marker and to nothing at width 0", () => {
+    expect(ellipsize("abcdef", 4, "...")).toBe("a...");
+    expect(ellipsize("abcdef", 0)).toBe("");
+  });
+});

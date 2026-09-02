@@ -32,3 +32,33 @@ describe("hintBar", () => {
     expect(row.endsWith("v0.4.2" + theme.reset + " ")).toBe(true);
   });
 });
+
+describe("hintBar — never truncates a hint mid-word", () => {
+  const theme = makeTheme({ trueColor: true, ascii: false });
+  const strip = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
+  const many = [
+    { k: "s", label: "search" },
+    { k: "r", label: "remember" },
+    { k: "enter", label: "open/run" },
+    { k: "↑↓", label: "navigate" },
+    { k: "tab", label: "focus box" },
+    { k: "a", label: "attach procedure" },
+  ];
+
+  it("drops whole trailing hints until the row fits (80 columns keeps remember, loses attach)", () => {
+    const row = strip(hintBar({ hints: many }, theme, 80));
+    expect(displayWidth(row)).toBe(80);
+    expect(row).toContain("[r] remember");
+    expect(row).toContain("[tab] focus box");
+    expect(row).not.toContain("attach");
+    expect(row).not.toContain("proce");
+  });
+
+  it("keeps a trailing [?] hint when it has to drop something, since it is the route to the rest", () => {
+    const hints = [...many.slice(0, 5), { k: "?", label: "actions" }];
+    const row = strip(hintBar({ hints }, theme, 60));
+    expect(displayWidth(row)).toBe(60);
+    expect(row).toContain("[?] actions");
+    expect(row).toContain("[s] search");
+  });
+});

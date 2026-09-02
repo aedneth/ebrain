@@ -113,8 +113,11 @@ function applySgr(style: Style, params: number[]): Style {
  */
 export function parseAnsi(text: string, cols: number): Cell[][] {
   const grid: Cell[][] = [];
+  // tmux emits an SGR only where attributes CHANGE and does not reset at line ends, so a style
+  // carries across rows until something overrides it. Resetting per line here painted every
+  // dimmed row after the first as default-coloured and made a scrim look like a no-op.
+  let style = { ...BASE };
   for (const rawLine of text.replace(/\r/g, "").split("\n")) {
-    let style = { ...BASE };
     const row: Cell[] = [];
     let i = 0;
     while (i < rawLine.length) {

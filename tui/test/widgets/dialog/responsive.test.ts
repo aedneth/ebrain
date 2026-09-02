@@ -74,3 +74,26 @@ describe("ResponsiveDialog", () => {
     for (const row of dialog.rows) expect(displayWidth(row)).toBe(42);
   });
 });
+
+describe("ResponsiveDialog keyValue detail", () => {
+  test("renders value and detail in two tones on one line and keeps them flowing when wrapped", () => {
+    const { rows } = responsiveDialog({
+      title: "f",
+      width: 40,
+      blocks: [{ kind: "keyValue", key: "target", value: "opencode-openrouter", detail: "openrouter · opencode · the only declared target", keyTone: "accent.teal" }],
+    }, theme);
+    const text = rows.map(strip).join("\n");
+    expect(text).toContain("target  opencode-openrouter");
+    expect(text).toContain("openrouter · opencode");
+    expect(text).toContain("only declared target");
+    // The value carries text.primary and the detail text.muted, in that order on the first line.
+    const first = rows[1]!;
+    const primaryAt = first.indexOf(theme.fg("text.primary"));
+    expect(primaryAt).toBeGreaterThan(-1);
+    // The blur border shares text.muted's escape, so look for the detail's muted run after the value.
+    expect(first.indexOf(theme.fg("text.muted"), primaryAt)).toBeGreaterThan(primaryAt);
+    // Continuation lines stay under the value column, never under the key.
+    for (const row of rows.slice(2, -1)) expect(strip(row).startsWith("│         ")).toBe(true);
+    for (const row of rows) expect(displayWidth(row)).toBe(40);
+  });
+});

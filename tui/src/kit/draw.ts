@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 
 /** Strip ANSI escape sequences (CSI + OSC) before measuring string width. */
-function stripAnsi(s: string): string {
+export function stripAnsi(s: string): string {
   // Match ESC [ ... m (SGR), ESC [ ... H/A/B/etc (CSI), ESC ] ... BEL/ST (OSC)
   // eslint-disable-next-line no-control-regex
   return s.replace(/\x1b(?:\[[0-9;]*[A-Za-z]|\][^\x07\x1b]*(?:\x07|\x1b\\))/g, "");
@@ -105,6 +105,20 @@ export function padTo(
     default: // "left"
       return s + " ".repeat(pad);
   }
+}
+
+/**
+ * Truncate `s` to at most `width` visible characters, ending in `…` when anything was cut.
+ * Dense dashboard rows still use `truncate` for cells that are padded to an exact width; this is
+ * for prose and identifiers a reader would otherwise see stop mid-word and take for a rendering
+ * bug. The ellipsis counts toward `width`. At width 1 the ellipsis alone is returned.
+ */
+export function ellipsize(s: string, width: number, ellipsis = "…"): string {
+  if (width <= 0) return "";
+  if (displayWidth(s) <= width) return s;
+  const mark = displayWidth(ellipsis) <= width ? ellipsis : "";
+  const head = truncate(s, width - displayWidth(mark));
+  return head + mark;
 }
 
 // ---------------------------------------------------------------------------

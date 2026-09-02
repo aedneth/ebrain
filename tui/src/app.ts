@@ -29,7 +29,7 @@ import { CAPABILITIES, type Capability } from "../../cli/task-profile.ts";
 import { makeTheme, type Theme, type AgentName } from "./theme.js";
 import { Screen } from "./kit/screen.js";
 import { splitV, splitH, type Rect } from "./kit/layout.js";
-import { padTo, truncate, displayWidth } from "./kit/draw.js";
+import { padTo, truncate, displayWidth, stripAnsi } from "./kit/draw.js";
 import { startNavReader, type Key } from "./kit/input.js";
 import { composerApplyKey, composerFrom, composerViewport, type ComposerGeometry, type ComposerState, type ComposerVisualRow } from "./kit/composer.js";
 
@@ -1077,6 +1077,16 @@ export function hintsForState(state: AppState): HintEntry[] {
         ? [{ k: "↑↓", label: "select activity" }, { k: "enter", label: "show workspace" }, { k: "r", label: "refresh" }, { k: "tab", label: "next box" }, { k: "?", label: "actions" }]
         : [{ k: "enter", label: "use in launch" }, { k: "g", label: "open launch" }, { k: "tab", label: "next box" }, { k: "?", label: "actions" }];
   }
+  if (state.tab === "memory" && memoryOf(state).search) {
+    return [
+      { k: "s", label: "search" },
+      { k: "esc", label: "back to recent" },
+      { k: "enter", label: "open" },
+      { k: "↑↓", label: "navigate" },
+      { k: "tab", label: "focus box" },
+      { k: "r", label: "remember" },
+    ];
+  }
   return hintsForTab(state.tab).slice(0, 6);
 }
 
@@ -1590,7 +1600,9 @@ export function buildFrame(state: AppState, size: FrameSize, theme: Theme): stri
   frame.push(padTo(tabBar({ tabs: [...TABS], active: TABS.indexOf(state.tab) }, theme, cols), cols));
   frame.push(buildHairlineRow(theme, cols));
   frame.push(...buildMiddle(state, middleRect, theme));
-  frame.push(hintBar({ hints: hintsForState(state) }, theme, cols));
+  // While a modal owns the keyboard its own actions row is the one place that lists the keys; the
+  // bar goes quiet rather than echoing the same four hints ten rows lower.
+  frame.push(state.overlay ? " ".repeat(cols) : hintBar({ hints: hintsForState(state) }, theme, cols));
   // The footer names the selected workspace, never the incidental shell cwd from which the
   // TUI happened to start. A registered workspace can be different from the caller project.
   const workspace = workspaceOf(state);
@@ -1613,22 +1625,54 @@ export function buildFrame(state: AppState, size: FrameSize, theme: Theme): stri
 // see the tab context behind the modal). Exact width/height preserved.
 // ---------------------------------------------------------------------------
 
-function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: number, theme: Theme): { box: string[]; top: number; left: number } {
-  const maxDialogHeight = Math.max(6, rows - 4);
+/** Where an overlay sits inside the view region: confirmations and read-only references centre;
+ * anything with a cursor or a selection (composers, pickers, forms) anchors near the top so it
+ * holds still while its content grows instead of re-centring under the user's hands. */
+type OverlayAnchor = "center" | "upper";
+
+interface BuiltOverlay {
+  box: string[];
+  anchor: OverlayAnchor;
+}
+
+/** The rows an overlay may occupy: the view region between the hairline and the hint bar. The
+ * status bar, tabs and footer stay in place (dimmed) around every modal and no modal can paint
+ * over them; placed against the whole frame, the palette used to cover both at 80x24. */
+function overlayRegion(rows: number): { top: number; height: number } {
+  return { top: 3, height: Math.max(1, rows - 5) };
+}
+
+function placeOverlay(built: BuiltOverlay, cols: number, rows: number): { box: string[]; top: number; left: number } {
+  const region = overlayRegion(rows);
+  const box = built.box.slice(0, region.height);
+  const width = box.reduce((w, row) => Math.max(w, displayWidth(row)), 0);
+  const left = Math.max(0, Math.floor((cols - width) / 2));
+  const free = Math.max(0, region.height - box.length);
+  const offset = built.anchor === "center" ? Math.floor(free / 2) : Math.min(Math.floor(region.height / 5), free);
+  return { box, top: region.top + offset, left };
+}
+
+/**
+ * Build the box for `overlay`, or null when the overlay edits the view in place rather than
+ * opening a second surface (the memory search types into the view's own search bar).
+ */
+function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: number, theme: Theme): BuiltOverlay | null {
+  const maxDialogHeight = overlayRegion(rows).height;
+  const centered = (box: string[]): BuiltOverlay => ({ box, anchor: "center" });
+  const upper = (box: string[]): BuiltOverlay => ({ box, anchor: "upper" });
+
   if (overlay.kind === "palette") {
     const width = Math.min(64, Math.max(20, cols - 4));
-    const maxItems = Math.max(1, rows - 8);
+    // The list shares the box with the prompt row, its hairline, the footer hint and two borders.
+    const maxItems = Math.max(1, maxDialogHeight - 5);
     const items = toItems(filterCommands(overlay.palette.query)).slice(0, maxItems);
     const selected = Math.min(Math.max(0, overlay.palette.selected), Math.max(0, items.length - 1));
-    const box = commandPalette({ query: overlay.palette.query, items, selected, width }, theme);
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.min(Math.floor(rows * 0.3), rows - box.length));
-    return { box, top, left };
+    return upper(commandPalette({ query: overlay.palette.query, items, selected, width }, theme));
   }
 
   if (overlay.kind === "confirmKill") {
     const width = Math.min(52, Math.max(30, cols - 8));
-    const box = confirmLayout(
+    return centered(confirmLayout(
       {
         title: "kill session",
         message: `kill ${overlay.name}? this cannot be undone.`,
@@ -1642,15 +1686,12 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
         scroll: overlay.scroll,
       },
       theme,
-    ).rows;
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.floor((rows - box.length) / 2));
-    return { box, top, left };
+    ).rows);
   }
 
   if (overlay.kind === "confirmLaunch") {
     const width = Math.min(80, Math.max(40, cols - 6));
-    const box = confirmLayout(
+    return centered(confirmLayout(
       {
         title: "RAM governor",
         message: overlay.reason,
@@ -1664,64 +1705,49 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
         scroll: overlay.scroll,
       },
       theme,
-    ).rows;
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.floor((rows - box.length) / 2));
-    return { box, top, left };
+    ).rows);
   }
 
   if (overlay.kind === "prompt") {
     const width = Math.min(64, Math.max(30, cols - 6));
-    const box = buildPromptBox(overlay, width, maxDialogHeight, theme);
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.min(Math.floor(rows * 0.4), rows - box.length));
-    return { box, top, left };
+    return upper(buildPromptBox(overlay, width, maxDialogHeight, theme));
   }
 
   if (overlay.kind === "confirmSend") {
     const width = Math.min(84, Math.max(44, cols - 6));
-    const box = buildSendPreviewBox(overlay, width, maxDialogHeight, theme);
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return centered(buildSendPreviewBox(overlay, width, maxDialogHeight, theme));
   }
 
   if (overlay.kind === "taskSetup") {
     const width = Math.min(88, Math.max(48, cols - 6));
-    const box = buildTaskSetupBox(overlay, width, maxDialogHeight, theme);
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return upper(buildTaskSetupBox(overlay, width, maxDialogHeight, theme));
   }
 
   if (overlay.kind === "taskPrompt") {
     const width = Math.min(88, Math.max(48, cols - 6));
-    const box = buildTaskPromptBox(overlay, width, maxDialogHeight, theme);
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.min(Math.floor(rows * 0.34), rows - box.length));
-    return { box, top, left };
+    return upper(buildTaskPromptBox(overlay, width, maxDialogHeight, theme));
   }
 
   if (overlay.kind === "launchWizard") {
     const width = Math.min(88, Math.max(48, cols - 6));
-    const box = buildLaunchWizardBox(launchOf(state), width, maxDialogHeight, theme);
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return upper(buildLaunchWizardBox(launchOf(state), width, maxDialogHeight, theme));
   }
 
   if (overlay.kind === "workspacePicker") {
     const width = Math.min(88, Math.max(48, cols - 6));
-    const box = buildWorkspacePickerBox(state, overlay, width, maxDialogHeight, theme);
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return upper(buildWorkspacePickerBox(state, overlay, width, maxDialogHeight, theme));
   }
   if (overlay.kind === "workspaceAdd") {
     const width = Math.min(88, Math.max(48, cols - 6));
-    const box = buildWorkspaceAddBox(state, overlay, width, maxDialogHeight, theme);
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return upper(buildWorkspaceAddBox(state, overlay, width, maxDialogHeight, theme));
   }
   if (overlay.kind === "workspaceRename") {
     const width = Math.min(72, Math.max(36, cols - 6));
-    const box = buildWorkspaceRenameBox(state, overlay, width, maxDialogHeight, theme);
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return upper(buildWorkspaceRenameBox(state, overlay, width, maxDialogHeight, theme));
   }
   if (overlay.kind === "confirmWorkspaceRemove") {
     const width = Math.min(72, Math.max(36, cols - 6));
-    const box = confirmLayout({
+    return centered(confirmLayout({
       title: "remove workspace",
       message: `Remove ${overlay.label} from the local workspace registry? The directory and existing sessions are unchanged.`,
       danger: true,
@@ -1732,8 +1758,7 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
       width,
       maxHeight: maxDialogHeight,
       scroll: overlay.scroll,
-    }, theme).rows;
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    }, theme).rows);
   }
   if (overlay.kind === "confirmTargetLaunch" || overlay.kind === "confirmTargetGovernor") {
     const plan = overlay.plan;
@@ -1750,45 +1775,30 @@ function overlayBox(overlay: Overlay, state: AppState, cols: number, rows: numbe
     const wfLine = overlay.intent.workflowId ? `workflow: ${overlay.intent.workflowId}` : "";
     const head = governor ? overlay.reason : `${plan.target} · ${plan.profile} · ${plan.model} · ${plan.costStatus}`;
     const message = [head, taskLine, wfLine].filter(Boolean).join("\n");
-    const box = confirmLayout({ title: governor ? "RAM governor" : "launch target", message, danger: governor, confirmKey: "y", confirmLabel: governor ? "launch anyway" : "launch", cancelKey: "n", cancelLabel: "cancel", width, maxHeight: maxDialogHeight, scroll: overlay.scroll }, theme).rows;
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return centered(confirmLayout({ title: governor ? "RAM governor" : "launch target", message, danger: governor, confirmKey: "y", confirmLabel: governor ? "launch anyway" : "launch", cancelKey: "n", cancelLabel: "cancel", width, maxHeight: maxDialogHeight, scroll: overlay.scroll }, theme).rows);
   }
   if (overlay.kind === "confirmProfilesInit") {
     const width = Math.min(84, Math.max(44, cols - 6));
-    const box = confirmLayout({ title: "Initialize execution profile", message: "Create a local profile from existing ebrain routing? No provider call or credential is stored.", danger: false, confirmKey: "y", confirmLabel: "initialize", cancelKey: "n", cancelLabel: "cancel", width, maxHeight: maxDialogHeight, scroll: overlay.scroll }, theme).rows;
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
+    return centered(confirmLayout({ title: "Initialize execution profile", message: "Create a local profile from existing ebrain routing? No provider call or credential is stored.", danger: false, confirmKey: "y", confirmLabel: "initialize", cancelKey: "n", cancelLabel: "cancel", width, maxHeight: maxDialogHeight, scroll: overlay.scroll }, theme).rows);
   }
 
   if (overlay.kind === "remember") {
     const width = Math.min(72, Math.max(30, cols - 6));
-    const box = buildRememberBox(overlay, width, theme);
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.min(Math.floor(rows * 0.4), rows - box.length));
-    return { box, top, left };
+    return upper(buildRememberBox(overlay, width, maxDialogHeight, theme));
   }
 
-  if (overlay.kind === "memorySearch") {
-    const width = Math.min(72, Math.max(30, cols - 6));
-    const field = promptBox({ value: overlay.line.text, focus: true, placeholder: "search shared memory", hint: "enter search · esc cancel", width: width - 4 }, theme);
-    const box = panel({ title: "memory search", dialog: true, width, height: 3, body: [field] }, theme);
-    return { box, top: Math.max(0, Math.floor((rows - box.length) / 2)), left: Math.max(0, Math.floor((cols - width) / 2)) };
-  }
+  // The memory search edits the view's own search bar (buildMemoryView), so there is no box.
+  if (overlay.kind === "memorySearch") return null;
 
   if (overlay.kind === "detail") {
     const width = Math.min(76, Math.max(36, cols - 8));
-    const box = buildDetailBox(overlay, width, maxDialogHeight, theme);
-    const left = Math.max(0, Math.floor((cols - width) / 2));
-    const top = Math.max(0, Math.floor((rows - box.length) / 2));
-    return { box, top, left };
+    return centered(buildDetailBox(overlay, width, maxDialogHeight, theme));
   }
 
   // help (fallthrough): `?` is a focused action reference, while direct unit
   // callers can still render the full command registry without a context.
   const width = Math.min(66, Math.max(20, cols - 4));
-  const box = renderHelpLayout(theme, COMMANDS, width, actionReferenceFor(state), maxDialogHeight, overlay.scroll).rows;
-  const left = Math.max(0, Math.floor((cols - width) / 2));
-  const top = Math.max(0, Math.floor((rows - box.length) / 2));
-  return { box, top, left };
+  return centered(renderHelpLayout(theme, COMMANDS, width, actionReferenceFor(state), maxDialogHeight, overlay.scroll).rows);
 }
 
 /** The prompt bar and cursor consume three cells inside a panel's content area. Keep the
@@ -1804,7 +1814,7 @@ function promptComposerGeometry(width: number, maxDialogHeight: number): Compose
 
 function promptComposerGeometryForFrame(size: FrameSize): ComposerGeometry {
   const width = Math.min(64, Math.max(30, size.cols - 6));
-  return promptComposerGeometry(width, Math.max(6, size.rows - 4));
+  return promptComposerGeometry(width, overlayRegion(size.rows).height);
 }
 
 function composerInputRow(
@@ -2072,32 +2082,45 @@ function buildDetailBox(overlay: Extract<Overlay, { kind: "detail" }>, width: nu
   }, theme).rows;
 }
 
-/** Remember overlay box: a PromptBox wrapped in a titled dialog panel. Writes to
- * permanent agentic memory on enter — the composer is single-line here (the multiline
- * RememberForm of the mockup is the composer work in F6.6.3). */
-function buildRememberBox(overlay: Extract<Overlay, { kind: "remember" }>, width: number, theme: Theme): string[] {
-  const field = promptBox(
-    { value: overlay.line.text, focus: true, placeholder: "a durable, self-contained learning", hint: "enter save · esc cancel", width: width - 4 },
-    theme,
-  );
-  return panel(
-    { title: "remember → permanent agentic memory", dialog: true, width, height: 3, body: [field] },
-    theme,
-  );
+/** Remember overlay: a titled composer that explains where the text goes, then takes it. Writes
+ * to permanent agentic memory on enter — single-line here (the multiline RememberForm of the
+ * mockup is the composer work in F6.6.3). */
+function buildRememberBox(overlay: Extract<Overlay, { kind: "remember" }>, width: number, maxHeight: number, theme: Theme): string[] {
+  return responsiveDialog({
+    title: "remember",
+    focus: true,
+    width,
+    maxHeight,
+    blocks: [
+      { kind: "paragraph", text: "One durable, self-contained learning. It is written to permanent agentic memory and shared with every agent.", tone: "text.muted" },
+      { kind: "spacer" },
+      { kind: "input", value: overlay.line.text, cursor: overlay.line.cursor, placeholder: "a durable, self-contained learning" },
+      { kind: "spacer" },
+      { kind: "actions", items: [{ key: "enter", label: "save" }, { key: "esc", label: "cancel", labelTone: "text.muted" }] },
+    ],
+  }, theme).rows;
 }
 
+/**
+ * Draw `overlay` over `base`. Everything behind the modal keeps its text and loses its colour,
+ * so exactly one box on screen is lit and it is the one that owns the keyboard; the modal is
+ * spliced into the dimmed rows rather than clearing a band, so the view stays legible around it.
+ */
 function compositeOverlay(base: string[], overlay: Overlay, size: FrameSize, theme: Theme, state: AppState): string[] {
   const { cols, rows } = size;
-  const { box, top, left } = overlayBox(overlay, state, cols, rows, theme);
-  const out = base.slice();
+  const built = overlayBox(overlay, state, cols, rows, theme);
+  if (!built) return base;
+  const { box, top, left } = placeOverlay(built, cols, rows);
+  const dim = theme.fg("text.muted");
+  const out = base.map((row) => dim + stripAnsi(row) + theme.reset);
   for (let i = 0; i < box.length; i++) {
     const y = top + i;
     if (y < 0 || y >= rows) continue;
     const boxRow = box[i]!;
-    const boxW = displayWidth(boxRow);
-    const leftPad = " ".repeat(Math.max(0, left));
-    const rightPad = " ".repeat(Math.max(0, cols - left - boxW));
-    out[y] = padTo(truncate(leftPad + boxRow + rightPad, cols), cols);
+    const cells = [...stripAnsi(base[y] ?? "")];
+    const before = cells.slice(0, left).join("");
+    const after = cells.slice(left + displayWidth(boxRow)).join("");
+    out[y] = padTo(truncate(dim + before + theme.reset + boxRow + dim + after + theme.reset, cols), cols);
   }
   return out;
 }
@@ -2144,7 +2167,7 @@ function buildMiddle(state: AppState, rect: Rect, theme: Theme): string[] {
   else if (state.tab === "sessions") rows = buildSessionsView(sessionsOf(state), rect, theme);
   else if (state.tab === "launch") rows = buildLaunchView(launchOf(state), workspaceOf(state).active, state.cwd, focused, rect, theme);
   else if (state.tab === "workspaces") rows = buildWorkspacesView(workspaceOf(state), sessionsOf(state), focused, rect, theme);
-  else if (state.tab === "memory") rows = buildMemoryView(memoryOf(state), focused, rect, theme);
+  else if (state.tab === "memory") rows = buildMemoryView(memoryOf(state), focused, rect, theme, state.overlay?.kind === "memorySearch" ? state.overlay.line : undefined);
   else if (state.tab === "routing") rows = buildRoutingView(routingOf(state), rect, theme);
   else rows = buildDoctorView(doctorOf(state), focused, rect, theme);
   return rows.slice(0, rect.height).map((r) => padTo(truncate(r, rect.width), rect.width));
@@ -2834,7 +2857,7 @@ function renderProcedureRow(w: ProcedureSummaryData, width: number, sel: boolean
     " " + padTo(truncate(meta, metaW), metaW, "right") + reset;
 }
 
-export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, theme: Theme): string[] {
+export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, theme: Theme, searchDraft?: LineState): string[] {
   const cols = rect.width;
   const height = rect.height;
   if (height <= 0) return [];
@@ -2851,15 +2874,24 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
   const procedures = procedureRows(m);
   const contexts = m.contexts?.packs ?? [];
   const sessions = m.data.sessions;
-  const [searchRect, midRect, footRect] = splitV(rect, [1, { flex: 1 }, 1]);
+  const [, midRect] = splitV(rect, [1, { flex: 1 }]);
 
   const out: string[] = [];
 
-  // Search stays on the `ebrain q --json` contract; no direct memory/daemon reads here.
+  // Search stays on the `ebrain q --json` contract; no direct memory/daemon reads here. While the
+  // `s` composer is open it edits THIS bar in place: one search field on screen, not a second one
+  // floating over the first.
+  const editing = searchDraft != null;
   out.push(
     padTo(
       promptBox(
-        { value: m.search?.query ?? "", focus: false, placeholder: "shared memory search", hint: "s search", width: cols },
+        {
+          value: editing ? searchDraft.text : m.search?.query ?? "",
+          focus: editing,
+          placeholder: "shared memory search",
+          hint: editing ? "enter search · esc cancel" : "s search",
+          width: cols,
+        },
         theme,
       ),
       cols,
@@ -2971,16 +3003,6 @@ export function buildMemoryView(m: MemorySlice, focused: string, rect: Rect, the
   for (let i = 0; i < midRect.height; i++) {
     const right = rightRows[i] ?? " ".repeat(rightRect.width);
     out.push((leftPanel[i] ?? "") + gap + right);
-  }
-
-  // Footer hint (the composer opens as an overlay on `r`). When a search is active, surface
-  // `esc back to recent` so the collection swap is discoverable (G56-F3).
-  if (footRect.height > 0) {
-    const hint = m.search
-      ? "s search · esc back to recent · enter open result · ↑↓ focused box"
-      : "s search · r remember · enter run/open · a attach procedure · ↑↓ focused box";
-    const foot = theme.fg("text.muted") + hint + theme.reset;
-    out.push(padTo(truncate(foot, cols), cols));
   }
 
   while (out.length < height) out.push(" ".repeat(cols));

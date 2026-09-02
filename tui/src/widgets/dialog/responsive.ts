@@ -35,7 +35,9 @@ export type DialogBlock =
   | { kind: "pre"; text: string; tone?: ColorRole; bold?: boolean }
   /** A single-line editor rendered as wrapped content so its complete value stays inspectable. */
   | { kind: "input"; value: string; cursor?: number; placeholder: string; tone?: ColorRole }
-  | { kind: "keyValue"; key: string; value: string; keyTone?: ColorRole; valueTone?: ColorRole }
+  /** `key  value  detail`: the value is the fact, the detail its quieter provenance or state.
+   * Both wrap together under the key column so a long detail never reads as a second field. */
+  | { kind: "keyValue"; key: string; value: string; keyTone?: ColorRole; valueTone?: ColorRole; detail?: string; detailTone?: ColorRole }
   | { kind: "actions"; items: DialogAction[] }
   | { kind: "spacer" };
 
@@ -156,21 +158,49 @@ function inputLines(block: Extract<DialogBlock, { kind: "input" }>, width: numbe
   return wrapDialogText(text, width).map((line) => styled(line, theme, tone));
 }
 
+const SPACE = /\s/;
+
+/**
+ * Wrap `value` followed by `detail` as one text so they flow together, then colour each wrapped
+ * line by where the value ends. The wrapper only ever collapses whitespace, so counting the
+ * value's non-space characters locates that boundary exactly on the wrapped output.
+ */
+function valueDetailLines(value: string, detail: string | undefined, width: number, theme: Theme, valueTone: ColorRole, detailTone: ColorRole): string[] {
+  if (!detail) return wrapDialogText(value, width).map((line) => styled(line, theme, valueTone));
+  const valueInk = [...value].filter((ch) => !SPACE.test(ch)).length;
+  let seen = 0;
+  return wrapDialogText(`${value}  ${detail}`, width).map((line) => {
+    const glyphs = [...line];
+    let cut = 0;
+    let inkHere = 0;
+    for (const ch of glyphs) {
+      if (seen + inkHere >= valueInk) break;
+      if (!SPACE.test(ch)) inkHere++;
+      cut++;
+    }
+    seen += inkHere;
+    const head = glyphs.slice(0, cut).join("");
+    const tail = glyphs.slice(cut).join("");
+    return (head ? styled(head, theme, valueTone) : "") + (tail ? styled(tail, theme, detailTone) : "");
+  });
+}
+
 function keyValueLines(block: Extract<DialogBlock, { kind: "keyValue" }>, width: number, theme: Theme): string[] {
   const prefix = `${block.key}  `;
+  const valueTone = block.valueTone ?? "text.primary";
+  const detailTone = block.detailTone ?? "text.muted";
   if (displayWidth(prefix) >= width) {
     return [
       ...textLines(block.key, width, theme, block.keyTone ?? "text.secondary"),
-      ...textLines(block.value, width, theme, block.valueTone ?? "text.primary"),
+      ...valueDetailLines(block.value, block.detail, width, theme, valueTone, detailTone),
     ];
   }
   const prefixWidth = displayWidth(prefix);
   const valueWidth = Math.max(1, width - prefixWidth);
-  const values = wrapDialogText(block.value, valueWidth);
+  const values = valueDetailLines(block.value, block.detail, valueWidth, theme, valueTone, detailTone);
   return values.map((value, index) => {
     const key = index === 0 ? prefix : " ".repeat(prefixWidth);
-    const keyPart = styled(key, theme, block.keyTone ?? "text.secondary");
-    return keyPart + styled(value, theme, block.valueTone ?? "text.primary");
+    return styled(key, theme, block.keyTone ?? "text.secondary") + value;
   });
 }
 

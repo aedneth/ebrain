@@ -154,9 +154,11 @@ describe("Memory panel (F9.2)", () => {
     expect(t).toContain("active · 3 uses · skill");
     expect(t).toContain("07-14 12:45");
     expect(t).toContain("refactor router");
-    expect(t).toContain("r remember");
+    // The compact controls live in the global hint bar only; the view no longer paints a second
+    // hint row of its own directly above it.
+    expect(t).toContain("[r] remember");
     expect(t).toContain("shared memory search");
-    expect(t).toContain("s search");
+    expect(t).toContain("[s] search");
   });
 
   it("keeps Recall usable at 80x24 and never exposes an episode body", () => {
@@ -305,7 +307,7 @@ describe("Memory search selection (G56-F3)", () => {
     const t = frameText(memState({ search: { query: "q", results: RESULTS }, searchSelected: 1 }));
     expect(t).toContain("search results · 3");
     expect(t).toContain("SEARCH-1");
-    expect(t).toContain("esc back to recent");
+    expect(t).toContain("[esc] back to recent");
     // A stale cursor past the result set must not break the width invariant (frameText asserts it).
     frameText(memState({ search: { query: "q", results: RESULTS }, searchSelected: 99 }));
   });
