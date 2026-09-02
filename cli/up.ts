@@ -27,6 +27,7 @@ import {
   toolsListSmoke,
 } from "./mcp-token.ts";
 import { ensure as ensureDaemon, stop as stopDaemon, logLocation as daemonLogLocation } from "./daemon-control.ts";
+import { materialiseDefaults } from "./config-bootstrap.ts";
 
 const HOME = homedir();
 const EBRAIN_HOME = resolveEbrainHome();
@@ -398,6 +399,11 @@ async function cmdUp(args: string[]): Promise<void> {
   const json = args.includes("--json");
   ensureDirs();
 
+  // The user config comes first: `routing.yaml` was read by four call sites and written by none,
+  // so a fresh clone could bring the daemon up and still fail on the first `ebrain route`. Doing
+  // it before the daemon also means a failure here costs nothing that has to be undone.
+  const configs = materialiseDefaults({ configDir: CFG });
+
   // `ensureDaemon` is the idempotent primitive: healthy already, or started under the shared
   // start lock and confirmed serving before it returns. Going through it rather than spawning
   // the control script means N agents running `ebrain up` at once still produce one host.
@@ -433,6 +439,7 @@ async function cmdUp(args: string[]): Promise<void> {
   const payload = {
     daemon: { state: "up", url: mcpUrl(port()), already_running: wasHealthy },
     token: { store: tokenStorePaths(CFG).tokenFile, env: EBRAIN_MCP_TOKEN_ENV },
+    config: configs.map(({ name, target, action }) => ({ name, path: target, action })),
     smoke,
     onboard: results,
   };
@@ -441,6 +448,11 @@ async function cmdUp(args: string[]): Promise<void> {
   } else {
     console.log(`ebrain up: daemon UP · ${mcpUrl(port())}`);
     console.log(`  token: ${EBRAIN_MCP_TOKEN_ENV} ready (${tokenStorePaths(CFG).tokenFile})`);
+    // A hundredth `ebrain up` should not narrate configs it left alone; a first one must say
+    // where the file it just made lives, because the user is about to edit it.
+    for (const item of configs) {
+      if (item.action !== "kept") console.log(`  config: ${item.detail}`);
+    }
     console.log(smoke.ok ? `  smoke: tools/list ok (${smoke.tools} tools)` : `  smoke: FAILED — ${smoke.message}`);
     console.log("  onboard:");
     printOnboard(results, false);

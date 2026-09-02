@@ -86,7 +86,7 @@ c_sec "config"
 # their absence as a hard FAIL (rc=1) told a correct fresh install it was "broken", the friction this
 # whole effort exists to remove. Absent → WARN with a "run ebrain up" hint (not-configured-yet);
 # present-but-wrong (bad perms) stays a WARN; only real corruption would be a FAIL.
-[ -f "$CFG/routing.yaml" ] && c_ok "config:routing.yaml" "routing.yaml" || c_warn "config:routing.yaml" "routing.yaml aún no creado — corré 'ebrain up' para configurar ($CFG/routing.yaml)"
+[ -f "$CFG/routing.yaml" ] && c_ok "config:routing.yaml" "routing.yaml" || c_warn "config:routing.yaml" "routing.yaml aún no creado — 'ebrain up' lo copia desde config/routing.default.yaml ($CFG/routing.yaml)"
 if [ -f "$CFG/.env" ]; then
   perm="$(ebrain_file_mode "$CFG/.env")"; [ -n "$perm" ] || perm='?'
   [ "$perm" = "600" ] && c_ok "config:dotenv:perm" "dotenv de config presente (chmod 600)" || c_warn "config:dotenv:perm" "dotenv presente pero perms=$perm (esperado 600)"

@@ -1,0 +1,73 @@
+# config/routing.default.yaml — the routing config a fresh install starts from.
+#
+# `ebrain up` copies this to ~/.config/ebrain/routing.yaml the first time, and never touches it
+# again: once it is yours, it is yours. Edit it freely — it is a plain file on purpose, not a
+# black box. Delete your copy and re-run `ebrain up` to start over from this template.
+#
+# Nothing here is a secret. The provider key is referenced by NAME (`key_env`) and read from the
+# environment at call time; it is never written into this file.
+
+budget:
+  # A deliberately small default. The routing lane calls a paid API, so an install that has not
+  # been thought about should not be able to spend much before you notice.
+  monthly_usd: 5
+  hard_stop: true                 # abort BEFORE calling once the month's spend reaches the cap
+  log: ~/.config/ebrain/spend.jsonl
+
+provider:
+  # `id` selects a descriptor from the built-in provider registry (`ebrain providers list`).
+  # It sets the defaults below and tells `ebrain cost` how to attribute spend. Any
+  # OpenAI-compatible endpoint works: change `id`, or override `base_url`/`key_env` directly.
+  id: openrouter
+  base_url: https://openrouter.ai/api/v1
+  key_env: OPENROUTER_API_KEY
+
+  # Extra fields merged into the request body. These are provider-specific by nature — the keys
+  # below are OpenRouter's. Switching `id` to a provider that does not understand them will make
+  # `ebrain providers check` say so; it is data, not behaviour.
+  provider_routing:
+    data_collection: deny         # privacy: prompts carry your own context
+    max_price:                    # per-request ceiling ($/M), a belt over the monthly cap
+      prompt: 2.0
+      completion: 5.0
+
+  completion_defaults:
+    max_tokens: 8192              # per-request completion ceiling — cuts expensive runaway loops
+
+# One chain per capability: [winner, fallback, floor]. When the provider supports a model array
+# it runs the failover itself; otherwise eBrain walks the chain in order.
+#
+# These slugs are a starting point, not a recommendation — model availability changes constantly.
+# Check what your provider currently offers and edit freely.
+capabilities:
+  coding:
+    models: [deepseek/deepseek-v4-pro, deepseek/deepseek-v4-flash, qwen/qwen3-coder:free]
+  agentic:
+    models: [moonshotai/kimi-k2.6, qwen/qwen3-coder-plus, qwen/qwen3-coder-flash]
+  web_design:
+    models: [z-ai/glm-5.2, z-ai/glm-4.7, z-ai/glm-4.7-flash]
+  reasoning:
+    models: [minimax/minimax-m3, deepseek/deepseek-v4-pro, qwen/qwen3-235b-a22b-thinking-2507]
+  long_context:                   # chosen by context WINDOW (all >=1M), not by price alone
+    models: [minimax/minimax-m3, qwen/qwen3.5-plus-20260420, qwen/qwen3.5-flash-02-23]
+  terminal:
+    models: [qwen/qwen3.7-max, qwen/qwen3.7-plus, qwen/qwen3.5-flash-02-23]
+  general:
+    models: [qwen/qwen3.7-max, qwen/qwen3.7-plus, qwen/qwen3-next-80b-a3b-instruct:free]
+
+# Rule-based classification. An explicit `--cap` always wins; otherwise the capability matching the
+# most keywords wins; ties and no-match fall through to `general`.
+classify:
+  coding:       [code, function, bug, refactor, script, typescript, python, test, api]
+  agentic:      [agent, tool-call, multi-step, orchestrate, workflow, loop, autonomous]
+  web_design:   [component, ui, tailwind, css, design, layout, frontend, react, next.js]
+  reasoning:    [reason, prove, analyze, architecture, tradeoff, why, deep, math]
+  long_context: [summarize, digest, whole repo, long, transcript, entire, ingest]
+  terminal:     [bash, shell, terminal, command, cli, pipeline, ffmpeg]
+
+frontier:
+  # The routing lane is for programmatic and batch work, where an unattended loop can run for a
+  # long time. Escalating to a frontier model there turns a cheap job into an expensive one with
+  # nobody watching, so it never happens automatically. `route.ts` enforces this independently of
+  # this flag; setting it true is refused rather than obeyed.
+  auto_escalate: false
