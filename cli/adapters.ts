@@ -34,6 +34,7 @@ import { z } from "zod";
 import { resolveEbrainHome } from "./ebrain-home.ts";
 import { expandPath, parseMcpBlock, type AgentMcpSpec } from "./mcp-manifest.ts";
 import { parseHooksBlock, type HooksSpec } from "./hooks-wire.ts";
+import { parseCommandsBlock, type CommandsSpec } from "./harness-commands.ts";
 import { registrationState, type RegistrationState } from "./mcp-registration.ts";
 
 /** Agent ids, capability names and model slugs share one shape across the codebase. */
