@@ -18,8 +18,10 @@ cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // .tool_input.cmd //
 
 # Programas lectores cuyo stdout aterriza en el contexto del modelo.
 readers='cat|bat|less|more|head|tail|nl|xxd|od|hexdump|strings|tac|rev|nano|vim|vi|view|emacs|jq|yq|grep|egrep|fgrep|rg|ag|ack|awk|sed|base64|sort|uniq|cut|paste|tr|dd|openssl|fold|column|expand'
-# Formas de archivo de secretos: .env, *.env, .env.local, secrets.*, *.pem, *.key, id_rsa, credentials, .npmrc, .netrc
-secret='(\.env([./]|$|[[:space:]"'\''])|\.env\b|[[:alnum:]_-]+\.env\b|secrets?\.[[:alnum:]]+|\.pem\b|[[:alnum:]_-]+\.key\b|id_rsa|[/[:space:]]credentials\b|\.npmrc\b|\.netrc\b)'
+# Formas de archivo de secretos: .env, *.env, .env.local, secrets.*, *.pem, *.key, id_rsa, credentials, .npmrc, .netrc,
+# y los rc/historiales del shell y ~/.claude.json, que en esta máquina guardan tokens en texto plano (fuga del 2026-10-09:
+# un `sed -n` sobre ~/.bashrc mostró las líneas vecinas sin máscara). Editarlos se hace a mano o con `>>`; leerlos, nunca.
+secret='(\.env([./]|$|[[:space:]"'\''])|\.env\b|[[:alnum:]_-]+\.env\b|secrets?\.[[:alnum:]]+|\.pem\b|[[:alnum:]_-]+\.key\b|id_rsa|[/[:space:]]credentials\b|\.npmrc\b|\.netrc\b|\.(bashrc|bash_profile|bash_aliases|bash_history|zshrc|zprofile|zsh_history|profile)\b|\.claude\.json\b)'
 
 deny() {
   local reason="$1"
