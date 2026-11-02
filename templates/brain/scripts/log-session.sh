@@ -107,26 +107,37 @@ if [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ] \
     CONTENT="$(echo "$entry" | jq -r '.content')"
 
     SLUG="$(date -u -d "$TS" +"%Y-%m-%d-%H%M" 2>/dev/null || echo "$DATE_TAG")"
-    OUT_FILE="$COMPACTS_DIR/${SLUG}-compact.md"
-    n=1
-    while [ -e "$OUT_FILE" ]; do
-      OUT_FILE="$COMPACTS_DIR/${SLUG}-compact-${n}.md"
-      n=$((n+1))
+    # The Stop hook runs every turn and re-reads the whole transcript, so the
+    # same compact comes back each time. Its identity is its timestamp: reuse
+    # any file of that minute that already holds it (numbering may have gaps);
+    # only a compact not yet on disk gets the next free name.
+    # (Before 2026-11-02 every turn wrote a new -N copy.)
+    OUT_FILE=""
+    for f in "$COMPACTS_DIR/${SLUG}"-compact*.md; do
+      [ -e "$f" ] && grep -qxF "compacted-at: $TS" "$f" 2>/dev/null && { OUT_FILE="$f"; break; }
     done
 
-    {
-      echo "---"
-      echo "type: compact-summary"
-      echo "project: $PROJECT_SLUG"
-      echo "session-id: ${SESSION_ID:-unknown}"
-      echo "compacted-at: $TS"
-      echo "tags: [compact, $PROJECT_SLUG]"
-      echo "---"
-      echo
-      echo "# Compact Summary — $TS"
-      echo
-      echo "$CONTENT"
-    } > "$OUT_FILE"
+    if [ -z "$OUT_FILE" ]; then
+      OUT_FILE="$COMPACTS_DIR/${SLUG}-compact.md"
+      n=1
+      while [ -e "$OUT_FILE" ]; do
+        OUT_FILE="$COMPACTS_DIR/${SLUG}-compact-${n}.md"
+        n=$((n+1))
+      done
+      {
+        echo "---"
+        echo "type: compact-summary"
+        echo "project: $PROJECT_SLUG"
+        echo "session-id: ${SESSION_ID:-unknown}"
+        echo "compacted-at: $TS"
+        echo "tags: [compact, $PROJECT_SLUG]"
+        echo "---"
+        echo
+        echo "# Compact Summary — $TS"
+        echo
+        echo "$CONTENT"
+      } > "$OUT_FILE"
+    fi
 
     EXCERPT="$(echo "$CONTENT" | awk 'NF { print; exit }' | head -c 200)"
     echo "${TS}|${OUT_FILE}|${EXCERPT}" >> "$COMPACTS_TMP"
