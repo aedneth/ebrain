@@ -41,6 +41,8 @@ describe("la regla de lo retirado", () => {
     expect(estadoDeRuta(c, "04-strategy/plan-viejo.md")).toBe("vigente");
     expect(estadoDeRuta(c, "no/existe.md")).toBe("inexistente");
     expect(estadoDeRuta(c, "07-clients/x/record.md")).toBe("excluida");
+    expect(estadoDeRuta(c, join(raiz, "04-strategy/OFERTA-CANONICA.md"))).toBe("externa");
+    expect(estadoDeRuta(c, "/no/existe/memoria.md")).toBe("inexistente");
   });
 
   test("el índice del corpus no incluye lo excluido", () => {
@@ -106,6 +108,21 @@ describe("el runner", () => {
     expect(ev.fugaRetirada).toEqual(["12-archive/OFERTA-v3.md"]);
     expect(ev.fugaObsoleta).toEqual(["company-brain/ruta-de-antes-del-pivote"]);
     expect(ev.fugaSinMarcar).toEqual(["04-strategy/plan-viejo.md"]);
+  });
+
+  test("un resultado de clientes no es fuga ni obsoleto, y no guarda su ruta", () => {
+    const top = [{ ruta: "qmd://company-brain/07-clients/x/record.md", fragmento: "cliente" }];
+    const ev = evaluarCaso(base.casos[0], top, idx, estado, { bytesCrudos: 1, ms: 1 }, ["12-archive/"], ["07-clients/"]);
+    expect(ev.excluidas).toBe(1);
+    expect(ev.fugaObsoleta).toEqual([]);
+    expect(ev.devueltas).toEqual(["<excluida>"]);
+  });
+
+  test("lo que viene de 12-archive y ya no existe es fuga retirada y obsoleta a la vez", () => {
+    const top = [{ ruta: "12-archive/web-copy-drafts/borrador", fragmento: "viejo" }];
+    const ev = evaluarCaso(base.casos[0], top, idx, estado, { bytesCrudos: 1, ms: 1 }, ["12-archive/"], ["07-clients/"]);
+    expect(ev.fugaRetirada.length).toBe(1);
+    expect(ev.fugaObsoleta.length).toBe(1);
   });
 
   test("el techo de gasto cuenta bytes como tokens y suma el reranker", () => {

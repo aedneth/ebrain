@@ -42,7 +42,8 @@ export function validar(a: ArchivoDeCasos, deny: string[], min: number, max: num
 
     for (const r of c.vigente) {
       const e = estadoDeRuta(a.corpus, r);
-      if (e !== "vigente") err(c.id, `vigente ${e}: ${r}`);
+      if (e === "externa") aviso(c.id, `vigente fuera del corpus (ningún motor del corpus la indexa): ${r}`);
+      else if (e !== "vigente") err(c.id, `vigente ${e}: ${r}`);
     }
     for (const r of c.retiradas) {
       const e = estadoDeRuta(a.corpus, r);

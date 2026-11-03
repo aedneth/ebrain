@@ -39,7 +39,11 @@ export type Corpus = {
 
 export type ArchivoDeCasos = { version: number; corpus: Corpus; casos: Caso[] };
 
-export type EstadoRuta = "vigente" | "retirada" | "inexistente" | "excluida";
+/** «externa»: la verdad vive fuera del corpus (p. ej. la auto-memory de un agente); ningún motor que
+ *  indexe solo el corpus puede devolverla, y medirlo es justo el punto. */
+export type EstadoRuta = "vigente" | "retirada" | "inexistente" | "excluida" | "externa";
+
+export const esExterna = (p: string) => p.startsWith("~/") || p.startsWith("/");
 
 const lista = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim() !== "").map((x) => x.trim()) : [];
@@ -111,6 +115,7 @@ export function estaExcluida(corpus: Corpus, rel: string): boolean {
 
 /** Clasifica una ruta relativa a la raíz del corpus. */
 export function estadoDeRuta(corpus: Corpus, rel: string): EstadoRuta {
+  if (esExterna(rel)) return existsSync(expandirHome(rel)) ? "externa" : "inexistente";
   if (estaExcluida(corpus, rel)) return "excluida";
   const abs = join(corpus.raiz, rel);
   if (!existsSync(abs)) return "inexistente";

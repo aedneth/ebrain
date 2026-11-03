@@ -40,6 +40,8 @@ export type EvalCaso = {
   fugaRetirada: string[];
   fugaObsoleta: string[];
   fugaSinMarcar: string[];
+  /** Resultados bajo un prefijo excluido (clientes): no son fuga de doctrina, pero ocupan el top-k. Se guardan sin ruta. */
+  excluidas: number;
   bytesTopK: number;
   bytesCrudos: number;
   ms: number;
@@ -65,25 +67,38 @@ export function evaluarCaso(
   indice: Map<string, string>,
   estado: (rel: string) => EstadoRuta,
   medida: { bytesCrudos: number; ms: number },
+  prefijosRetirados: string[] = [],
+  excluir: string[] = [],
 ): EvalCaso {
+  const pref = prefijosRetirados.map(normalizar).filter(Boolean);
+  const excl = excluir.map(normalizar).filter(Boolean);
+  const bajo = (n: string, ps: string[]) => ps.some((p) => n === p || n.startsWith(`${p}/`));
   const vig = new Set(caso.vigente.map(normalizar));
   const ret = new Set(caso.retiradas.map(normalizar));
   const contra = new Set(caso.contradice.map(normalizar));
   const ev: EvalCaso = {
-    id: caso.id, acierto: false, rango: null, devueltas: [], fugaRetirada: [], fugaObsoleta: [], fugaSinMarcar: [],
+    id: caso.id, acierto: false, rango: null, devueltas: [], fugaRetirada: [], fugaObsoleta: [], fugaSinMarcar: [], excluidas: 0,
     bytesTopK: 0, bytesCrudos: medida.bytesCrudos, ms: medida.ms,
   };
   top.forEach((r, i) => {
     const n = normalizar(r.ruta);
     const rel = indice.get(n);
-    ev.devueltas.push(rel ?? r.ruta);
     ev.bytesTopK += Buffer.byteLength(r.fragmento, "utf8");
+    if (rel === undefined && bajo(n, excl)) {
+      ev.excluidas++;
+      ev.devueltas.push("<excluida>");
+      return;
+    }
+    ev.devueltas.push(rel ?? r.ruta);
     if (vig.has(n) && ev.rango === null) {
       ev.acierto = true;
       ev.rango = i + 1;
     }
-    if (rel === undefined) ev.fugaObsoleta.push(r.ruta);
-    else if (ret.has(n) || estado(rel) === "retirada") ev.fugaRetirada.push(rel);
+    if (rel === undefined) {
+      // Ya no existe en el árbol: índice viejo. Si además venía de un prefijo retirado, también es fuga retirada.
+      ev.fugaObsoleta.push(r.ruta);
+      if (bajo(n, pref)) ev.fugaRetirada.push(r.ruta);
+    } else if (ret.has(n) || estado(rel) === "retirada") ev.fugaRetirada.push(rel);
     else if (contra.has(n)) ev.fugaSinMarcar.push(rel);
   });
   return ev;
@@ -103,6 +118,7 @@ export function resumir(evs: EvalCaso[]) {
     fuga_retirada: evs.filter((e) => e.fugaRetirada.length > 0).length / n,
     fuga_obsoleta: evs.filter((e) => e.fugaObsoleta.length > 0).length / n,
     fuga_sin_marcar: evs.filter((e) => e.fugaSinMarcar.length > 0).length / n,
+    casos_con_resultados_de_clientes: evs.filter((e) => e.excluidas > 0).length,
     bytes_topk_p50: percentil(evs.map((e) => e.bytesTopK), 50),
     bytes_topk_p95: percentil(evs.map((e) => e.bytesTopK), 95),
     latencia_ms_p50: percentil(evs.map((e) => e.ms), 50),
@@ -115,6 +131,24 @@ export function techoDeGasto(consultas: string[], corridas: number, rerankerUsd:
   const embeddings = (bytes * PRECIO_EMBEDDING_USD_POR_MTOK) / 1e6;
   const reranker = consultas.length * corridas * rerankerUsd;
   return { llamadas: consultas.length * corridas, tokens_techo: bytes, embeddings_usd: embeddings, reranker_usd: reranker, total_usd: embeddings + reranker };
+}
+
+/**
+ * Tokens exactos de las consultas con cl100k_base, el tokenizador de text-embedding-3-large, usando el
+ * @dqbd/tiktoken que ya trae vendor/gbrain. Devuelve null si no está (entonces solo vale el techo).
+ */
+export async function tokensCl100k(textos: string[]): Promise<number[] | null> {
+  try {
+    const mod = require("../../vendor/gbrain/node_modules/@dqbd/tiktoken/tiktoken.cjs");
+    const enc = mod.get_encoding("cl100k_base");
+    try {
+      return textos.map((t) => enc.encode(t).length);
+    } finally {
+      enc.free();
+    }
+  } catch {
+    return null;
+  }
 }
 
 // ── Motores ──────────────────────────────────────────────────────────────────
@@ -219,7 +253,11 @@ async function main() {
   const estado = (rel: string) => cache.get(rel) ?? (cache.set(rel, estadoDeRuta(corpus, rel)), cache.get(rel)!);
   const daemonAntes = motorNombre.startsWith("gbrain") ? memoriaDaemonKB() : null;
   let rssMaxKB = 0;
+  let daemonPicoKB = daemonAntes ?? 0;
+  let runnerPicoKB = 0;
   let llamadas = 0;
+  let tokensEmbebidos = 0;
+  const tokensPorCaso = motor.pagado ? await tokensCl100k(casos.map((c) => c.consulta)) : null;
   const porCorrida: Array<{ corrida: number; resumen: ReturnType<typeof resumir>; casos: EvalCaso[] }> = [];
   for (let corrida = 1; corrida <= corridas; corrida++) {
     const evs: EvalCaso[] = [];
@@ -228,8 +266,11 @@ async function main() {
       const r = await motor.buscar(caso.consulta, corpus.topK);
       const ms = performance.now() - t0;
       llamadas++;
+      if (tokensPorCaso) tokensEmbebidos += tokensPorCaso[casos.indexOf(caso)];
       rssMaxKB = Math.max(rssMaxKB, r.maxRssKB ?? 0);
-      evs.push(evaluarCaso(caso, topKDocumentos(r.resultados, corpus.topK), indice, estado, { bytesCrudos: r.bytesCrudos, ms }));
+      runnerPicoKB = Math.max(runnerPicoKB, Math.round(process.memoryUsage().rss / 1024));
+      if (daemonAntes !== null) daemonPicoKB = Math.max(daemonPicoKB, memoriaDaemonKB() ?? 0);
+      evs.push(evaluarCaso(caso, topKDocumentos(r.resultados, corpus.topK), indice, estado, { bytesCrudos: r.bytesCrudos, ms }, corpus.prefijosRetirados, corpus.excluir));
     }
     porCorrida.push({ corrida, resumen: resumir(evs), casos: evs });
   }
@@ -239,15 +280,19 @@ async function main() {
   const informe = {
     plan,
     llamadas,
-    gasto_techo_usd: techo ? techoDeGasto(casos.map((c) => c.consulta), corridas, rerankerUsd).total_usd : 0,
+    gasto_techo_usd: techo ? techo.total_usd : 0,
+    embeddings: motor.pagado
+      ? { tokens_cl100k: tokensPorCaso ? tokensEmbebidos : null, usd: tokensPorCaso ? (tokensEmbebidos * PRECIO_EMBEDDING_USD_POR_MTOK) / 1e6 : null }
+      : null,
     resultados_identicos_entre_corridas: estable,
     resumen: { ...resumir(porCorrida[0].casos), latencia_ms_p95_todas: percentil(todas.map((e) => e.ms), 95) },
-    ram: { motor_max_rss_kb: rssMaxKB || null, daemon_kb_antes: daemonAntes, daemon_kb_despues: daemonDespues },
+    resumen_por_corrida: porCorrida.map((c) => ({ corrida: c.corrida, ...c.resumen })),
+    ram: { motor_max_rss_kb: rssMaxKB || null, runner_pico_kb: runnerPicoKB, daemon_kb_antes: daemonAntes, daemon_kb_pico: daemonAntes === null ? null : daemonPicoKB, daemon_kb_despues: daemonDespues },
     corridas: porCorrida,
   };
   const salida = arg(argv, "--salida");
   if (salida) writeFileSync(salida, JSON.stringify(informe, null, 2));
-  console.log(JSON.stringify({ resumen: informe.resumen, llamadas, estable, ram: informe.ram, gasto_techo_usd: informe.gasto_techo_usd }, null, 2));
+  console.log(JSON.stringify({ resumen_por_corrida: informe.resumen_por_corrida, llamadas, estable, ram: informe.ram, gasto_techo_usd: informe.gasto_techo_usd, embeddings: informe.embeddings }, null, 2));
 }
 
 if (import.meta.main) await main();
