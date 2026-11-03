@@ -139,6 +139,7 @@ export function estadoDeRuta(corpus: Corpus, rel: string): EstadoRuta {
 export function normalizar(p: string): string {
   return p
     .replace(/^qmd:\/\/[^/]+\//, "")
+    .replace(/[?#].*$/, "")
     .replace(/\.md$/i, "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")

@@ -55,6 +55,8 @@ describe("la regla de lo retirado", () => {
     const n = normalizar("04-strategy/modelo-y-oferta/OFERTA-CANONICA.md");
     expect(normalizar("qmd://company-brain/04-strategy/modelo-y-oferta/OFERTA-CANONICA.md")).toBe(n);
     expect(normalizar("04-strategy/modelo-y-oferta/oferta-canonica")).toBe(n);
+    expect(normalizar("qmd://korvex/04-strategy/modelo-y-oferta/OFERTA-CANONICA.md?index=e2con")).toBe(n);
+    expect(normalizar("11-platform/brain/decisions/x.md")).toBe(normalizar("11-platform/.brain/decisions/x.md"));
   });
 });
 

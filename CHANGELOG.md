@@ -19,6 +19,13 @@ before, and what boundary moved. Implementation detail lives in the commits.
   no-longer-existing paths, bytes returned, p95 latency and RAM. Paid engines get a spend ceiling
   computed before the first call; above `--max-usd` nothing is called.
 - The cases themselves live in the private brain, never in this repo.
+- Engines are a registry (`cli/eval/registro.ts`): `qmd search|query`, the daemon, and sandboxed
+  servers driven over stdio MCP the way agents use them (GBrain upstream, Data Olympus through a
+  driver that rebuilds its server's search stack, engram). Sandboxed servers never inherit provider
+  keys, so no query leaves the machine.
+- `cli/eval/tareas.ts` measures task cases: a real request needs several layers of context at once
+  (canon, process, template, brand, voice, record, decisions), and the metric is how many of those
+  layers reach the agent within a 10,000-character budget, plus retired-doctrine leakage.
 
 ## 2026-09-02 — Any provider, any agent CLI
 
