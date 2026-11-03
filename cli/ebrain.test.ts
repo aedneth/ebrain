@@ -14,8 +14,8 @@ afterEach(() => {
   while (tempRoots.length) rmSync(tempRoots.pop()!, { recursive: true, force: true });
 });
 
-async function invoke(args: string[]): Promise<{ exit: number; out: string; err: string }> {
-  const proc = Bun.spawn(["bash", CLI, ...args], { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+async function invoke(args: string[], env: Record<string, string> = {}): Promise<{ exit: number; out: string; err: string }> {
+  const proc = Bun.spawn(["bash", CLI, ...args], { stdin: "ignore", stdout: "pipe", stderr: "pipe", env: { ...process.env, ...env } });
   const [out, err, exit] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
   return { exit, out, err };
 }
@@ -24,13 +24,23 @@ describe("ebrain dispatcher non-interactive compatibility", () => {
   test("bare ebrain on pipes keeps help output and never starts the TUI", async () => {
     const result = await invoke([]);
     expect(result.exit).toBe(0);
-    expect(result.out).toContain("unified harness + agentic-memory layer");
-    expect(result.out).toContain("ebrain ui");
+    expect(result.out).toContain("persistent memory for coding agents");
+    expect(result.out).toContain("Frozen on 2026-11-02");
+    expect(result.out).toContain("ui (and bare `ebrain` as the TUI)");
     expect(result.out).not.toContain("\x1b[?1049h");
   });
 
+  test("a frozen command explains itself and exits 3 without running", async () => {
+    for (const cmd of ["ui", "fleet", "route", "episodes", "workspaces"]) {
+      const result = await invoke([cmd]);
+      expect(result.exit).toBe(3);
+      expect(result.err).toContain(`ebrain ${cmd}: frozen on 2026-11-02`);
+      expect(result.err).toContain("EBRAIN_CONGELADOS=1");
+    }
+  });
+
   test("explicit ui on pipes fails clearly before the Bun entrypoint", async () => {
-    const result = await invoke(["ui"]);
+    const result = await invoke(["ui"], { EBRAIN_CONGELADOS: "1" });
     expect(result.exit).toBe(1);
     expect(result.err).toContain("needs a real interactive terminal");
   });
@@ -59,7 +69,7 @@ ttyTest("bare ebrain and the ui alias start the same TUI entrypoint from a real 
   // `run_bun` only needs a PATH entry; its neutral config cwd falls back to /tmp in this fixture.
   for (const [index, args] of [[], ["ui"]].entries()) {
     const session = `ebr-entry-${Date.now().toString(36)}-${index}`;
-    const command = `PATH=${shellQuote(bin)}:$PATH HOME=${shellQuote(home)} EBRAIN_HOME=${shellQuote(ROOT)} TERM=xterm-256color bash ${shellQuote(CLI)} ${args.map(shellQuote).join(" ")}; sleep 1`;
+    const command = `EBRAIN_CONGELADOS=1 PATH=${shellQuote(bin)}:$PATH HOME=${shellQuote(home)} EBRAIN_HOME=${shellQuote(ROOT)} TERM=xterm-256color bash ${shellQuote(CLI)} ${args.map(shellQuote).join(" ")}; sleep 1`;
     try {
       const created = Bun.spawn(["tmux", "new-session", "-d", "-x", "100", "-y", "30", "-s", session, command], { stdout: "ignore", stderr: "pipe" });
       expect(await created.exited).toBe(0);
