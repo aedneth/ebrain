@@ -228,6 +228,7 @@ async function main() {
   const corridas = Math.max(1, Number(arg(argv, "--corridas", "3")));
   const maxUsd = Number(arg(argv, "--max-usd", "1"));
   const rerankerUsd = Number(arg(argv, "--reranker-usd", "0.0003"));
+  const filtrarRetirado = argv.includes("--filtrar-retirado");
   const motor =
     motorNombre === "qmd" ? motorQmd(arg(argv, "--coleccion", "company-brain")!)
     : motorNombre === "gbrain-search" ? motorGbrain("search", arg(argv, "--fuente", "company-brain")!)
@@ -236,7 +237,7 @@ async function main() {
   if (!motor) throw new Error(`motor desconocido: ${motorNombre}`);
 
   const techo = motor.pagado ? techoDeGasto(casos.map((c) => c.consulta), corridas, rerankerUsd) : null;
-  const plan = { motor: motor.nombre, casos: casos.length, sin_confirmar_excluidos: archivo.casos.length - casos.length, corridas, top_k: corpus.topK, techo_gasto: techo };
+  const plan = { motor: motor.nombre + (filtrarRetirado ? "+filtro-retirado" : ""), casos: casos.length, sin_confirmar_excluidos: archivo.casos.length - casos.length, corridas, top_k: corpus.topK, techo_gasto: techo };
   console.log(JSON.stringify({ plan }, null, 2));
   if (techo && techo.total_usd > maxUsd) {
     console.error(`ALTO: el techo de gasto (US$${techo.total_usd.toFixed(4)}) pasa de --max-usd ${maxUsd}. No se llamó al motor.`);
@@ -265,6 +266,13 @@ async function main() {
       const t0 = performance.now();
       const r = await motor.buscar(caso.consulta, corpus.topK);
       const ms = performance.now() - t0;
+      if (filtrarRetirado) {
+        // Simula excluir lo retirado AL INDEXAR: fuera lo retirado, lo que ya no existe y lo excluido, antes del top-k.
+        r.resultados = r.resultados.filter((x) => {
+          const rel = indice.get(normalizar(x.ruta));
+          return rel !== undefined && estado(rel) !== "retirada";
+        });
+      }
       llamadas++;
       if (tokensPorCaso) tokensEmbebidos += tokensPorCaso[casos.indexOf(caso)];
       rssMaxKB = Math.max(rssMaxKB, r.maxRssKB ?? 0);
