@@ -40,12 +40,17 @@ function crearMotorExterno(nombre: string, arg: Arg): Motor {
     if (!sandbox) throw new Error("gbrain060 necesita --sandbox");
     const herramienta = nombre === "gbrain060-search" ? "search" : "query";
     const fuente = arg("--fuente", "korvex-con")!;
+    const home = arg("--gbrain-home", `${sandbox}/gbrain-home`)!;
+    // El híbrido embebe cada consulta con OpenAI: solo ese motor recibe OPENAI_API_KEY (del entorno de la corrida,
+    // nunca de un archivo de configuración). Las demás llaves nunca pasan.
+    const hibrido = herramienta === "query";
     return motorMcpStdio({
       nombre: `${nombre}:${fuente}`,
+      pagado: hibrido,
       cmd: [`${sandbox}/bun-1.4.4/bun-linux-x64/bun`, "run", `${sandbox}/gbrain-0.60/src/cli.ts`, "serve", "--surface", "full", "--access", "read-only"],
       cwd: `${sandbox}/gbrain-0.60`,
-      env: { GBRAIN_HOME: `${sandbox}/gbrain-home`, DO_NOT_TRACK: "1" },
-      quitar: LLAVES,
+      env: { GBRAIN_HOME: home, DO_NOT_TRACK: "1" },
+      quitar: hibrido ? LLAVES.filter((k) => k !== "OPENAI_API_KEY") : LLAVES,
       herramienta,
       argumentos: (q, pool) => ({ query: q, limit: pool, source_id: fuente, ...(herramienta === "query" ? { expand: false } : {}) }),
       mapa: (v) => (Array.isArray(v) ? v : []).map((f: any) => ({ ruta: String(f.slug ?? ""), fragmento: String(f.chunk_text ?? "") })),
