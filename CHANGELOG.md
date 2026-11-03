@@ -7,6 +7,19 @@ before, and what boundary moved. Implementation detail lives in the commits.
 
 ━━━
 
+## Unreleased (branch `e1-regresion`) — A retrieval regression you can run before trusting a memory
+
+- `cli/eval/validar.ts` checks a cases file (query, current path, retired paths) against the
+  brain on disk: a retired path must really be retired (archive prefix, `status: superseded`,
+  `superseded_by:` or a retirement banner), a current path must exist and be live, and no case may
+  name a denied (client) repo. Live documents that still state retired doctrine are reported as
+  unmarked drift.
+- `cli/eval/runner.ts` runs those cases against `qmd`, the daemon's keyword `search` or its
+  hybrid `query`, and reports recall@k of the current path, leakage of retired and of
+  no-longer-existing paths, bytes returned, p95 latency and RAM. Paid engines get a spend ceiling
+  computed before the first call; above `--max-usd` nothing is called.
+- The cases themselves live in the private brain, never in this repo.
+
 ## 2026-09-02 — Any provider, any agent CLI
 
 The model provider stopped being a compile-time fact and became a value in `routing.yaml`, and
