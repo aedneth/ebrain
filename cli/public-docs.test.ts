@@ -123,9 +123,8 @@ describe("F10 public documentation contract", () => {
     for (const heading of [
       "## Five-minute proof",
       "## What you can do",
-      "## Compound personal context",
       "## From CKIS to eBrain",
-      "## Token and provider telemetry",
+      "## Frozen on 2026-11-02",
       "## Security and privacy boundaries",
       "## Contributing",
     ]) {
@@ -133,7 +132,8 @@ describe("F10 public documentation contract", () => {
     }
     expect(readme).toContain("actions/workflows/ci.yml/badge.svg");
     expect(readme).toContain("https://github.com/aedneth/ckis");
-    expect(readme).toContain("does not choose a universally best model");
-    expect(readme).toContain("does not report subscription charges as token usage");
+    // 2026-11-02: the routing lane and the cockpit are frozen; the README must say so and how to revert.
+    expect(readme).toContain("EBRAIN_CONGELADOS=1");
+    expect(readme).not.toContain("## Token and provider telemetry");
   });
 });

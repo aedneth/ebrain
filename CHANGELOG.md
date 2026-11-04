@@ -7,6 +7,19 @@ before, and what boundary moved. Implementation detail lives in the commits.
 
 ━━━
 
+## Unreleased (branches `recorte` + `integracion`) — eBrain is a memory that arrives by itself, and nothing else
+
+- Everything without measured use in October 2026 is frozen: the terminal cockpit, workspaces,
+  sessions, targets, profiles and fleet; `providers`, `task-profile` and `advise`; `dream`; context packs, episodes, procedures, workflows
+  and `memory recent`; and both federation sweeps. They are out of the README and `ebrain help`,
+  and the dispatcher answers that they are frozen (exit 3). Nothing was deleted, and
+  `EBRAIN_CONGELADOS=1` runs any of them. A bare `ebrain` prints help instead of opening the TUI.
+- The norms stop claiming what does not happen: the MCP server is not assumed connected, and the
+  session log is where each project's Stop hook writes it, not `.brain/sessions/`.
+- Evidence for each decision: the "Frozen on 2026-11-02" section of the README.
+- Merging with the v0.60 migration, what runs in production wins: `route`, `spend`, `routing` and `cost` are not frozen, because the
+  engine launcher and the agent adapters call `ebrain route`.
+
 ## Unreleased (branch `migracion-gbrain-060`) — The engine moves to v0.60 with vectors, and spending has a ceiling
 
 - The pinned engine is gbrain v0.60.556.0, which needs bun 1.4.4. A runtime installed at

@@ -53,57 +53,49 @@ run_ui() {
 
 usage() {
   cat <<'EOF'
-ebrain — unified harness + agentic-memory layer (provider-agnostic)
+ebrain — persistent memory for coding agents: the context arrives by itself, secrets stay out
 
   ebrain remember [--project S] [--tags a,b] "<learning>"   write to permanent agentic memory
   ebrain q "<question>" [--json]                             search (cross-source fan-out)
   ebrain route --cap <cap> "<prompt>"                        routed one-shot (capped OpenRouter stack)
+  ebrain spend|routing|cost [--json]                         routing-lane spend per capability, stack and unified ledger
   ebrain harness install <agent>                             install/update one agent's harness
   ebrain harness doctor [agent]                              verify ONE agent's harness (guard/hooks/mcp)
   ebrain harness status                                      harness fleet status + MCP mode
+  ebrain adapters <list|show|validate> [--json]              agent adapters: how each is wired, and whether its manifest is valid
+  ebrain norms render <file>                                 render the managed norms block
   ebrain doctor [--json]                                     full CKIS health (launchers/config/contract/sources/spend)
   ebrain status [--json]                                     quick snapshot (brain/spend/fleet/memory)
-  ebrain                                                       interactive TUI on a real terminal (non-TTY: this help)
-  ebrain ui                                                    compatible explicit TUI alias
-  ebrain spend [--json]                                      MTD spend per capability vs routing.yaml cap
-  ebrain routing [--json]                                    OpenRouter stack: chains, models and spend
-  ebrain cost [--json]                                       unified ledger by provider/agent/model/session/workflow
   ebrain embedder status|migrate [--to P:M@D] [--dry-run] [--yes]  show or switch the memory embedder (migrate previews cost, then confirms)
-  ebrain dream [--dry-run] [--at-cap] [--keyless]            submit the memory maintenance cycle to the running daemon
-  ebrain context <list|proposals|init|get|update|propose|review> [--json] reviewed local operating context packs
-  ebrain episodes <list|get|recall|record> [--json]          bounded local episode recall (no raw transcripts)
-  ebrain procedures <list|show|use|review> [--json]          reviewed lifecycle for local workflows/skills
-  ebrain providers <list|show> [--json]                      model providers eBrain can route to, and which are configured
-  ebrain adapters <list|show|validate> [--json]              agent adapters: how each is wired, and whether its manifest is valid
-  ebrain profiles <list|show|validate|init|catalog-add|create> [--json] user-chosen local execution profiles
-  ebrain workspaces <list|add|rename|remove> [--json]            validated local directory registry
-  ebrain targets <list|plan|launch> [--json]                  adapter targets with a declared model selector
-  ebrain workflows <list|search|show|run|capture|skillify>   local workflows/SOPs + skillify with approval
-  ebrain fleet [--json]                                      health + RAM class (heavy|light) of the 6 adapters
-  ebrain memory recent [--json] [--limit N]                  latest learnings + sessions (agent-memory + Dev Brain)
   ebrain memoria <project|sync|status|install-timer>         keep the memory index fresh, under spend caps
-  ebrain sessions list [--json]                               active ebr-* tmux sessions
-  ebrain sessions new <agent> <slug> [--cwd D] [--json]       new tmux session (harness env injected; client deny-list)
-  ebrain sessions peek <name> [--lines N] [--json]            capture-pane (scrubbed — no raw secrets)
-  ebrain sessions send <name> "<text>" --yes [--json]         send-keys (requires --yes)
-  ebrain sessions kill <name> --yes [--json]                  kill-session (requires --yes)
-  ebrain task-profile "<task>" [--json]                       explainable signals/capability (does not pick model/agent)
-  ebrain advise "<task>" [--json]                             compatible alias of task-profile
   ebrain up [--json]                                          plug-and-play boot: daemon + token + onboard + smoke
   ebrain onboard [--all|agent] [--json]                       register HTTP MCP for detected agents
   ebrain daemon {start|stop|status|restart|ensure}           shared-brain HTTP-MCP host (:8541 loopback, owns the lock)
   ebrain daemon install-service|uninstall-service            keep the host running across reboots and crashes
   ebrain uninstall [--dry-run] [--purge]                     remove eBrain: agent entries, launcher, service, config
-  ebrain norms render <file>                                 render the managed norms block
-  ebrain federate sessions|skills                            sweep .brain/ or skills into federated memory
   ebrain help
+
+Frozen on 2026-11-02 (no measured use; the code stays in the repo, EBRAIN_CONGELADOS=1 runs it):
+  ui (and bare `ebrain` as the TUI) · dream · context · episodes ·
+  procedures · providers · profiles · workspaces · targets · workflows · fleet · memory · sessions ·
+  task-profile · advise · federate. Why and evidence: README.md, section "Frozen on 2026-11-02"
 
 Agents supported by install: claude · codex · gemini · generic
 EOF
 }
 
+# Congelado = fuera del flujo, no borrado. Sin EBRAIN_CONGELADOS=1 el comando se explica y sale con 3.
+CONGELADOS=" ui dream context episodes procedures providers profiles workspaces targets workflows fleet memory sessions task-profile advise federate "
+congelado() {
+  case "$CONGELADOS" in *" $1 "*) ;; *) return 0 ;; esac
+  [ "${EBRAIN_CONGELADOS:-}" = 1 ] && return 0
+  echo "ebrain $1: frozen on 2026-11-02 (no measured use in October). The code stays in the repo;" >&2
+  echo "  EBRAIN_CONGELADOS=1 runs it. Why and evidence: README.md, section "Frozen on 2026-11-02"" >&2
+  exit 3
+}
+
 if [ "$#" -eq 0 ]; then
-  if interactive_tui; then
+  if [ "${EBRAIN_CONGELADOS:-}" = 1 ] && interactive_tui; then
     run_ui
     exit $?
   fi
@@ -112,6 +104,7 @@ if [ "$#" -eq 0 ]; then
 fi
 
 cmd="$1"; shift
+congelado "$cmd"
 case "$cmd" in
   remember)  run "$CORE/remember.sh" "$@" ;;
   q|query)   run "$SCRIPTS/ebrain-q" "$@" ;;
