@@ -28,6 +28,12 @@ before, and what boundary moved. Implementation detail lives in the commits.
 - `ebrain doctor` measures recall against the running daemon instead of inferring it from config and keys.
 - The daemon advertises the memory verbs to agents (8 tools instead of 94); the CLI can still call every operation.
 - A single dropped connection to the local daemon is retried once.
+- `ebrain memoria` also keeps a qmd index of the same projected corpus, and writes `.rutas.json`: the allowlist that maps
+  each indexed document to its real path. A prompt hook drops any result that is not there, so an archived, retired or
+  denied document cannot be injected whatever an index returns.
+- `cli/eval/hook.ts` runs the regression in hook mode: it measures the text a prompt really receives, not what an engine
+  returns, and tells a result from a path merely cited inside a fragment.
+- The daemon runs at normal priority: it now answers inside every prompt, under a deadline.
 
 ## Unreleased (branch `e1-regresion`) — A retrieval regression you can run before trusting a memory
 

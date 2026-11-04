@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { gastoDelMes, proyectar, rutaVisible, sanearFrontmatter, seleccionar, topeDeEstaCorrida, type Config, type Fuente } from "./memoria.ts";
+import { escribirRutas, gastoDelMes, proyectar, rutaVisible, sanearFrontmatter, seleccionar, topeDeEstaCorrida, type Config, type Fuente } from "./memoria.ts";
 import { engineHome } from "./engine-home.ts";
 
 const base = mkdtempSync(join(tmpdir(), "ebrain-memoria-"));
@@ -65,6 +65,20 @@ describe("the projection", () => {
     const tres = proyectar(fuente, config);
     expect(tres.cambios).toBe(1);
     expect(existsSync(join(tres.dir, "06-sales/menciona.md"))).toBe(false);
+  });
+});
+
+describe("the hook's allowlist", () => {
+  test("maps every projected document to its real path, and nothing else", () => {
+    const p = proyectar(fuente, config);
+    escribirRutas(config, [p]);
+    const r = JSON.parse(readFileSync(join(config.corpus, ".rutas.json"), "utf8"));
+    expect(r.brain.raiz).toBe(raiz);
+    expect(r.brain.docs["04-strategy/canon"]).toBe("04-strategy/canon.md");
+    expect(r.brain.docs["11-platform/brain/decisions/d"]).toBe("11-platform/.brain/decisions/d.md");
+    for (const real of Object.values(r.brain.docs) as string[]) {
+      expect(real.startsWith("12-archive/") || real.startsWith("07-clients/") || real.startsWith("02-daily/")).toBe(false);
+    }
   });
 });
 

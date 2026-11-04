@@ -21,11 +21,11 @@
  * The provider key is read from its file for that one child process. It is never printed, logged or written.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, appendFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, appendFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, sep } from "node:path";
 import { engineHome } from "./engine-home.ts";
-import { estadoDeRuta, expandirHome, type Corpus } from "./eval/casos.ts";
+import { estadoDeRuta, expandirHome, normalizar, type Corpus } from "./eval/casos.ts";
 
 export type Fuente = {
   id: string;
@@ -49,6 +49,8 @@ export type Config = {
   denegadosRuta?: string;
   retirado: { prefijos: string[]; estados: string[] };
   llave: string;
+  /** qmd over the same projected corpus: the complement for exact terms and the fallback when the daemon is down. */
+  qmd?: { indice: string; bin: string; nodeDir: string };
   topeCorridaUsd: number;
   topeMensualUsd: number;
 };
@@ -152,13 +154,20 @@ function git(dir: string, ...args: string[]) {
   return spawnSync("git", ["-c", "user.name=ebrain", "-c", "user.email=ebrain@localhost", "-c", "core.hooksPath=/dev/null", "-C", dir, ...args], { encoding: "utf8" });
 }
 
+export type Proyeccion = { id: string; dir: string; raiz: string; archivos: number; cambios: number; head: string; rutas: Record<string, string> };
+
 /** Mirrors a source into its corpus repository. Returns the HEAD commit and how many files the projection changed. */
-export function proyectar(f: Fuente, c: Config): { id: string; dir: string; archivos: number; cambios: number; head: string } {
+export function proyectar(f: Fuente, c: Config): Proyeccion {
   const dir = join(expandirHome(c.corpus), f.id);
   mkdirSync(dir, { recursive: true });
   if (!existsSync(join(dir, ".git"))) git(dir, "init", "-q");
   const deseado = new Map<string, string>();
-  for (const { rel, texto } of seleccionar(f, c)) deseado.set(rutaVisible(rel), sanearFrontmatter(texto));
+  const rutas: Record<string, string> = {};
+  for (const { rel, texto } of seleccionar(f, c)) {
+    const visible = rutaVisible(rel);
+    deseado.set(visible, sanearFrontmatter(texto));
+    rutas[normalizar(visible)] = rel;
+  }
   for (const rel of listarMd(dir, [])) {
     if (!deseado.has(rel)) rmSync(join(dir, rel));
   }
@@ -171,7 +180,46 @@ export function proyectar(f: Fuente, c: Config): { id: string; dir: string; arch
   git(dir, "add", "-A");
   const cambios = git(dir, "diff", "--cached", "--name-only").stdout.split("\n").filter(Boolean).length;
   if (cambios > 0) git(dir, "commit", "-q", "-m", `projection ${new Date().toISOString()}`);
-  return { id: f.id, dir, archivos: deseado.size, cambios, head: git(dir, "rev-parse", "HEAD").stdout.trim() };
+  return { id: f.id, dir, raiz: expandirHome(f.raiz), archivos: deseado.size, cambios, head: git(dir, "rev-parse", "HEAD").stdout.trim(), rutas };
+}
+
+/**
+ * The allowlist of the prompt hook: a result whose document is not here is never injected, whatever an index returns.
+ * It also maps an engine's slug back to the real path, because the projection renames hidden segments.
+ */
+export function escribirRutas(c: Config, ps: Proyeccion[]): void {
+  const salida: Record<string, { raiz: string; docs: Record<string, string> }> = {};
+  for (const p of ps) salida[p.id] = { raiz: p.raiz, docs: p.rutas };
+  const f = join(expandirHome(c.corpus), ".rutas.json");
+  writeFileSync(`${f}.tmp`, JSON.stringify(salida));
+  renameSync(`${f}.tmp`, f);
+}
+
+function qmd(c: Config, args: string[]) {
+  const q = c.qmd!;
+  return spawnSync(expandirHome(q.bin), ["--index", q.indice, ...args], {
+    cwd: join(CFG, "wd"), encoding: "utf8", timeout: 300_000,
+    // The system's Node is too old for qmd, and a systemd unit has no nvm in its PATH.
+    env: { ...process.env, PATH: `${expandirHome(q.nodeDir)}:${process.env.PATH ?? ""}` },
+  });
+}
+
+/** Brings qmd's index up to the projection. It is local and free, and it is the fallback, so it runs with the daemon down too. */
+export function actualizarQmd(c: Config, ps: Proyeccion[], estado: Record<string, string>): void {
+  if (!c.qmd) return;
+  const atrasadas = ps.filter((p) => p.head && estado[`qmd:${p.id}`] !== p.head);
+  if (atrasadas.length === 0) return;
+  const lista = qmd(c, ["collection", "list"]).stdout ?? "";
+  for (const p of ps) {
+    if (!lista.includes(`${p.id} (qmd://`)) qmd(c, ["collection", "add", p.dir, "--name", p.id]);
+  }
+  const r = qmd(c, ["update"]);
+  if (r.status === 0) {
+    for (const p of atrasadas) estado[`qmd:${p.id}`] = p.head;
+    log(`qmd: index updated for ${atrasadas.map((p) => p.id).join(", ")}`);
+  } else {
+    log(`qmd: update failed with exit ${r.status}; retried next run`);
+  }
 }
 
 /** Sum of the actual spend in the engine's budget ledger for one calendar month (YYYY-MM, UTC, as the ledger stamps it). */
@@ -324,6 +372,9 @@ async function sincronizar(c: Config): Promise<number> {
   const puerto =Number(process.env.EBRAIN_BRAIN_PORT || 8541);
   const estado = leerEstado(c);
   const proyecciones = c.fuentes.map((f) => proyectar(f, c));
+  escribirRutas(c, proyecciones);
+  actualizarQmd(c, proyecciones, estado);
+  writeFileSync(estadoFile(c), JSON.stringify(estado, null, 2));
   const porSincronizar = proyecciones.filter((p) => p.head && estado[p.id] !== p.head);
   if (!(await daemonSano(puerto, 5_000))) {
     log("daemon down: the corpus is projected, the sync waits for the next run");
@@ -443,10 +494,9 @@ if (import.meta.main) {
   }
   const c = cargarConfig();
   if (cmd === "project") {
-    for (const f of c.fuentes) {
-      const p = proyectar(f, c);
-      console.log(`${p.id}: ${p.archivos} files, ${p.cambios} changed, ${p.dir}`);
-    }
+    const ps = c.fuentes.map((f) => proyectar(f, c));
+    escribirRutas(c, ps);
+    for (const p of ps) console.log(`${p.id}: ${p.archivos} files, ${p.cambios} changed, ${p.dir}`);
   } else if (cmd === "sync") {
     process.exit(await sincronizar(c));
   } else if (cmd === "status") {

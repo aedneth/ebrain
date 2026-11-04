@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { cargarCasos, estadoDeRuta, indiceDelCorpus, normalizar } from "./casos.ts";
 import { validar } from "./validar.ts";
+import { prohibida, rutasConFragmento, rutasDeResultados } from "./hook.ts";
 import { evaluarCaso, percentil, techoDeGasto, topKDocumentos } from "./runner.ts";
 
 const raiz = mkdtempSync(join(tmpdir(), "ebrain-eval-"));
@@ -88,6 +89,24 @@ describe("el validador", () => {
 
   test("falla si el total queda fuera del rango pedido", () => {
     expect(validar(base, [], 30, 50).some((x) => x.id === "*" && x.nivel === "error")).toBe(true);
+  });
+});
+
+describe("el modo hook", () => {
+  const texto = "[Memoria]\n\n── 04-strategy/a.md\nCita 12-archive/x.md dentro del texto.\n\n── /abs/b.md (línea 7)\nOtro.\n\nOtros documentos:\n→ c.md";
+  test("distingue resultados de rutas citadas dentro de un fragmento", () => {
+    expect(rutasDeResultados(texto)).toEqual(["04-strategy/a.md", "/abs/b.md", "c.md"]);
+    expect(rutasConFragmento(texto)).toEqual(["04-strategy/a.md", "/abs/b.md"]);
+  });
+
+  test("prohíbe el archivo, los clientes, el vault personal y lo retirado", () => {
+    const c = base.corpus;
+    expect(prohibida("12-archive/x.md", c)).toBe("archivo");
+    expect(prohibida("/h/K/07-clients/x/record.md", c)).toBe("cliente");
+    expect(prohibida("/h/Documents/Second Brain/02-daily/a.md", c)).toBe("second-brain");
+    expect(prohibida("00-inbox/borrador.md", c)).toBe("retirada");
+    expect(prohibida("repo-de-acme/a.md", c, /acme/)).toBe("cliente");
+    expect(prohibida("04-strategy/OFERTA-CANONICA.md", c)).toBeNull();
   });
 });
 
