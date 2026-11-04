@@ -21,8 +21,12 @@ before, and what boundary moved. Implementation detail lives in the commits.
 - With a provider key in its environment the engine picks a chat model by itself and spends on it, uncapped. A pin in
   its config does not stop that; `GBRAIN_MODEL` naming a keyless provider does, and the daemon runs that way. `think`
   answers "no LLM available" and search is unaffected.
-- `ebrain remember` keeps a learning that names a denied repo on disk only: it no longer reaches the index by the
-  direct write.
+- With `ebrain memoria` configured, `ebrain remember` no longer writes to the daemon directly: in v0.60 a direct write
+  claims the source for a managed writer and the engine then fences every sync of it. The learning stays on disk and
+  enters with the next hourly sync, filtered and under the caps. Without that config the direct write stays, except
+  for a learning that names a denied repo, which stays on disk only.
+- `ebrain doctor` measures recall against the running daemon instead of inferring it from config and keys.
+- The daemon advertises the memory verbs to agents (8 tools instead of 94); the CLI can still call every operation.
 - A single dropped connection to the local daemon is retried once.
 
 ## Unreleased (branch `e1-regresion`) — A retrieval regression you can run before trusting a memory
