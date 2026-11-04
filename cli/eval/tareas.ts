@@ -79,6 +79,9 @@ export type EvalTarea = {
   ms: number;
   /** Documentos distintos en el orden en que llegaron (todo el pool, no solo el presupuesto), para métricas a igual número de documentos. */
   orden: string[];
+  /** Todo el pool en orden, con los caracteres que ocuparía cada resultado (para simular uniones con presupuesto). */
+  pool: { k: string; c: number }[];
+  otraFuente: number;
 };
 
 export function evaluarTarea(
@@ -88,7 +91,11 @@ export function evaluarTarea(
   indice: Map<string, string>,
   estado: (rel: string) => EstadoRuta,
   ms: number,
+  otras: string[] = [],
 ): EvalTarea {
+  const otrasN = otras.map(normalizar).filter(Boolean);
+  const pool = resultados.map((r) => ({ k: normalizar(r.ruta), c: r.ruta.length + 2 + r.fragmento.length }));
+  let otraFuente = 0;
   const llegados = new Set<string>();
   const orden: string[] = [];
   for (const r of resultados) { const k = normalizar(r.ruta); if (!orden.includes(k)) orden.push(k); }
@@ -104,14 +111,15 @@ export function evaluarTarea(
     const k = normalizar(r.ruta);
     llegados.add(k);
     const rel = indice.get(k);
-    if (rel === undefined) obsoletos++;
+    if (rel === undefined && otrasN.some((p) => k === p || k.startsWith(`${p}/`))) otraFuente++;
+    else if (rel === undefined) obsoletos++;
     else if (retiradas.has(k) || estado(rel) === "retirada") fuga.add(rel);
   }
   const cubiertas = t.capas.filter((c) => c.docs.some((d) => llegados.has(normalizar(d)))).map((c) => c.capa);
   const faltan = t.capas.map((c) => c.capa).filter((c) => !cubiertas.includes(c));
   return {
     id: t.id, capas: t.capas.length, cubiertas, faltan, cobertura: cubiertas.length / (t.capas.length || 1),
-    llegaron: n, caracteres: Math.min(usados, presupuesto), fugaRetirada: [...fuga], fugaObsoleta: obsoletos, ms, orden,
+    llegaron: n, caracteres: Math.min(usados, presupuesto), fugaRetirada: [...fuga], fugaObsoleta: obsoletos, ms, orden, pool, otraFuente,
   };
 }
 
@@ -142,6 +150,7 @@ async function main() {
   const pool = Number(arg(argv, "--pool", "50"));
   const presupuesto = Number(arg(argv, "--presupuesto", String(a.presupuesto)));
   const filtrar = argv.includes("--filtrar-retirado");
+  const otras = (arg(argv, "--otras-fuentes") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
   const patronRuido = arg(argv, "--excluir-patron") ? new RegExp(arg(argv, "--excluir-patron")!) : null;
   const indice = indiceDelCorpus(a.corpus);
   const cache = new Map<string, EstadoRuta>();
@@ -158,7 +167,7 @@ async function main() {
     let rs = r.resultados;
     if (filtrar) rs = rs.filter((x) => { const rel = indice.get(normalizar(x.ruta)); return rel !== undefined && estado(rel) !== "retirada"; });
     if (patronRuido) rs = rs.filter((x) => !patronRuido.test(indice.get(normalizar(x.ruta)) ?? x.ruta));
-    evs.push(evaluarTarea(t, rs, presupuesto, indice, estado, ms));
+    evs.push(evaluarTarea(t, rs, presupuesto, indice, estado, ms, otras));
   }
   (motor as { cerrar?: () => void }).cerrar?.();
   const n = evs.length || 1;
@@ -169,6 +178,7 @@ async function main() {
     tareas_completas: evs.filter((e) => e.cobertura === 1).length,
     capas_cubiertas: `${evs.reduce((s, e) => s + e.cubiertas.length, 0)}/${evs.reduce((s, e) => s + e.capas, 0)}`,
     tareas_con_fuga: evs.filter((e) => e.fugaRetirada.length > 0).length,
+    resultados_de_otras_fuentes: evs.reduce((a, e) => a + e.otraFuente, 0),
     resultados_por_tarea_media: evs.reduce((s, e) => s + e.llegaron, 0) / n,
     rss_motor_kb: rssMax || null,
     residente_pico_kb: marca ? residentePico : null,

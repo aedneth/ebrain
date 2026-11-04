@@ -15,7 +15,7 @@ export function crearMotor(nombre: string, arg: Arg): Motor {
   switch (nombre) {
     case "qmd":
     case "qmd-search":
-      return motorQmd({ coleccion, index, modo: "search", configDir });
+      return motorQmd({ coleccion, index, modo: "search", configDir, primaria: arg("--primaria") });
     case "qmd-query":
       return motorQmd({ coleccion, index, modo: "query", configDir, sinRerank: arg("--sin-rerank") === "1" });
     case "gbrain-daemon-search":
@@ -41,6 +41,7 @@ function crearMotorExterno(nombre: string, arg: Arg): Motor {
     const herramienta = nombre === "gbrain060-search" ? "search" : "query";
     const fuente = arg("--fuente", "korvex-con")!;
     const home = arg("--gbrain-home", `${sandbox}/gbrain-home`)!;
+    const primaria = arg("--primaria", fuente === "*" ? "korvex-sr" : fuente)!;
     // El híbrido embebe cada consulta con OpenAI: solo ese motor recibe OPENAI_API_KEY (del entorno de la corrida,
     // nunca de un archivo de configuración). Las demás llaves nunca pasan.
     const hibrido = herramienta === "query";
@@ -52,8 +53,12 @@ function crearMotorExterno(nombre: string, arg: Arg): Motor {
       env: { GBRAIN_HOME: home, DO_NOT_TRACK: "1" },
       quitar: hibrido ? LLAVES.filter((k) => k !== "OPENAI_API_KEY") : LLAVES,
       herramienta,
-      argumentos: (q, pool) => ({ query: q, limit: pool, source_id: fuente, ...(herramienta === "query" ? { expand: false } : {}) }),
-      mapa: (v) => (Array.isArray(v) ? v : []).map((f: any) => ({ ruta: String(f.slug ?? ""), fragmento: String(f.chunk_text ?? "") })),
+      argumentos: (q, pool) => ({ query: q, limit: pool, ...(fuente === "*" ? {} : { source_id: fuente }), ...(herramienta === "query" ? { expand: false } : {}) }),
+      mapa: (v) => (Array.isArray(v) ? v : []).map((f: any) => {
+        const sid = String(f.source_id ?? "");
+        const slug = String(f.slug ?? "");
+        return { ruta: !sid || sid === primaria ? slug : `${sid}/${slug}`, fragmento: String(f.chunk_text ?? "") };
+      }),
     });
   }
   if (nombre.startsWith("olympus")) {

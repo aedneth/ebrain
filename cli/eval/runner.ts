@@ -42,6 +42,8 @@ export type EvalCaso = {
   fugaSinMarcar: string[];
   /** Resultados bajo un prefijo excluido (clientes): no son fuga de doctrina, pero ocupan el top-k. Se guardan sin ruta. */
   excluidas: number;
+  /** Resultados de otra fuente del índice (p. ej. wfc/, agent-memory/): ocupan el top-k sin ser del corpus principal. */
+  otraFuente: number;
   bytesTopK: number;
   bytesCrudos: number;
   ms: number;
@@ -69,7 +71,9 @@ export function evaluarCaso(
   medida: { bytesCrudos: number; ms: number },
   prefijosRetirados: string[] = [],
   excluir: string[] = [],
+  otras: string[] = [],
 ): EvalCaso {
+  const otrasN = otras.map(normalizar).filter(Boolean);
   const pref = prefijosRetirados.map(normalizar).filter(Boolean);
   const excl = excluir.map(normalizar).filter(Boolean);
   const bajo = (n: string, ps: string[]) => ps.some((p) => n === p || n.startsWith(`${p}/`));
@@ -77,13 +81,18 @@ export function evaluarCaso(
   const ret = new Set(caso.retiradas.map(normalizar));
   const contra = new Set(caso.contradice.map(normalizar));
   const ev: EvalCaso = {
-    id: caso.id, acierto: false, rango: null, devueltas: [], fugaRetirada: [], fugaObsoleta: [], fugaSinMarcar: [], excluidas: 0,
+    id: caso.id, acierto: false, rango: null, devueltas: [], fugaRetirada: [], fugaObsoleta: [], fugaSinMarcar: [], excluidas: 0, otraFuente: 0,
     bytesTopK: 0, bytesCrudos: medida.bytesCrudos, ms: medida.ms,
   };
   top.forEach((r, i) => {
     const n = normalizar(r.ruta);
     const rel = indice.get(n);
     ev.bytesTopK += Buffer.byteLength(r.fragmento, "utf8");
+    if (rel === undefined && bajo(n, otrasN)) {
+      ev.otraFuente++;
+      ev.devueltas.push(r.ruta);
+      return;
+    }
     if (rel === undefined && bajo(n, excl)) {
       ev.excluidas++;
       ev.devueltas.push("<excluida>");
@@ -119,6 +128,7 @@ export function resumir(evs: EvalCaso[]) {
     fuga_obsoleta: evs.filter((e) => e.fugaObsoleta.length > 0).length / n,
     fuga_sin_marcar: evs.filter((e) => e.fugaSinMarcar.length > 0).length / n,
     casos_con_resultados_de_clientes: evs.filter((e) => e.excluidas > 0).length,
+    resultados_de_otras_fuentes: evs.reduce((a, e) => a + e.otraFuente, 0),
     bytes_topk_p50: percentil(evs.map((e) => e.bytesTopK), 50),
     bytes_topk_p95: percentil(evs.map((e) => e.bytesTopK), 95),
     latencia_ms_p50: percentil(evs.map((e) => e.ms), 50),
@@ -173,6 +183,7 @@ async function main() {
   const maxUsd = Number(arg(argv, "--max-usd", "1"));
   const rerankerUsd = Number(arg(argv, "--reranker-usd", "0.0003"));
   const filtrarRetirado = argv.includes("--filtrar-retirado");
+  const otras = (arg(argv, "--otras-fuentes") ?? "").split(",").map((x) => x.trim()).filter(Boolean);
   // --excluir-patron <regex>: simula no indexar rutas que casan (p. ej. logs y órdenes operativas), además de lo retirado.
   const patronRuido = arg(argv, "--excluir-patron") ? new RegExp(arg(argv, "--excluir-patron")!) : null;
   const motor: Motor = crearMotor(motorNombre, (f, d) => arg(argv, f, d));
@@ -221,7 +232,7 @@ async function main() {
       rssMaxKB = Math.max(rssMaxKB, r.maxRssKB ?? 0);
       runnerPicoKB = Math.max(runnerPicoKB, Math.round(process.memoryUsage().rss / 1024));
       if (marca) daemonPicoKB = Math.max(daemonPicoKB, memoriaProcesosKB(marca) ?? 0);
-      evs.push(evaluarCaso(caso, topKDocumentos(r.resultados, corpus.topK), indice, estado, { bytesCrudos: r.bytesCrudos, ms }, corpus.prefijosRetirados, corpus.excluir));
+      evs.push(evaluarCaso(caso, topKDocumentos(r.resultados, corpus.topK), indice, estado, { bytesCrudos: r.bytesCrudos, ms }, corpus.prefijosRetirados, corpus.excluir, otras));
     }
     porCorrida.push({ corrida, resumen: resumir(evs), casos: evs });
   }

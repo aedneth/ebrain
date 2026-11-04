@@ -32,7 +32,15 @@ function correr(cmd: string[], env?: Record<string, string>, timeoutMs = 120_000
 }
 
 /** qmd `search` (BM25) o `query` (híbrido local: expansión + BM25 + vectores [+ reranker]). */
-export function motorQmd(opts: { coleccion: string; index?: string; modo: "search" | "query"; sinRerank?: boolean; configDir?: string }): Motor {
+export function motorQmd(opts: { coleccion: string; index?: string; modo: "search" | "query"; sinRerank?: boolean; configDir?: string; primaria?: string }): Motor {
+  // coleccion "*" = todas las colecciones del índice. La primaria (por defecto la colección pedida, o «korvex»)
+  // conserva su ruta; las demás quedan como «<colección>/<ruta>» para no chocar con las rutas del corpus principal.
+  const primaria = opts.primaria ?? (opts.coleccion === "*" ? "korvex" : opts.coleccion);
+  const ruta = (file: string) => {
+    const m = file.match(/^qmd:\/\/([^/]+)\/(.*)$/);
+    if (!m) return file;
+    return m[1] === primaria ? m[2] : `${m[1]}/${m[2]}`;
+  };
   const base = ["qmd", ...(opts.index ? ["--index", opts.index] : [])];
   return {
     nombre: `qmd-${opts.modo}${opts.sinRerank ? "-sin-rerank" : ""}:${opts.index ?? "index"}/${opts.coleccion}`,
@@ -40,14 +48,14 @@ export function motorQmd(opts: { coleccion: string; index?: string; modo: "searc
     async buscar(consulta, pool) {
       const extra = opts.modo === "query" && opts.sinRerank ? ["--no-rerank"] : [];
       const { salida, maxRssKB } = correr(
-        [...base, opts.modo, consulta, "-c", opts.coleccion, "-n", String(pool), "--json", ...extra],
+        [...base, opts.modo, consulta, ...(opts.coleccion === "*" ? [] : ["-c", opts.coleccion]), "-n", String(pool), "--json", ...extra],
         opts.configDir ? { QMD_CONFIG_DIR: opts.configDir } : undefined,
         600_000,
       );
       const i = salida.indexOf("[");
       const filas = i >= 0 ? (JSON.parse(salida.slice(i)) as Array<Record<string, unknown>>) : [];
       return {
-        resultados: filas.map((f) => ({ ruta: String(f.file ?? ""), fragmento: String(f.snippet ?? "") })),
+        resultados: filas.map((f) => ({ ruta: ruta(String(f.file ?? "")), fragmento: String(f.snippet ?? "") })),
         bytesCrudos: Buffer.byteLength(salida, "utf8"),
         maxRssKB,
       };
