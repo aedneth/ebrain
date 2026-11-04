@@ -17,6 +17,7 @@
 set -uo pipefail
 
 . "$(dirname -- "${BASH_SOURCE[0]}")/ebrain-home.sh"
+ebrain_prefer_pinned_bun
 EBRAIN_HOME="$(ebrain_resolve_home "${BASH_SOURCE[0]}")"
 
 CORE="$EBRAIN_HOME/harness/core"

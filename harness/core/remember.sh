@@ -14,6 +14,7 @@
 set -uo pipefail
 
 . "$(dirname -- "${BASH_SOURCE[0]}")/ebrain-home.sh"
+ebrain_prefer_pinned_bun
 EBRAIN_HOME="$(ebrain_resolve_home "${BASH_SOURCE[0]}")"
 
 # Resolve the eBrain root ONCE, here, and derive everything else from it. The checkout path is the
@@ -142,6 +143,10 @@ if [ -f "$EPISODES" ]; then
 fi
 
 SLUG_PATH="learnings/$SLUG/${DATE_TAG}-${AGENT}-${HASH}"
+if [ "$SYNC" = "1" ] && trust_denied "$CONTENT"; then
+  echo "  not indexed: the text names a denied repo; the learning stays on disk only"
+  SYNC=0
+fi
 if [ "$SYNC" = "1" ] && [ -f "$REMOTE" ]; then
   if "$BUN_BIN" run "$REMOTE" put-page --source agent-memory --slug "$SLUG_PATH" --file "$OUT" >/dev/null 2>&1; then
     echo "  MCP put_page agent-memory ✓ (searchable in ebrain)"

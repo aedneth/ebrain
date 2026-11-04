@@ -7,6 +7,24 @@ before, and what boundary moved. Implementation detail lives in the commits.
 
 ━━━
 
+## Unreleased (branch `migracion-gbrain-060`) — The engine moves to v0.60 with vectors, and spending has a ceiling
+
+- The pinned engine is gbrain v0.60.556.0, which needs bun 1.4.4. A runtime installed at
+  `~/.local/share/ebrain/bun` wins for eBrain's own processes and nothing else on the machine sees it.
+- A one-line pointer, `~/.config/ebrain/engine-home`, lets the daemon run on a new store while the previous one stays
+  intact as the way back. Doctor, spend and uninstall follow it, and no direct run of the new engine can reach and
+  migrate the old store.
+- `ebrain memoria` keeps the index fresh. The engine has no per-source exclusions, so each source is projected into a
+  small local git repository (no remote) by rules in a private config: archives, retired documents, operational noise
+  and denied material never reach it. A run does nothing when nothing changed. Embeddings have a per-run and a monthly
+  cap, summed from the engine's own budget ledger; at the monthly cap keyword search keeps working.
+- With a provider key in its environment the engine picks a chat model by itself and spends on it, uncapped. A pin in
+  its config does not stop that; `GBRAIN_MODEL` naming a keyless provider does, and the daemon runs that way. `think`
+  answers "no LLM available" and search is unaffected.
+- `ebrain remember` keeps a learning that names a denied repo on disk only: it no longer reaches the index by the
+  direct write.
+- A single dropped connection to the local daemon is retried once.
+
 ## Unreleased (branch `e1-regresion`) — A retrieval regression you can run before trusting a memory
 
 - `cli/eval/validar.ts` checks a cases file (query, current path, retired paths) against the

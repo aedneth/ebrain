@@ -44,6 +44,8 @@ export type Config = {
   fuentes: Fuente[];
   /** Regex of the denied terms for `denegadosEnContenido`. Lives in the private config, never in this repo. */
   denegados?: string;
+  /** Case-insensitive regex: a relative path that matches never enters any corpus. Private config too. */
+  denegadosRuta?: string;
   retirado: { prefijos: string[]; estados: string[] };
   llave: string;
   topeCorridaUsd: number;
@@ -55,6 +57,13 @@ const CFG = join(HOME, ".config", "ebrain");
 const LOG_DIR = join(HOME, ".local", "state", "ebrain");
 const LLAVES_AJENAS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "ZEROENTROPY_API_KEY", "VOYAGE_API_KEY",
   "GROQ_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "DEEPSEEK_API_KEY", "MISTRAL_API_KEY", "COHERE_API_KEY"];
+
+/**
+ * With a provider key in its environment the engine picks a chat model by itself and spends on it, uncapped, on some
+ * document imports and on every `think`; a pin in its config does not stop that. GBRAIN_MODEL overrides every tier, so
+ * naming a provider whose key is absent leaves the engine with no LLM: embeddings and search are unaffected.
+ */
+const SIN_CHAT = "anthropic:claude-sonnet-4-6";
 
 export function cargarConfig(file = join(CFG, "memoria.json")): Config {
   const c = JSON.parse(readFileSync(file, "utf8")) as Config;
@@ -117,7 +126,7 @@ function listarMd(raiz: string, podar: string[]): string[] {
 export function seleccionar(f: Fuente, c: Config): { rel: string; texto: string }[] {
   const raiz = expandirHome(f.raiz);
   const incluir = f.incluir ? new RegExp(f.incluir) : null;
-  const excluir = (f.excluir ?? []).map((x) => new RegExp(x, "i"));
+  const excluir = [...(f.excluir ?? []).map((x) => new RegExp(x)), ...(c.denegadosRuta ? [new RegExp(c.denegadosRuta, "i")] : [])];
   const denegados = f.denegadosEnContenido && c.denegados ? new RegExp(c.denegados, "i") : null;
   const corpus: Corpus = { raiz, excluir: [], prefijosRetirados: c.retirado.prefijos, estadosRetirados: c.retirado.estados, topK: 5 };
   const out: { rel: string; texto: string }[] = [];
@@ -207,6 +216,7 @@ function log(msg: string) {
 function entornoMotor(conLlave?: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, GBRAIN_HOME: engineHome({ ...process.env, GBRAIN_HOME: undefined }), DO_NOT_TRACK: "1" };
   for (const k of LLAVES_AJENAS) delete env[k];
+  env.GBRAIN_MODEL = SIN_CHAT;
   if (conLlave) env.OPENAI_API_KEY = conLlave;
   return env;
 }

@@ -36,7 +36,15 @@ export async function callTool<T>(name: string, args: Record<string, unknown> = 
   const { callRemoteTool, unpackToolResult } = await import("../vendor/gbrain/src/core/mcp-client.ts");
   const cfg = loadConfig();
   if (!cfg?.remote_mcp) throw new Error("remote MCP config missing; restart the ebrain daemon or run 'ebrain up'");
-  const raw = await callRemoteTool(cfg, name, args, { timeoutMs });
+  let raw;
+  try {
+    raw = await callRemoteTool(cfg, name, args, { timeoutMs });
+  } catch (e) {
+    // A single dropped connection to the local daemon is retried once. Anything else is the caller's to see.
+    if ((e as { reason?: string })?.reason !== "network") throw e;
+    await Bun.sleep(500);
+    raw = await callRemoteTool(cfg, name, args, { timeoutMs });
+  }
   return unpackToolResult<T>(raw);
 }
 
