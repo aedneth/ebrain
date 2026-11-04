@@ -16,12 +16,12 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.14"
+          bun-version: "1.4.4"
 
       - name: Clone pinned gbrain engine
         run: |
           git clone --quiet https://github.com/garrytan/gbrain.git vendor/gbrain
-          git -C vendor/gbrain checkout --quiet a25209bbb2bacf1b88e06fd5282b27f1bf4a3e7a
+          git -C vendor/gbrain checkout --quiet 46a6fd758b30314da475339df1f473056b80e956
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -115,12 +115,12 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1.3.14"
+          bun-version: "1.4.4"
 
       - name: Clone pinned gbrain engine
         run: |
           git clone --quiet https://github.com/garrytan/gbrain.git vendor/gbrain
-          git -C vendor/gbrain checkout --quiet a25209bbb2bacf1b88e06fd5282b27f1bf4a3e7a
+          git -C vendor/gbrain checkout --quiet 46a6fd758b30314da475339df1f473056b80e956
 
       - name: Install dependencies
         run: |

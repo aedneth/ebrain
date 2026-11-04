@@ -20,10 +20,10 @@ export function crearMotor(nombre: string, arg: Arg): Motor {
       return motorQmd({ coleccion, index, modo: "query", configDir, sinRerank: arg("--sin-rerank") === "1" });
     case "gbrain-daemon-search":
     case "gbrain-search":
-      return motorGbrainDaemon("search", arg("--fuente", "company-brain")!);
+      return motorGbrainDaemon("search", arg("--fuente", "korvex")!, arg("--primaria", "korvex")!);
     case "gbrain-daemon-query":
     case "gbrain-query":
-      return motorGbrainDaemon("query", arg("--fuente", "company-brain")!);
+      return motorGbrainDaemon("query", arg("--fuente", "korvex")!, arg("--primaria", "korvex")!);
     default:
       return crearMotorExterno(nombre, arg);
   }

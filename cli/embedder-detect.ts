@@ -20,6 +20,7 @@
  * A fresh clone has no such file; that is tolerated as "no brain yet".
  */
 
+import { engineHome } from "./engine-home.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -175,10 +176,7 @@ function isPresent(value: string | undefined): boolean {
  */
 function resolveConfigPath(gbrainHome: string | undefined, env: NodeJS.ProcessEnv): string {
   const base =
-    (gbrainHome && gbrainHome.trim() !== "" && gbrainHome) ||
-    (env.GBRAIN_HOME && env.GBRAIN_HOME.trim() !== "" && env.GBRAIN_HOME) ||
-    env.HOME ||
-    homedir();
+    (gbrainHome && gbrainHome.trim() !== "" && gbrainHome) || engineHome(env);
   return join(base, ".gbrain", "config.json");
 }
 

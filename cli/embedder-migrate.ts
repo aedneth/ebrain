@@ -51,6 +51,7 @@
  *  - No secret is read or printed; providers are named, never keyed by value.
  */
 
+import { engineHome } from "./engine-home.ts";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -350,11 +351,7 @@ function defaultConfirm(target: TargetEmbedder): boolean {
 /** Default: has a gbrain config been written at all? Used only to sharpen the "no brain yet" message. */
 function brainConfigExists(): boolean {
   try {
-    const base =
-      (process.env.GBRAIN_HOME && process.env.GBRAIN_HOME.trim() !== "" && process.env.GBRAIN_HOME) ||
-      process.env.HOME ||
-      homedir();
-    return existsSync(join(base, ".gbrain", "config.json"));
+    return existsSync(join(engineHome(), ".gbrain", "config.json"));
   } catch {
     return false;
   }

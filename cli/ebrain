@@ -26,6 +26,8 @@ run() { local f="$1"; shift; if [ -x "$f" ] || [ -f "$f" ]; then bash "$f" "$@";
 # invocarse desde CUALQUIER directorio (incl. uno de cliente con su propio .env) — este cd evita
 # que ese .env ajeno entre al proceso. Los cli/*.ts nuevos (spend/fleet/memory) no tocan secretos,
 # pero el patrón se mantiene por consistencia y defensa en profundidad.
+# The pinned runtime wins for eBrain's own processes and for every child script (see harness/core/ebrain-home.sh).
+if [ -x "$HOME/.local/share/ebrain/bun/bun" ]; then export PATH="$HOME/.local/share/ebrain/bun:$PATH"; fi
 BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN_BIN=bun
 run_bun() {
   local f="$1"; shift
@@ -79,6 +81,7 @@ ebrain — unified harness + agentic-memory layer (provider-agnostic)
   ebrain workflows <list|search|show|run|capture|skillify>   local workflows/SOPs + skillify with approval
   ebrain fleet [--json]                                      health + RAM class (heavy|light) of the 6 adapters
   ebrain memory recent [--json] [--limit N]                  latest learnings + sessions (agent-memory + Dev Brain)
+  ebrain memoria <project|sync|status|install-timer>         keep the memory index fresh, under spend caps
   ebrain sessions list [--json]                               active ebr-* tmux sessions
   ebrain sessions new <agent> <slug> [--cwd D] [--json]       new tmux session (harness env injected; client deny-list)
   ebrain sessions peek <name> [--lines N] [--json]            capture-pane (scrubbed — no raw secrets)
@@ -128,6 +131,7 @@ case "$cmd" in
   workflows) run_bun "$EBRAIN_HOME/cli/workflows.ts" "$@" ;;
   fleet)     run_bun "$EBRAIN_HOME/cli/fleet.ts" "$@" ;;
   memory)    run_bun "$EBRAIN_HOME/cli/memory.ts" "$@" ;;
+  memoria)   run_bun "$EBRAIN_HOME/cli/memoria.ts" "$@" ;;
   sessions)  run_bun "$EBRAIN_HOME/cli/sessions.ts" "$@" ;;
   task-profile) run_bun "$EBRAIN_HOME/cli/task-profile.ts" "$@" ;;
   advise)    run_bun "$EBRAIN_HOME/cli/advise.ts" "$@" ;;

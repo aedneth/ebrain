@@ -64,18 +64,22 @@ export function motorQmd(opts: { coleccion: string; index?: string; modo: "searc
 }
 
 /** GBrain por el daemon de eBrain (MCP). Solo para la línea base de v0.42. */
-export function motorGbrainDaemon(herramienta: "search" | "query", fuente: string): Motor {
+export function motorGbrainDaemon(herramienta: "search" | "query", fuente: string, primaria = "korvex"): Motor {
   return {
     nombre: `gbrain-daemon-${herramienta}:${fuente}`,
     pagado: herramienta === "query",
     async buscar(consulta, pool) {
       const { callTool } = await import("../remote-tools.ts");
-      const args: Record<string, unknown> = { query: consulta, limit: pool, source_id: fuente };
+      const args: Record<string, unknown> = { query: consulta, limit: pool, ...(fuente === "*" ? {} : { source_id: fuente }) };
       if (herramienta === "query") args.expand = false;
       const filas = await callTool<unknown>(herramienta, args, 30_000);
       const lista = Array.isArray(filas) ? (filas as Array<Record<string, unknown>>) : [];
       return {
-        resultados: lista.map((f) => ({ ruta: String(f.slug ?? ""), fragmento: String(f.chunk_text ?? "") })),
+        resultados: lista.map((f) => {
+          const sid = String(f.source_id ?? "");
+          const slug = String(f.slug ?? "");
+          return { ruta: fuente !== "*" || !sid || sid === primaria ? slug : `${sid}/${slug}`, fragmento: String(f.chunk_text ?? "") };
+        }),
         bytesCrudos: Buffer.byteLength(JSON.stringify(filas ?? null), "utf8"),
       };
     },

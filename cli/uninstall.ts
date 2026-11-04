@@ -14,6 +14,7 @@
  *  2. Destructive commands state their plan and require `--yes`, the same contract
  *     `ebrain sessions kill` already follows. A bare `ebrain uninstall` removes nothing.
  */
+import { engineHome } from "./engine-home.ts";
 import { existsSync, rmSync, readFileSync, writeFileSync, chmodSync, renameSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { homedir } from "os";
@@ -120,7 +121,7 @@ export function uninstallPlan(): PlanItem[] {
     });
   }
 
-  const brain = join(process.env.GBRAIN_HOME || HOME, ".gbrain");
+  const brain = join(engineHome({ ...process.env, HOME }), ".gbrain");
   items.push({
     kind: "brain",
     label: "DELETE the brain store — everything eBrain ever remembered",
@@ -237,7 +238,7 @@ export async function performUninstall(opts: { purge: boolean }): Promise<Uninst
     done.push(`removed ${CFG}`);
   }
 
-  const brain = join(process.env.GBRAIN_HOME || HOME, ".gbrain");
+  const brain = join(engineHome({ ...process.env, HOME }), ".gbrain");
   if (opts.purge) {
     if (existsSync(brain)) {
       rmSync(brain, { recursive: true, force: true });

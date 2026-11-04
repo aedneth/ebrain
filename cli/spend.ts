@@ -18,6 +18,7 @@
  *   ebrain spend --json     # {month,budget,mtd,remaining,by_capability[],engine,gbrain_untracked}
  *   ebrain spend            # mismo dato, texto plano
  */
+import { engineHome } from "./engine-home.ts";
 import { homedir } from "os";
 import { join } from "path";
 import { monthKey, monthSpend, expandHome } from "./route.ts";
@@ -35,11 +36,7 @@ const CFG_PATH = join(HOME, ".config", "ebrain", "routing.yaml");
  * tests; production callers use the default `process.env`.
  */
 export function resolveEngineAuditDir(env: NodeJS.ProcessEnv = process.env): string {
-  const base =
-    (env.GBRAIN_HOME && env.GBRAIN_HOME.trim() !== "" && env.GBRAIN_HOME) ||
-    env.HOME ||
-    homedir();
-  return join(base, ".gbrain", "audit");
+  return join(engineHome(env), ".gbrain", "audit");
 }
 
 /**

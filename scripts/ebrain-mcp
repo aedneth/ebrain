@@ -15,6 +15,7 @@ EBRAIN_REAL="$(readlink -f -- "$EBRAIN_SELF" 2>/dev/null || true)"
 if [ -n "$EBRAIN_REAL" ]; then EBRAIN_SELF="$EBRAIN_REAL"; fi
 . "$(dirname -- "$EBRAIN_SELF")/../harness/core/ebrain-home.sh"
 ebrain_export_home "$EBRAIN_SELF"
+ebrain_export_engine_home
 cd "$HOME/.config/ebrain/wd"
 ENV_FILE="$HOME/.config/ebrain/.env"
 if [ -f "$ENV_FILE" ]; then set -a; . "$ENV_FILE"; set +a; fi

@@ -27,6 +27,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 THIN_HOME="$HOME/.config/ebrain/gbrain-thin"
 REMOTE_ENV="$HOME/.config/ebrain/remote-client.env"
+if [ "${EBRAIN_RUN_LOCAL:-0}" = "1" ] || [ ! -f "$THIN_HOME/.gbrain/config.json" ]; then ebrain_export_engine_home; fi
 if [ "${EBRAIN_RUN_LOCAL:-0}" != "1" ] && [ -f "$THIN_HOME/.gbrain/config.json" ]; then
   export GBRAIN_HOME="$THIN_HOME"
   if [ -f "$REMOTE_ENV" ]; then

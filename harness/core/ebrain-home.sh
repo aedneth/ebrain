@@ -87,6 +87,29 @@ ebrain_resolve_home() {
 ebrain_export_home() {
 	EBRAIN_HOME=$(ebrain_resolve_home "${1:-$0}")
 	export EBRAIN_HOME
+	ebrain_prefer_pinned_bun
+}
+
+# ebrain_prefer_pinned_bun — the engine pins a minimum bun that the user's global one may not meet. A runtime
+# installed at ~/.local/share/ebrain/bun wins for eBrain's own processes; nothing else on the machine sees it, and
+# removing that directory falls back to the global bun.
+ebrain_prefer_pinned_bun() {
+	if [ -x "$HOME/.local/share/ebrain/bun/bun" ]; then
+		case ":$PATH:" in
+			*":$HOME/.local/share/ebrain/bun:"*) ;;
+			*) PATH="$HOME/.local/share/ebrain/bun:$PATH"; export PATH ;;
+		esac
+	fi
+}
+
+# ebrain_export_engine_home — for entrypoints that open the local store (the daemon, a local run). A one-line
+# ~/.config/ebrain/engine-home points at the store's parent during a side-by-side upgrade, so no direct run of the new
+# engine can reach, and migrate, the previous store that is kept as the way back. Thin clients must NOT call this.
+ebrain_export_engine_home() {
+	if [ -z "${GBRAIN_HOME:-}" ] && [ -s "$HOME/.config/ebrain/engine-home" ]; then
+		GBRAIN_HOME=$(cat "$HOME/.config/ebrain/engine-home")
+		export GBRAIN_HOME
+	fi
 }
 
 # ── portable userland ────────────────────────────────────────────────────────

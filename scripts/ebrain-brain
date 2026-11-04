@@ -35,6 +35,7 @@ command -v bun >/dev/null 2>&1 && BUN_BIN=bun
 # `ebrain up` would hard-fail. Initialize once, embedding-DISABLED (keyword-only recall, zero provider
 # calls); enabling semantic recall is the explicit `ebrain embedder migrate`. An already-initialized
 # store is left exactly as it is — this never re-inits or touches an existing brain.
+ebrain_export_engine_home
 GBRAIN_STORE_DIR="${GBRAIN_HOME:-$HOME}/.gbrain"
 if [ ! -f "$GBRAIN_STORE_DIR/config.json" ]; then
   "$BUN_BIN" run "$EBRAIN_HOME/vendor/gbrain/src/cli.ts" init --pglite --non-interactive --no-embedding
