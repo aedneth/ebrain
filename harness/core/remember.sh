@@ -147,6 +147,12 @@ if [ "$SYNC" = "1" ] && trust_denied "$CONTENT"; then
   echo "  not indexed: the text names a denied repo; the learning stays on disk only"
   SYNC=0
 fi
+# With `ebrain memoria` configured, a learning reaches the index with the next sync, filtered and under its spend caps.
+# A direct write would also claim the source for a managed writer, which the engine answers by fencing every later sync.
+if [ "$SYNC" = "1" ] && [ -f "$HOME/.config/ebrain/memoria.json" ]; then
+  echo "  on disk; indexed by the next memory sync (hourly)"
+  SYNC=0
+fi
 if [ "$SYNC" = "1" ] && [ -f "$REMOTE" ]; then
   if "$BUN_BIN" run "$REMOTE" put-page --source agent-memory --slug "$SLUG_PATH" --file "$OUT" >/dev/null 2>&1; then
     echo "  MCP put_page agent-memory ✓ (searchable in ebrain)"

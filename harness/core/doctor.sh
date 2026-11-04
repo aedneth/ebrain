@@ -229,7 +229,12 @@ EMB_ENV_FILE="$HOME/.config/ebrain/.env"
 # lives in the daemon's env file, not a bare shell. Source it in a SUBSHELL (scoped; the value is never
 # printed — the detector reports presence by NAME only) so doctor reflects the daemon's real posture.
 # embedder-detect reads the engine config read-only and never writes.
-if ( set -a
+# First the measurement: ask the running daemon. The detector below only reads config and keys, so it cannot see a
+# daemon that gets its key from elsewhere, nor a config that says "embedded" while the vector arm is failing.
+emb_probe="$("$BUN_BIN" run "$EBRAIN_HOME/cli/memoria.ts" probe 2>/dev/null || true)"
+if [ "$emb_probe" = "hybrid" ]; then
+  c_ok "memory:embedder" "hybrid recall verified against the running daemon"
+elif ( set -a
      if [ -f "$EMB_ENV_FILE" ]; then . "$EMB_ENV_FILE" 2>/dev/null; fi
      set +a
      "$BUN_BIN" run "$EBRAIN_HOME/cli/embedder-detect.ts" ) >"$emb_tmp" 2>/dev/null && [ -s "$emb_tmp" ]; then

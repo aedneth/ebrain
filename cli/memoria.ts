@@ -6,6 +6,7 @@
  *   ebrain memoria sync           project → sync what changed → embed what is pending, under the caps
  *   ebrain memoria status [--json]  sources, pending work, and this month's spend against the cap
  *   ebrain memoria install-timer  install the hourly systemd user timer that runs `sync`
+ *   ebrain memoria probe          ask the running daemon whether recall really uses vectors
  *
  * Why a projected corpus. The engine indexes every Markdown file of a source and has no per-source exclusions, while
  * a brain holds archives, retired doctrine, operational noise and client material that must never be indexed. So each
@@ -259,6 +260,22 @@ async function pendientes(): Promise<number | null> {
   }
 }
 
+/**
+ * Does recall really use vectors? Asked of the running daemon, not of its config: a query whose words appear in no
+ * document can only come back through the vector arm. Prints "hybrid" or "keyword"; costs one embedded query.
+ */
+async function probarRecall(): Promise<"hybrid" | "keyword" | "down"> {
+  const { callTool } = await import("./remote-tools.ts");
+  try {
+    const filas = await callTool<Array<{ evidence?: unknown }>>("query", { query: "qwxzv ynkjtp vbhgrm", limit: 3, expand: false }, 60_000);
+    return Array.isArray(filas) && filas.length > 0 ? "hybrid" : "keyword";
+  } catch {
+    return "down";
+  } finally {
+    delete process.env.GBRAIN_HOME;
+  }
+}
+
 const estadoFile = (c: Config) => join(expandirHome(c.corpus), ".sincronizado.json");
 function leerEstado(c: Config): Record<string, string> {
   try {
@@ -271,8 +288,40 @@ function leerEstado(c: Config): Record<string, string> {
 const mesActual = () => new Date().toISOString().slice(0, 7);
 const auditDir = () => join(engineHome(), ".gbrain", "audit");
 
+/** One run at a time: the timer and a manual run must not race on the corpus, the state file or the daemon's stop/start. */
+function tomarCandado(): boolean {
+  mkdirSync(LOG_DIR, { recursive: true });
+  const f = join(LOG_DIR, "memoria.lock");
+  try {
+    const pid = Number(readFileSync(f, "utf8").trim());
+    if (pid && pid !== process.pid) {
+      try {
+        process.kill(pid, 0);
+        return false;
+      } catch {
+        // The holder died: its lock is stale.
+      }
+    }
+  } catch {
+    // No lock yet.
+  }
+  writeFileSync(f, String(process.pid));
+  process.on("exit", () => {
+    try {
+      rmSync(f);
+    } catch {
+      // Already gone.
+    }
+  });
+  return true;
+}
+
 async function sincronizar(c: Config): Promise<number> {
-  const puerto = Number(process.env.EBRAIN_BRAIN_PORT || 8541);
+  if (!tomarCandado()) {
+    log("another run is in progress: skipped");
+    return 0;
+  }
+  const puerto =Number(process.env.EBRAIN_BRAIN_PORT || 8541);
   const estado = leerEstado(c);
   const proyecciones = c.fuentes.map((f) => proyectar(f, c));
   const porSincronizar = proyecciones.filter((p) => p.head && estado[p.id] !== p.head);
@@ -386,6 +435,10 @@ if (import.meta.main) {
   }
   if (cmd === "install-timer") {
     instalarTimer();
+    process.exit(0);
+  }
+  if (cmd === "probe") {
+    console.log(await probarRecall());
     process.exit(0);
   }
   const c = cargarConfig();
