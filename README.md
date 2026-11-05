@@ -34,7 +34,7 @@ In one month of real use (October 2026, 31 sessions), the memory tools registere
 | Get the relevant memory into every prompt | The agent's prompt hook runs a *context command* you configure and hands its text to the agent as reference data with source paths. | eBrain ships the hooks, the guard, the index maintenance and the regression. It does not ship a retrieval command for your brain: [the contract](docs/reference/prompt-context.md) says what yours must do. |
 | Keep secrets out of the conversation | One canonical guard denies reads of dotenv files, keys, credentials and agent login files, and dumps of the environment. A translator covers agents that read files with their own tools. | The guard fails open on an error of its own, so a broken guard never stops work; it says so when its canon or Bun is missing. |
 | Know the wiring is real | `ebrain harness doctor <agent>` checks the file **the agent reads**, flags keys it never fires, flags stale files, self-tests the guard with that agent's own payload, and asks the agent where it can. | It cannot approve a hook for you: Codex runs a hook only after you approve it in `/hooks`. |
-| Remember a decision | `ebrain remember "<learning>"` writes one scrubbed, self-contained learning. With the index configured it is searchable after the next sync (hourly). | A learning that names a denied repository stays on disk only. |
+| Remember a decision | `ebrain remember "<learning>"` writes one scrubbed, self-contained learning. On a clean install it is searchable at once; with the index (`ebrain memoria`) configured, after the next sync (hourly, or `ebrain memoria sync`). | A learning that names a denied repository stays on disk only. |
 
 ## Agents
 
@@ -66,7 +66,7 @@ ebrain harness install codex
 ebrain harness doctor codex      # ends with what is left for you to do, such as approving the hooks in /hooks
 ```
 
-Two things from that run that you should know. `ebrain remember` wrote its learning and the write-through to the daemon succeeded, but `ebrain q` then answered `no eligible federated sources are available`: a clean install has no federated source yet, and the engine's `default` source is excluded on purpose. Register a source first ([memory](docs/concepts/memory.md)). And the hooks do nothing until you configure a context command ([quick start](docs/getting-started/quickstart.md)).
+Then, in the same throwaway `HOME`: `ebrain remember "Install test learning: the staging deploy needs the flag ZETA before release."` followed by `ebrain q "staging deploy flag before release"` returned that learning at once (source `default`, score 1.0), with no sync in between. Without a context command configured the prompt hooks do nothing ([quick start](docs/getting-started/quickstart.md)).
 
 ## Turn it off
 
@@ -86,7 +86,7 @@ Both measurements used one private brain and one retrieval command (hybrid vecto
 ## What it does not do
 
 - It does not ship the retrieval command for your brain; without one configured, the prompt hooks do nothing.
-- A clean install has nothing to search until you register a source.
+- With `ebrain memoria` configured, `remember` is no longer written straight to the daemon: it enters the index at the next hourly sync (`ebrain memoria sync` runs it now).
 - `think` and `synthesize` do not answer: the engine runs with no chat model on purpose, because with a provider key in its environment it picks one and spends uncapped. Search is unaffected.
 - It does not approve hooks for you, and it does not verify Gemini CLI, Cursor or OpenCode in this release.
 - It does not run on macOS or Windows as far as anyone has tested.

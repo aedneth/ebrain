@@ -56,13 +56,16 @@ echo '/path/to/your/context-command' > "${XDG_CONFIG_HOME:-$HOME/.config}/ebrain
 ebrain remember --project demo "Review a database migration before merge."
 ```
 
-The learning is written to disk at once and a write-through to the daemon is attempted.
+The learning is written to disk and, on a clean install, to the daemon at once:
+
+```bash
+ebrain q "what must happen before a migration merges?"
+```
+
+returns it straight away (verified in a throwaway `HOME`). If you have configured `ebrain memoria`, `remember` instead waits for the next hourly sync; `ebrain memoria sync` runs it now.
 
 ## What this path does not do
 
-- **Searching what you just remembered does not work on a clean install.** `ebrain q` queries federated sources other than
-  the engine's `default`, and a fresh install has none, so it answers `no eligible federated sources are available`.
-  Register a source (see [configuration](../reference/configuration.md) and `ebrain memoria`) first.
 - It does not make `think` or `synthesize` answer: the engine runs with no chat model on purpose (they report
   `no LLM available`; search is unaffected).
 - It does not install an agent CLI or create a provider account, and it does not expose the daemon outside loopback.

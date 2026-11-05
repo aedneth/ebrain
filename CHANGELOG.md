@@ -7,6 +7,15 @@ before, and what boundary moved. Implementation detail lives in the commits.
 
 ━━━
 
+## Unreleased (branch `integracion`) — `ebrain q` finds what `remember` saved on a clean install
+
+- `ebrain q` searched every federated source except `default`, and a fresh install has only `default`: it answered
+  "no eligible federated sources". Now `default` is searched when it is the only eligible source; next to named sources
+  it is still left out (it duplicates them), and the client-isolation filter applies to it like any source. Verified from
+  scratch in a throwaway `HOME`: `remember` then `q` returns the learning at once.
+- Install-class commands (`ebrain`, the core and public installers, the hook wirers) now exit 2 when `HOME` is empty,
+  unset or relative. Before, a wirer fell back to the passwd home and could write into the real one.
+
 ## Unreleased (branch `integracion`) — Ready to publish: README, site, installer and a clean tree
 
 - README and `website/` describe what eBrain is now: memory that arrives with each prompt, the agents it is wired into and
@@ -18,8 +27,6 @@ before, and what boundary moved. Implementation detail lives in the commits.
 - The repository carries no name of a private brain or a client: fixtures and default collection names are neutral
   (`nimbus`). Anything that relied on the old default collection names passes them explicitly.
 - `THIRD_PARTY_NOTICES.md` now lists Bun, qmd and the hosted site's analytics packages, which it previously denied.
-- Known gap, reported rather than fixed: on a clean install `ebrain q` finds nothing, because it queries only federated
-  sources other than `default` and a fresh install has none.
 
 ## Unreleased (branch `integracion`) — Agent adapters that are verified against what each agent reads
 

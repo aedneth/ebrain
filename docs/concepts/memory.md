@@ -21,7 +21,7 @@ there. Embeddings have a per-run and a monthly spend cap; at the cap, keyword se
 
 ## Writing
 
-`ebrain remember "<learning>"` writes one scrubbed, self-contained learning to disk at once. With `ebrain memoria`
+`ebrain remember "<learning>"` writes one scrubbed, self-contained learning to disk at once. On a clean install it is searchable at once. With `ebrain memoria`
 configured it enters the index at the next sync (hourly), filtered and under the caps. It rejects secret-shaped input, and
 a learning that names a denied repository stays on disk only.
 
@@ -29,4 +29,4 @@ a learning that names a denied repository stays on disk only.
 
 - A terminal pane is not memory; only what you or an agent saves is.
 - The engine runs with no chat model: `think` and `synthesize` answer "no LLM available"; search is unaffected.
-- A clean install has no federated source, so `ebrain q` finds nothing until you register one.
+- `ebrain q` searches every federated source; on a clean install, where `default` is the only one, it searches `default`. Next to named sources `default` is left out, because it only duplicates them.
