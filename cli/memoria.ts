@@ -53,6 +53,11 @@ export type Config = {
   qmd?: { indice: string; bin: string; nodeDir: string };
   topeCorridaUsd: number;
   topeMensualUsd: number;
+  /**
+   * This machine keeps the projection (corpus, .rutas.json, qmd) fresh but has no daemon of its own: the daemon runs
+   * elsewhere and is reached through a tunnel. `sync` then projects and stops, with no engine and no embeddings.
+   */
+  soloProyeccion?: boolean;
 };
 
 const HOME = homedir();
@@ -277,8 +282,10 @@ function motor(args: string[], env: NodeJS.ProcessEnv, timeoutMs = 590_000) {
   });
 }
 
+/** How to stop/start the daemon: the user manager by default, or a system unit with EBRAIN_DAEMON_CTL="sudo -n systemctl". */
 function daemon(accion: "stop" | "start") {
-  return spawnSync("systemctl", ["--user", accion, "ebrain-daemon.service"], { encoding: "utf8", timeout: 60_000 }).status === 0;
+  const ctl = (process.env.EBRAIN_DAEMON_CTL || "systemctl --user").split(/\s+/).filter(Boolean);
+  return spawnSync(ctl[0]!, [...ctl.slice(1), accion, "ebrain-daemon.service"], { encoding: "utf8", timeout: 60_000 }).status === 0;
 }
 
 async function daemonSano(puerto: number, esperaMs: number): Promise<boolean> {
@@ -375,6 +382,10 @@ async function sincronizar(c: Config): Promise<number> {
   escribirRutas(c, proyecciones);
   actualizarQmd(c, proyecciones, estado);
   writeFileSync(estadoFile(c), JSON.stringify(estado, null, 2));
+  if (c.soloProyeccion) {
+    log("projection only (the daemon runs elsewhere): corpus, allowlist and qmd are fresh");
+    return 0;
+  }
   const porSincronizar = proyecciones.filter((p) => p.head && estado[p.id] !== p.head);
   if (!(await daemonSano(puerto, 5_000))) {
     log("daemon down: the corpus is projected, the sync waits for the next run");
