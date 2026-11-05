@@ -114,7 +114,7 @@ describe("invariant 3 — override wins when legal, degrades loudly when not", (
   });
 
   test("unknown provider → override-invalid", () => {
-    const decision = selectEmbedder(makeInput({ override: "acme:some-model@512" }));
+    const decision = selectEmbedder(makeInput({ override: "nimbus:some-model@512" }));
     expect(decision.mode).toBe("keyword-only");
     expect(decision.reasons).toEqual(["override-invalid"]);
   });

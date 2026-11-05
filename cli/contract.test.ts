@@ -414,10 +414,10 @@ const QueryResponseSchema = z.object({
 });
 const queryFixture = {
   schema_version: 1,
-  query: "korvex pricing",
+  query: "nimbus pricing",
   results: [
     { score: 0.91, source: "company-brain", slug: "company/pricing", snippet: "Modelo C pricing." },
-    { score: 0.74, source: "second-brain", slug: "korvex/pricing", snippet: "contrast with data." },
+    { score: 0.74, source: "second-brain", slug: "nimbus/pricing", snippet: "contrast with data." },
   ],
   partial: true,
   failures: [{ source: "agent-memory", message: "query returned an invalid payload" }],
@@ -822,7 +822,7 @@ const SessionsPeekSchema = z.union([SessionsPeekOkSchema, SessionsErrorSchema]);
 
 const sessionsPeekFixture = {
   ok: true,
-  name: "ebr-claude-korvex",
+  name: "ebr-claude-nimbus",
   lines: 50,
   text: "fake-agent: listo (AGENT_NAME=claude)\n$ export OPENROUTER_API_KEY=[REDACTED]\n[fake-agent 17:44:50] tick",
 };

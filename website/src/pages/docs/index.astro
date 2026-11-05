@@ -3,18 +3,18 @@ import DocsLayout from "../../layouts/DocsLayout.astro";
 import { DOC_SECTIONS, docRoute } from "../../lib/navigation";
 ---
 
-<DocsLayout title="Documentation" description="Install, launch, govern memory, route work, and operate eBrain locally.">
+<DocsLayout title="Documentation" description="Install eBrain, wire your agents, and understand what reaches each prompt.">
   <p class="eyebrow">eBrain documentation</p>
-  <h1>Documentation for the local agent control plane.</h1>
-  <p class="article-lede">Install, launch, govern memory, and inspect the system from source-backed docs. Each page states what a surface does, its confirmation boundary, and what it intentionally does not automate.</p>
+  <h1>Documentation for persistent agent memory.</h1>
+  <p class="article-lede">Install eBrain, wire your agents, and see what reaches each prompt. Each page states what a surface does and what it does not.</p>
   <section class="hub-paths" aria-labelledby="hub-paths-title">
     <h2 id="hub-paths-title">Pick your path</h2>
     <div>
       {[
-        { title: "Install eBrain", description: "Run the source proof, boot one shared daemon, and onboard detected adapters.", href: docRoute("getting-started/quickstart") },
-        { title: "Launch a workspace", description: "Register a directory, choose a launch mode, and keep the process persistent.", href: docRoute("launch/manual-launch") },
-        { title: "Understand memory", description: "Separate learnings, context, episodes, procedures, and federated sources.", href: docRoute("concepts/memory") },
-        { title: "Control routing", description: "Use explainable signals and local profiles without a universal model claim.", href: docRoute("routing/task-signals") },
+        { title: "Install eBrain", description: "Install from scratch, boot one shared daemon, and see what still has to be set up.", href: docRoute("getting-started/quickstart") },
+        { title: "Wire an agent", description: "How Codex, Antigravity and Hermes are wired, guarded and checked against what each one reads.", href: docRoute("guides/agents") },
+        { title: "Understand memory", description: "What arrives with each prompt, what the index holds and how learnings are written.", href: docRoute("concepts/memory") },
+        { title: "Bring your retrieval", description: "The contract between an agent's prompt hook and the command that retrieves for your brain.", href: docRoute("reference/prompt-context") },
       ].map((path) => (
         <a class="hub-path" href={path.href}>
           <h3>{path.title}</h3>

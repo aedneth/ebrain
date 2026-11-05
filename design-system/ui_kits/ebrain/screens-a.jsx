@@ -1,6 +1,6 @@
 // ebrain screens: HOME, SESSIONS, LAUNCH
 const SESSIONS = [
-  { agent: 'claude', name: 'ebr-claude-korvex', uptime: '02:41', state: 'running', detail: 'sonnet-4 \u00b7 refactor router de modelos' },
+  { agent: 'claude', name: 'ebr-claude-nimbus', uptime: '02:41', state: 'running', detail: 'sonnet-4 \u00b7 refactor router de modelos' },
   { agent: 'gemini', name: 'ebr-gem-web', uptime: '00:12', state: 'waiting', detail: 'esperando confirmacion frontier' },
   { agent: 'codex', name: 'ebr-codex-tests', uptime: '01:03', state: 'running', detail: 'o4-mini \u00b7 generando specs' },
   { agent: 'opencode', name: 'ebr-oc-docs', uptime: '00:48', state: 'idle', detail: 'qwen-2.5 \u00b7 sin actividad 4m' },
@@ -32,7 +32,7 @@ function HomeScreen() {
         <div style={{ flex: 'none', paddingTop: 'var(--row-h)' }}>
           <window.Panel title="ultimas memorias" bg="var(--surface-1)">
             {[['deepseek v3 falla con tool-use paralelo; enrutar a claude','0.94','routing'],
-              ['korvex usa pnpm, no npm \u2014 nunca sugerir npm install','0.91','korvex'],
+              ['nimbus usa pnpm, no npm \u2014 nunca sugerir npm install','0.91','nimbus'],
               ['frontier siempre requiere confirmacion manual del usuario','0.88','policy']].map((m,i)=>(
               <div key={i} style={{display:'flex',whiteSpace:'pre'}}>
                 <span style={{color:'var(--memory)'}}>{'\u25cf '}</span>
@@ -51,7 +51,7 @@ function HomeScreen() {
 function SessionsScreen({ selected = 0, onSelect }) {
   const s = SESSIONS[selected];
   const peekBody = {
-    'ebr-claude-korvex': '$ claude --resume korvex\n\u203a analizando src/router/models.ts\n  encontradas 3 funciones a refactorizar:\n  - resolveCap()   \u2713 hecho\n  - pickModel()    \u25b8 en progreso\n  - fallbackChain()  pendiente\n\n> aplicando cambios a pickModel()...\n  + 24 lineas  - 11 lineas',
+    'ebr-claude-nimbus': '$ claude --resume nimbus\n\u203a analizando src/router/models.ts\n  encontradas 3 funciones a refactorizar:\n  - resolveCap()   \u2713 hecho\n  - pickModel()    \u25b8 en progreso\n  - fallbackChain()  pendiente\n\n> aplicando cambios a pickModel()...\n  + 24 lineas  - 11 lineas',
   };
   return (
     <window.Screen tab="sessions" hints={[{k:'\u2191\u2193',label:'navegar'},{k:'a',label:'attach'},{k:'k',label:'kill'},{k:'p',label:'prompt'}]}>
@@ -110,7 +110,7 @@ function LaunchScreen({ agent = 'claude' }) {
             </window.Panel>
             <window.Panel title="contexto a inyectar  [\u25be]" bg="var(--surface-1)" style={{flex:1,minHeight:0}}>
               <div style={{whiteSpace:'pre'}}>
-                <div><span style={{color:'var(--ok)'}}>{'\u2713 '}</span><span style={{color:'var(--text-2)'}}>norms/korvex.md</span><span style={{color:'var(--text-3)'}}>  2.1k</span></div>
+                <div><span style={{color:'var(--ok)'}}>{'\u2713 '}</span><span style={{color:'var(--text-2)'}}>norms/nimbus.md</span><span style={{color:'var(--text-3)'}}>  2.1k</span></div>
                 <div><span style={{color:'var(--memory)'}}>{'\u2713 '}</span><span style={{color:'var(--text-2)'}}>memoria: 8 learnings relevantes</span></div>
                 <div><span style={{color:'var(--ok)'}}>{'\u2713 '}</span><span style={{color:'var(--text-2)'}}>mcp: filesystem, git</span></div>
               </div>

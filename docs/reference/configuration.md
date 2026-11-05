@@ -29,7 +29,7 @@ referenced by environment-variable **name** and read at call time.
 | --- | --- |
 | `budget.monthly_usd` | The month's ceiling for routed spend. |
 | `budget.hard_stop` | When true, a call that would exceed the ceiling is refused **before** it is made. |
-| `provider.id` | Which provider receives the call. See the [provider reference](providers.md). |
+| `provider.id` | Which provider receives the call. See the provider reference. |
 | `provider.base_url`, `provider.key_env` | Endpoint and key **name**; required for an id the registry does not know. |
 | `capabilities.<name>.models` | The chain tried for that capability, in order. |
 | `classify` | Keywords that orient a prompt toward a capability. An explicit `--cap` always wins. |
@@ -53,7 +53,7 @@ One bare directory or source name per line; `#` starts a comment. A clean instal
 
 ```
 # never let these reach sessions, workspaces, federation, or memory
-acme-client
+nimbus-client
 internal-monorepo
 ```
 
@@ -68,8 +68,8 @@ How entries are matched:
 | Federation and sources | substring of the source id, display name, or local path | the source is never federated, and the daemon refuses to bind if one is present |
 | Memory inputs | substring of the text | episodes, context, and recall queries referencing it are rejected |
 
-Segment matching is deliberate for paths: a directory named `acme-client-notes` is not
-`acme-client`, because over-blocking teaches people to switch the guard off.
+Segment matching is deliberate for paths: a directory named `nimbus-client-notes` is not
+`nimbus-client`, because over-blocking teaches people to switch the guard off.
 
 The policy fails closed, identically in the CLI and in the shell harness. A policy file that exists
 but cannot be read, or an entry that is not a bare name, aborts the operation instead of continuing

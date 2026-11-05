@@ -25,10 +25,10 @@ import {
 // ── naming ───────────────────────────────────────────────────────────────
 describe("sessionName / parseSessionName", () => {
   test("naming convention ebr-<agente>-<slug>", () => {
-    expect(sessionName("claude", "korvex")).toBe("ebr-claude-korvex");
+    expect(sessionName("claude", "nimbus")).toBe("ebr-claude-nimbus");
   });
   test("parseSessionName invierte sessionName", () => {
-    expect(parseSessionName("ebr-claude-korvex")).toEqual({ agent: "claude", slug: "korvex" });
+    expect(parseSessionName("ebr-claude-nimbus")).toEqual({ agent: "claude", slug: "nimbus" });
   });
   test("slug con guiones se preserva completo (split en el PRIMER '-' tras el agente)", () => {
     expect(parseSessionName("ebr-codex-batch-job-1")).toEqual({ agent: "codex", slug: "batch-job-1" });

@@ -42,7 +42,7 @@ describe("Overview panel (6.5.1) + lock banner (6.5.5)", () => {
         fleet: { total: 6, online: 6 },
         memory: { learnings: 128, sessions: 39 },
       },
-      memory: { learnings: [{ project: "routing", agent: "x", date: "2026-07-14", tags: [], text: "no sugerir npm en korvex" }], sessions: [] },
+      memory: { learnings: [{ project: "routing", agent: "x", date: "2026-07-14", tags: [], text: "no sugerir npm en nimbus" }], sessions: [] },
       status: "ready",
       atLabel: "14:31",
     },
@@ -62,7 +62,7 @@ describe("Overview panel (6.5.1) + lock banner (6.5.5)", () => {
     expect(t).toContain("$2.14/$10");
     expect(t).toContain("6/6");
     expect(t).toContain("128");
-    expect(t).toContain("no sugerir npm en korvex");
+    expect(t).toContain("no sugerir npm en nimbus");
   });
 
   it("no data yet degrades to a loading line, never a spinner-forever", () => {
@@ -121,7 +121,7 @@ describe("Memory panel (F9.2)", () => {
       data: {
         learnings: [
           { project: "routing", agent: "unknown", date: "2026-07-14", tags: ["routing"], text: "deepseek v3 falla con tool-use paralelo" },
-          { project: "korvex", agent: "unknown", date: "2026-07-13", tags: [], text: "korvex usa pnpm, no npm" },
+          { project: "nimbus", agent: "unknown", date: "2026-07-13", tags: [], text: "nimbus usa pnpm, no npm" },
         ],
         sessions: [{ ts: "2026-07-14T12:45:46Z", project: "sb", agent: "claude", commit: "abc1234", summary: "refactor router" }],
       },

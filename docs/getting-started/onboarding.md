@@ -9,7 +9,7 @@ lock, and registration steps.
 ```bash
 ebrain up
 ebrain doctor
-ebrain fleet --json
+ebrain harness doctor
 ```
 
 At boot, eBrain creates or reuses its private local MCP credential, starts the authenticated daemon
@@ -42,11 +42,9 @@ healthy. Do not bypass a named isolation or permission failure with a hand-edite
 
 ## Lifecycle boundary
 
-Daemon restart or stop actions affect local MCP availability, not the contents of durable memory or
-running tmux sessions. A clean local memory operation can continue within its local boundary while
+Daemon restart or stop actions affect local MCP availability, not the contents of durable memory. A clean local memory operation can continue within its local boundary while
 federated daemon-backed search is unavailable. See [daemon and federation](../architecture/daemon-federation.md).
 
 ## Next step
 
-Register a project through [workspaces and sessions](workspace-session.md), then choose
-[manual launch](../launch/manual-launch.md) or [guided launch](../launch/guided-launch.md).
+Wire an agent's hooks with the [quick start](quickstart.md), and read how each agent is checked in [supported agents](../guides/agents.md).

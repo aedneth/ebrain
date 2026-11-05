@@ -20,11 +20,11 @@ escribir("02-daily/logs/hoy.md", "# Ruido\n");
 escribir("07-clients/x/record.md", "# Cliente\n");
 escribir("11-platform/.brain/decisions/d.md", "# Decisión\n");
 escribir("09-marketing/videos/core/build/nota.md", "# Nota\n");
-escribir("06-sales/menciona.md", "# Trabajo para acme\n");
+escribir("06-sales/menciona.md", "# Trabajo para nimbus\n");
 
 const fuente: Fuente = { id: "brain", raiz, excluir: ["^02-daily/"], podar: ["07-clients"] };
 const config: Config = {
-  corpus: join(base, "corpus"), fuentes: [fuente], denegados: "acme",
+  corpus: join(base, "corpus"), fuentes: [fuente], denegados: "nimbus",
   retirado: { prefijos: ["12-archive/"], estados: ["superseded", "historical"] },
   llave: join(base, "no-existe"), topeCorridaUsd: 0.02, topeMensualUsd: 2,
 };

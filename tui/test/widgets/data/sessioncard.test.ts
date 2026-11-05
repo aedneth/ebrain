@@ -11,8 +11,8 @@ describe("sessioncard (truecolor/unicode)", () => {
   const t = makeTheme({ trueColor: true, ascii: false });
 
   it("composes core/badge + name + dim uptime + semantic state, single row", () => {
-    const out = sessioncard({ agent: "claude", name: "ebr-claude-korvex", uptime: "02:41", state: "running" }, t);
-    expect(strip(out)).toBe("  ● claude ebr-claude-korvex  02:41  running");
+    const out = sessioncard({ agent: "claude", name: "ebr-claude-nimbus", uptime: "02:41", state: "running" }, t);
+    expect(strip(out)).toBe("  ● claude ebr-claude-nimbus  02:41  running");
     expect(out).toContain(badge({ agent: "claude" }, t)); // literal composition of core/badge
     expect(out).toContain(t.fg("semantic.ok")); // running → ok
     expect(displayWidth(out)).toBe(strip(out).length);

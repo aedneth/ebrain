@@ -9,7 +9,7 @@ type Arg = (flag: string, def?: string) => string | undefined;
 export const MOTORES = ["qmd-search", "qmd-query", "gbrain-daemon-search", "gbrain-daemon-query"] as const;
 
 export function crearMotor(nombre: string, arg: Arg): Motor {
-  const coleccion = arg("--coleccion", "korvex")!;
+  const coleccion = arg("--coleccion", "nimbus")!;
   const index = arg("--qmd-index");
   const configDir = arg("--qmd-config");
   switch (nombre) {
@@ -20,10 +20,10 @@ export function crearMotor(nombre: string, arg: Arg): Motor {
       return motorQmd({ coleccion, index, modo: "query", configDir, sinRerank: arg("--sin-rerank") === "1" });
     case "gbrain-daemon-search":
     case "gbrain-search":
-      return motorGbrainDaemon("search", arg("--fuente", "korvex")!, arg("--primaria", "korvex")!);
+      return motorGbrainDaemon("search", arg("--fuente", "nimbus")!, arg("--primaria", "nimbus")!);
     case "gbrain-daemon-query":
     case "gbrain-query":
-      return motorGbrainDaemon("query", arg("--fuente", "korvex")!, arg("--primaria", "korvex")!);
+      return motorGbrainDaemon("query", arg("--fuente", "nimbus")!, arg("--primaria", "nimbus")!);
     default:
       return crearMotorExterno(nombre, arg);
   }
@@ -39,9 +39,9 @@ function crearMotorExterno(nombre: string, arg: Arg): Motor {
   if (nombre.startsWith("gbrain060-")) {
     if (!sandbox) throw new Error("gbrain060 necesita --sandbox");
     const herramienta = nombre === "gbrain060-search" ? "search" : "query";
-    const fuente = arg("--fuente", "korvex-con")!;
+    const fuente = arg("--fuente", "nimbus-con")!;
     const home = arg("--gbrain-home", `${sandbox}/gbrain-home`)!;
-    const primaria = arg("--primaria", fuente === "*" ? "korvex-sr" : fuente)!;
+    const primaria = arg("--primaria", fuente === "*" ? "nimbus-sr" : fuente)!;
     // El híbrido embebe cada consulta con OpenAI: solo ese motor recibe OPENAI_API_KEY (del entorno de la corrida,
     // nunca de un archivo de configuración). Las demás llaves nunca pasan.
     const hibrido = herramienta === "query";
@@ -83,12 +83,12 @@ function crearMotorExterno(nombre: string, arg: Arg): Motor {
     const datos = arg("--datos", `${sandbox}/engram-datos/con`)!;
     return motorMcpStdio({
       nombre: `engram:${datos.split("/").pop()}`,
-      cmd: [`${sandbox}/engram-3.6.0/engram`, "mcp", "--tools=agent", "--project", "korvex"],
+      cmd: [`${sandbox}/engram-3.6.0/engram`, "mcp", "--tools=agent", "--project", "nimbus"],
       cwd: sandbox,
       quitar: LLAVES,
       env: { ENGRAM_DATA_DIR: datos },
       herramienta: "mem_search",
-      argumentos: (q, pool) => ({ query: q, limit: pool, project: "korvex" }),
+      argumentos: (q, pool) => ({ query: q, limit: pool, project: "nimbus" }),
       mapa: (v) => mapaEngram(v),
     });
   }

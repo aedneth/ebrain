@@ -13,7 +13,7 @@ import type { Theme } from "../../theme.js";
 import { displayWidth, truncate, padTo } from "../../kit/draw.js";
 
 export interface FooterProps {
-  /** e.g. "~/code/korvex" */
+  /** e.g. "~/code/nimbus" */
   cwd?: string;
   /** e.g. "main" */
   branch?: string;

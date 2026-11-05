@@ -1,5 +1,5 @@
 export interface FooterProps {
-  /** ej. "~/code/korvex" */
+  /** ej. "~/code/nimbus" */
   cwd?: string;
   /** ej. "main" */
   branch?: string;

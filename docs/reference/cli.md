@@ -1,58 +1,26 @@
 # CLI Reference
 
-Run `ebrain help` for the installed command surface. JSON output is available for many inspection
-commands and is intended for the TUI and local automation, not as a promise of raw private data.
-
-## Daily control plane
+Run `ebrain help` for the installed command surface. Commands frozen on 2026-11-02 answer that they are frozen and exit 3;
+`EBRAIN_CONGELADOS=1` runs them (see the README).
 
 | Command | Purpose |
 | --- | --- |
-| `ebrain` | Open the TUI in a real interactive terminal |
-| `ebrain up` | Start daemon, prepare local MCP access, materialize missing config, and onboard detected agents |
-| `ebrain doctor` | Check daemon, adapters, source isolation, and local contracts |
-| `ebrain status --json` | Read a compact health snapshot |
-| `ebrain fleet --json` | Inspect adapter health and RAM class |
-| `ebrain daemon <start\|stop\|status\|restart\|ensure>` | Control the shared local daemon directly |
-| `ebrain daemon install-service` | Register the daemon with systemd/launchd so it survives a reboot |
-| `ebrain adapters <list\|show\|validate>` | Inspect agent adapter manifests and check them against the schema |
-| `ebrain uninstall` | Show a removal plan; `--yes` applies it, `--purge` also removes the brain store |
-
-## Memory and context
-
-| Command | Boundary |
-| --- | --- |
-| `ebrain remember` | Write one durable learning through the approved local path |
-| `ebrain q` | Search configured federated sources |
-| `ebrain context` | List/get/update/propose/review explicit context packs |
-| `ebrain episodes` | List, bounded recall, explicit bounded get, or approved record |
-| `ebrain memory recent --json` | Read recent summaries without filesystem paths |
-
-## Workspaces and sessions
-
-| Command | Boundary |
-| --- | --- |
-| `ebrain workspaces` | List/add/rename/remove validated local directories |
-| `ebrain sessions list` | Inspect active eBrain tmux sessions |
-| `ebrain sessions peek` | Read a scrubbed bounded pane capture |
-| `ebrain sessions send ... --yes` | Send a reviewed literal prompt after confirmation |
-| `ebrain sessions kill ... --yes` | Stop one session after confirmation |
-
-## Routing and costs
-
-| Command | Boundary |
-| --- | --- |
-| `ebrain task-profile` | Explain task signals; never pick a model or agent |
-| `ebrain profiles` | Manage user-selected execution profiles |
-| `ebrain targets` | Inspect/preview/launch declared adapter targets |
-| `ebrain routing --json` | Inspect configured capability chains |
-| `ebrain providers <list\|show>` | Inspect known model providers and whether their key names are set |
-| `ebrain cost --json` | Inspect factual token/provider attribution |
-| `ebrain spend --json` | Inspect routed spend against the local cap |
-
-## Workflows and procedures
-
-`ebrain workflows` manages normalized local workflow records. `ebrain procedures` records explicit
-use and reviewed lifecycle state. Neither command executes an arbitrary shell command or claims a
-workflow was successful.
+| `ebrain up` | Start the daemon, prepare local MCP access, onboard detected agents |
+| `ebrain doctor [--json]` | Check daemon, adapters, source isolation, the guard contract, spend |
+| `ebrain status [--json]` | Compact health snapshot |
+| `ebrain daemon <start\|stop\|status\|restart\|ensure>` | Control the shared local daemon |
+| `ebrain daemon install-service` | Keep it running across reboots (systemd/launchd) |
+| `ebrain remember "<learning>"` | Write one durable learning |
+| `ebrain q "<question>"` | Search federated sources |
+| `ebrain memoria <project\|sync\|status\|install-timer>` | Keep the memory index fresh under spend caps |
+| `ebrain harness install <agent>` | Wire an agent's hooks into the file it reads; `--all` for every adapter |
+| `ebrain harness doctor [agent]` | Verify one agent, or the whole fleet |
+| `ebrain harness status` | Harness fleet status |
+| `ebrain adapters <list\|show\|validate>` | Inspect and validate agent manifests |
+| `ebrain norms render <file>` | Render the managed norms block into an instructions file |
+| `ebrain onboard [--all\|agent]` | Register the MCP bridge with detected agents |
+| `ebrain embedder status\|migrate` | Show or switch the embedder (migrate previews its cost first) |
+| `ebrain route --cap <cap> "<prompt>"` | One routed, capped one-shot; `spend`, `routing` and `cost` report it |
+| `ebrain uninstall [--yes] [--purge]` | Print the removal plan; `--yes` applies it |
 
 Mutating commands document a `--yes` confirmation boundary. Read `--help` before scripting one.

@@ -7,6 +7,20 @@ before, and what boundary moved. Implementation detail lives in the commits.
 
 ━━━
 
+## Unreleased (branch `integracion`) — Ready to publish: README, site, installer and a clean tree
+
+- README and `website/` describe what eBrain is now: memory that arrives with each prompt, the agents it is wired into and
+  how each was verified, the measured numbers with their method, and what it does not do. The documentation navigation
+  keeps only pages checked against the code; pages about frozen modules stay in the repository, out of the navigation.
+- **Installer fix.** The pinned engine needs Bun 1.4.4 or newer, and `scripts/install.sh` used whatever Bun was on `PATH`,
+  so a fresh machine stopped at "GBrain requires Bun 1.4.4". It now installs a private Bun for eBrain's own processes when
+  needed (`EBRAIN_BUN_MIN` overrides the minimum, for tests).
+- The repository carries no name of a private brain or a client: fixtures and default collection names are neutral
+  (`nimbus`). Anything that relied on the old default collection names passes them explicitly.
+- `THIRD_PARTY_NOTICES.md` now lists Bun, qmd and the hosted site's analytics packages, which it previously denied.
+- Known gap, reported rather than fixed: on a clean install `ebrain q` finds nothing, because it queries only federated
+  sources other than `default` and a fresh install has none.
+
 ## Unreleased (branch `integracion`) — Agent adapters that are verified against what each agent reads
 
 - **Security fix.** `ebrain harness doctor codex` reported ✓ while looking at `~/.codex/hooks/hooks.json`, a file Codex does

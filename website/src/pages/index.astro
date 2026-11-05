@@ -4,64 +4,56 @@ import SiteHeader from "../components/SiteHeader.astro";
 import { DOC_SECTIONS, docRoute } from "../lib/navigation";
 ---
 
-<Base title="eBrain | Local agent memory and workspace control" description="Shared local memory, persistent workspace sessions, and governed routing for coding agents.">
+<Base title="eBrain | Persistent memory for coding agents" description="The relevant memory arrives with every prompt, in the agents you already use, and secrets stay out of the conversation.">
   <SiteHeader />
   <main id="main-content" class="home">
     <section class="home-intro" aria-labelledby="home-title">
       <div class="home-intro__copy">
-        <p class="eyebrow">Local developer control plane</p>
+        <p class="eyebrow">Persistent memory for coding agents</p>
         <h1 id="home-title">eBrain</h1>
-        <p class="home-intro__lede">Shared memory and workspace orchestration for local coding agents.</p>
-        <p>One loopback MCP daemon, durable governed memory, persistent tmux sessions, user-owned routing choices, and factual token telemetry.</p>
+        <p class="home-intro__lede">The memory arrives with the prompt. Secrets stay out.</p>
+        <p>Agents almost never ask a memory tool for anything: in one month of real use, the tools were called 0 times, while context injected by a hook reached 20 of 31 sessions. eBrain puts the relevant, current documents into each prompt through the hook every agent already has, and denies the reads that would send a credential to the model provider.</p>
         <div class="home-intro__links" aria-label="Start here">
-          <a href="/demo/">Watch the demo <img src="/icons/arrow-right.svg" alt="" width="16" height="16" /></a>
+          <a href={docRoute("getting-started/quickstart")}>Follow the quick start <img src="/icons/arrow-right.svg" alt="" width="16" height="16" /></a>
           <a href="/docs/">Open documentation</a>
-          <a href={docRoute("getting-started/quickstart")}>Follow quick start</a>
         </div>
       </div>
-      <figure class="terminal-figure">
-        <a href="/demo/" aria-label="Watch the live eBrain demo">
-          <img src="/assets/ebrain-tui-demo.svg" alt="Sanitized eBrain terminal cockpit showing daemon, fleet, sessions, memory, and factual spend summary." width="1018" height="533" />
-          <span class="terminal-figure__badge" aria-hidden="true"><svg width="11" height="12" viewBox="0 0 11 12" role="presentation"><path d="M0 0l11 6-11 6z" fill="currentColor" /></svg>Watch the demo</span>
-        </a>
-        <figcaption>The real cockpit, animated — rendered from the production renderer, no invented mockups.</figcaption>
-      </figure>
     </section>
     <section class="local-proof" aria-labelledby="local-proof-title">
       <div>
-        <p class="eyebrow">Local proof</p>
-        <h2 id="local-proof-title">Boot one shared daemon, then work from the cockpit.</h2>
+        <p class="eyebrow">Install and check</p>
+        <h2 id="local-proof-title">One command, then verify what each agent really reads.</h2>
       </div>
-      <pre><code>ebrain up
+      <pre><code>curl -fsSL https://raw.githubusercontent.com/aedneth/ebrain/main/scripts/install.sh | sh
 ebrain doctor
-ebrain remember "Review structural changes independently."
-ebrain</code></pre>
-      <p>`ebrain up` owns local credential creation and adapter registration. It does not ask users to paste OAuth material, writer locks, tokens, or curl commands.</p>
+ebrain harness install codex
+ebrain harness doctor codex</code></pre>
+      <p>Linux only is claimed. Codex, Antigravity and Hermes are wired and checked; the others are declared but not verified in this release. To switch the memory off in every agent: <code>{'touch "${XDG_CONFIG_HOME:-$HOME/.config}/ebrain/sin-memoria-en-prompt"'}</code>.</p>
     </section>
     <section class="docs-paths" aria-labelledby="docs-paths-title">
       <div class="section-heading">
-        <p class="eyebrow">Documentation paths</p>
-        <h2 id="docs-paths-title">Start from the work you need to do.</h2>
+        <p class="eyebrow">What it does, and what it does not</p>
+        <h2 id="docs-paths-title">Measured, with the method stated.</h2>
       </div>
       <div class="docs-paths__grid">
         {[
-          { title: "Install eBrain", body: "Install from source, boot the daemon, check the machine, and onboard detected agents.", href: docRoute("getting-started/quickstart") },
-          { title: "Launch work", body: "Select a workspace, choose manual or guided launch, and keep the resulting session observable.", href: docRoute("launch/manual-launch") },
-          { title: "Build durable memory", body: "Store concise decisions, retrieve bounded context, and review procedure lifecycle deliberately.", href: docRoute("concepts/memory") },
-          { title: "Route and observe", body: "Use task signals as orientation, retain model choices in profiles, and inspect factual token telemetry.", href: docRoute("routing/task-signals") },
+          { title: "Memory in each prompt", body: "In a 44-case retrieval regression run the way a hook runs it, the current document was in the injected text in 73 % of the cases (68 % as a result of its own), and no archived, retired or client document was injected. One private brain, one command: the README states the method.", href: docRoute("concepts/memory") },
+          { title: "A guard that covers file tools", body: "One canonical guard for shell reads, plus a translator so agents that read files with their own tools cannot bypass it.", href: docRoute("guides/agents") },
+          { title: "Verified against the agent", body: "The doctor fails when a hook file sits where the agent does not look, and asks the agent itself where it can.", href: docRoute("guides/agents") },
+          { title: "What it does not do", body: "No retrieval command ships for your brain, a clean install has nothing to search yet, and think and synthesize are off on purpose.", href: docRoute("getting-started/quickstart") },
         ].map((path) => (
           <a class="path-link" href={path.href}>
             <h3>{path.title}</h3>
             <p>{path.body}</p>
-            <span>Read path <img src="/icons/arrow-right.svg" alt="" width="16" height="16" /></span>
+            <span>Read <img src="/icons/arrow-right.svg" alt="" width="16" height="16" /></span>
           </a>
         ))}
       </div>
     </section>
     <section class="docs-catalog" aria-labelledby="docs-catalog-title">
       <div class="section-heading">
-        <p class="eyebrow">Complete reference</p>
-        <h2 id="docs-catalog-title">Every surface has a documented boundary.</h2>
+        <p class="eyebrow">Documentation</p>
+        <h2 id="docs-catalog-title">Every page below was checked against the code.</h2>
       </div>
       <div class="docs-catalog__columns">
         {DOC_SECTIONS.map((section) => (

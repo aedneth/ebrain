@@ -49,7 +49,7 @@ function Screen({ tab, hints, children, right }) {
       <div style={{ flex: 'none', color: 'var(--border-1)', whiteSpace: 'pre', overflow: 'hidden', padding: '0 1ch' }}>{'\u2500'.repeat(COLS)}</div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', padding: 'var(--row-h) 1ch' }}>{children}</div>
       <HintBar style={{ flex: 'none' }} hints={hints} right="ctrl+c salir" />
-      <Footer style={{ flex: 'none' }} cwd="~/code/korvex" branch="main" right="ebrain 0.4.2" />
+      <Footer style={{ flex: 'none' }} cwd="~/code/nimbus" branch="main" right="ebrain 0.4.2" />
     </React.Fragment>
   );
 }

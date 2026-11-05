@@ -1,6 +1,6 @@
 export interface SessionCardProps {
   agent: 'claude' | 'codex' | 'gemini' | 'opencode' | 'cursor' | 'route' | 'generic' | 'free';
-  /** ej. "ebr-claude-korvex" */
+  /** ej. "ebr-claude-nimbus" */
   name: string;
   /** ej. "02:41" */
   uptime?: string;

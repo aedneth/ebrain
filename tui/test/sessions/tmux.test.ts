@@ -46,7 +46,7 @@ describe("insideTmux / attachTarget (pure, no tmux)", () => {
     expect(typeof peekSession).toBe("function");
     expect(typeof sendToSession).toBe("function");
     expect(typeof killSession).toBe("function");
-    expect(sessionName("claude", "korvex")).toBe("ebr-claude-korvex");
+    expect(sessionName("claude", "nimbus")).toBe("ebr-claude-nimbus");
   });
 });
 

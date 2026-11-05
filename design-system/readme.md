@@ -20,7 +20,7 @@ Diseñado desde el brief del producto (no se adjuntó codebase ni Figma). No se 
 
 **Casing:** minúsculas casi siempre. Nombres de vista, tabs, labels de panel, comandos y hints van en minúscula (`sessions`, `spend hoy`, `kill session`). Mayúsculas reservadas para estados enfáticos de una palabra (`UP`, `DOWN`) y siglas (`CKIS`, `RAM`, `MCP`, `API`).
 
-**Voz:** imperativa y telegráfica, orientada a la acción. Sin sujeto, sin cortesías. "terminar ebr-claude-korvex?", "requiere confirmación — nunca auto-escala", "enrutar a claude". Ni "yo" ni "tú": el sistema informa, el usuario actúa.
+**Voz:** imperativa y telegráfica, orientada a la acción. Sin sujeto, sin cortesías. "terminar ebr-claude-nimbus?", "requiere confirmación — nunca auto-escala", "enrutar a claude". Ni "yo" ni "tú": el sistema informa, el usuario actúa.
 
 **Densidad:** cada carácter gana su lugar por información. Nada de texto de relleno, ni descripciones largas. Metadatos y explicaciones van en dim (`--text-3`) y en una línea.
 
@@ -32,7 +32,7 @@ Ejemplos de copy:
 - `brain UP · CKIS · 128 learnings`
 - `frontier requiere confirmación — nunca auto-escala`
 - `deepseek down — fallback a claude`
-- `terminar ebr-claude-korvex? El agente pierde su contexto.`
+- `terminar ebr-claude-nimbus? El agente pierde su contexto.`
 
 ---
 

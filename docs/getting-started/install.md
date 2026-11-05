@@ -2,37 +2,41 @@
 
 ## Prerequisites
 
-- Bun 1.3 or newer
-- git
-- tmux for persistent sessions
-- At least one supported local agent CLI for onboarding
+- Linux (the only platform claimed; macOS and WSL are untested)
+- git and curl
+- At least one supported local agent CLI to wire (Codex, Antigravity, Hermes, Claude Code)
 
-## Source installation
+Bun is installed for you if it is missing, and so is a private Bun 1.4.4 for eBrain's own processes if the one on your `PATH`
+is older than the pinned engine needs. tmux is not required.
+
+## Install
 
 ```bash
-git clone https://github.com/aedneth/ebrain.git ebrain
+curl -fsSL https://raw.githubusercontent.com/aedneth/ebrain/main/scripts/install.sh | sh
+```
+
+or, to read the script first, from a clone:
+
+```bash
+git clone https://github.com/aedneth/ebrain.git
 cd ebrain
-bun install
 ./scripts/install.sh --from-source
 ```
 
-The installer links `ebrain`, obtains the pinned upstream knowledge engine separately, and starts
-the local setup unless an explicit test-only skip flag is used. It does not install agent CLIs or
-make provider requests.
+The installer links `ebrain` into `~/.local/bin`, obtains the pinned upstream knowledge engine separately, and runs
+`ebrain up`. It never reads a dotenv, never prints a secret, and does not install agent CLIs or call a provider. Re-running
+it is how you update.
 
-## Start and verify
+## Verify
 
 ```bash
-ebrain up
 ebrain doctor
 ebrain status --json
 ```
 
-`ebrain up` is idempotent. It starts the loopback daemon, creates/stores the local MCP credential
-without printing it, and attempts onboarding for detected supported agents. `ebrain doctor` reports
-missing local prerequisites and isolation failures clearly.
+`ebrain doctor` reports missing local prerequisites and isolation failures. Warnings on a fresh machine (no provider key,
+agents not wired yet, keyword-only recall) are decisions to take, not failures.
 
 ## Next step
 
-Continue with [your first durable memory](first-memory.md). For local configuration and optional
-providers, see the [configuration reference](../reference/configuration.md).
+Follow the [quick start](quickstart.md) to wire an agent, and read [the memory model](../concepts/memory.md).

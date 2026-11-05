@@ -27,7 +27,7 @@ const strip = (s: string) => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
 const size = { cols: 120, rows: 32 };
 
 const ROWS: SessionListItem[] = [
-  { name: "ebr-claude-korvex", agent: "claude", uptime: "02:41", attached: false },
+  { name: "ebr-claude-nimbus", agent: "claude", uptime: "02:41", attached: false },
   { name: "ebr-codex-tests", agent: "codex", uptime: "01:03", attached: false },
   { name: "ebr-gemini-web", agent: "gemini", uptime: "00:12", attached: true },
 ];
@@ -43,7 +43,7 @@ describe("buildSessionsView — fleet + live peek from a fixture", () => {
   test("fleet title carries the count and lists every session + uptime", () => {
     const frame = buildFrame(stateOn(slice()), size, t).map(strip).join("\n");
     expect(frame).toContain("fleet · 3 sessions");
-    expect(frame).toContain("ebr-claude-korvex");
+    expect(frame).toContain("ebr-claude-nimbus");
     expect(frame).toContain("ebr-codex-tests");
     expect(frame).toContain("ebr-gemini-web");
     expect(frame).toContain("02:41");
@@ -68,7 +68,7 @@ describe("buildSessionsView — fleet + live peek from a fixture", () => {
   });
 
   test("a tmux failure after listing clears stale peek output and is visible", () => {
-    const failed = failSessionPeek(slice({ peek: { name: ROWS[0]!.name, text: "stale output", at: 0 } }), "peek ebr-claude-korvex: no server running");
+    const failed = failSessionPeek(slice({ peek: { name: ROWS[0]!.name, text: "stale output", at: 0 } }), "peek ebr-claude-nimbus: no server running");
     expect(failed.peek).toBeNull();
     const frame = buildFrame(stateOn(failed), size, t).map(strip).join("\n");
     expect(frame).toContain("no server running");
@@ -112,12 +112,12 @@ describe("reduce — sessions nav & actions emit effects (pure, no tmux)", () =>
 
   test("a → attach effect for the selected session", () => {
     const r = reduce(base, parseKey("a"));
-    expect(r.effect).toEqual({ type: "attach", name: "ebr-claude-korvex" });
+    expect(r.effect).toEqual({ type: "attach", name: "ebr-claude-nimbus" });
   });
 
   test("k opens a danger confirm; ONLY `y` emits kill (enter does not; n cancels)", () => {
     const opened = reduce(base, parseKey("k"));
-    expect(opened.state.overlay).toEqual({ kind: "confirmKill", name: "ebr-claude-korvex" });
+    expect(opened.state.overlay).toEqual({ kind: "confirmKill", name: "ebr-claude-nimbus" });
     expect(opened.effect).toBeUndefined();
 
     const enter = reduce(opened.state, { name: "enter" });
@@ -125,7 +125,7 @@ describe("reduce — sessions nav & actions emit effects (pure, no tmux)", () =>
     expect(enter.state.overlay).not.toBeNull(); // stays open
 
     const confirmed = reduce(opened.state, parseKey("y"));
-    expect(confirmed.effect).toEqual({ type: "kill", name: "ebr-claude-korvex" });
+    expect(confirmed.effect).toEqual({ type: "kill", name: "ebr-claude-nimbus" });
     expect(confirmed.state.overlay).toBeNull();
 
     const cancelled = reduce(opened.state, parseKey("n"));
@@ -143,13 +143,13 @@ describe("reduce — sessions nav & actions emit effects (pure, no tmux)", () =>
     expect(review.effect).toBeUndefined();
     expect(review.state.overlay).toMatchObject({ kind: "confirmSend", text: "hola" });
     const sent = reduce(review.state, parseKey("y"));
-    expect(sent.effect).toEqual({ type: "send", name: "ebr-claude-korvex", text: "hola" });
+    expect(sent.effect).toEqual({ type: "send", name: "ebr-claude-nimbus", text: "hola" });
     expect(sent.state.overlay).toBeNull();
   });
 
   test("a long prompt review is scrollable at 80x24 and still sends only after y", () => {
     const text = "A detailed prompt line that remains reviewable on a compact terminal.\n".repeat(24);
-    const review: AppState = { ...base, overlay: { kind: "confirmSend", name: "ebr-claude-korvex", text } };
+    const review: AppState = { ...base, overlay: { kind: "confirmSend", name: "ebr-claude-nimbus", text } };
     const compact = { cols: 80, rows: 24 };
     const frame = buildFrame(review, compact, t).map(strip).join("\n");
     expect(frame).toContain("[↑↓] scroll");
@@ -157,7 +157,7 @@ describe("reduce — sessions nav & actions emit effects (pure, no tmux)", () =>
 
     const scrolled = reduce(review, { name: "down" });
     expect(scrolled.state.overlay).toMatchObject({ kind: "confirmSend", scroll: 1 });
-    expect(reduce(scrolled.state, parseKey("y")).effect).toEqual({ type: "send", name: "ebr-claude-korvex", text });
+    expect(reduce(scrolled.state, parseKey("y")).effect).toEqual({ type: "send", name: "ebr-claude-nimbus", text });
   });
 
   test("prompt composer preserves multiline paste and does not persist it in session state", () => {
@@ -167,7 +167,7 @@ describe("reduce — sessions nav & actions emit effects (pure, no tmux)", () =>
     expect(draft.draft.text).toBe("first line\nsecond line");
     const review = reduce(pasted, { name: "enter" });
     expect(review.state.overlay).toMatchObject({ kind: "confirmSend", text: "first line\nsecond line" });
-    expect(review.state.sessions?.rows[0]?.name).toBe("ebr-claude-korvex");
+    expect(review.state.sessions?.rows[0]?.name).toBe("ebr-claude-nimbus");
   });
 
   test("multiline editor grows, keeps both ends reachable, and preserves exact compact geometry", () => {

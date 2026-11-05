@@ -26,7 +26,7 @@ import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const HOME = process.env.HOME || homedir();
-const CONFIG_DIR = process.env.EBRAIN_CONFIG_DIR || join(HOME, ".config", "ebrain");
+const CONFIG_DIR = process.env.EBRAIN_CONFIG_DIR || join(process.env.XDG_CONFIG_HOME || join(HOME, ".config"), "ebrain");
 
 export const GUARD_REASON =
   "BLOCKED (ebrain harness): this tool would read a secrets file and send it to the model provider. Use the variable at runtime, never its value.";

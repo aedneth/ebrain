@@ -21,7 +21,7 @@ between the two.
 
 ## Configuring the command
 
-The command is `EBRAIN_CONTEXT_CMD`, or the first non-comment line of `~/.config/ebrain/context-command`. It runs with
+The command is `EBRAIN_CONTEXT_CMD`, or the first non-comment line of `$XDG_CONFIG_HOME/ebrain/context-command`. It runs with
 `sh -c`, so it may be a path with arguments. With nothing configured, the hook prints nothing and the prompt goes
 through unchanged.
 
@@ -32,7 +32,7 @@ through unchanged.
 - **Output (stdout):** the text to hand the agent, or nothing. Exit `0`. Any other exit code, a timeout (15 s by default,
   `EBRAIN_CONTEXT_TIMEOUT_MS`) or an error is treated as no output. The command must never block a prompt.
 - **Budget:** keep it small. A measured setup caps the total at 9,500 characters and answers inside 3 seconds.
-- **Off switch:** if `~/.config/ebrain/sin-memoria-en-prompt` exists, the hook does not run the command at all. A
+- **Off switch:** if `$XDG_CONFIG_HOME/ebrain/sin-memoria-en-prompt` exists, the hook does not run the command at all. A
   command that is also called some other way should honour the same file.
 - **Presentation:** frame retrieved text as reference data with its source path, not as instructions.
 - **What must never be in the output:** anything from a source you have excluded (archives, retired documents, denied

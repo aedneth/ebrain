@@ -24,7 +24,7 @@ Do **not** call it for: secrets/keys/tokens (it refuses them), one-off trivia, a
 ```bash
 ebrain remember "<the learning, in one self-contained sentence or short paragraph>"
 # optional flags:
-ebrain remember --project korvex --tags routing,openrouter "<learning>"
+ebrain remember --project nimbus --tags routing,openrouter "<learning>"
 ```
 
 - Runs from any directory. It stamps `agent:` (from `$AGENT_NAME`) and `project:` (from the current git repo, or `--project`).

@@ -2,7 +2,7 @@
 function MemoryScreen() {
   const results = [
     ['deepseek v3 falla con tool-use paralelo; enrutar a claude', '0.94', 'session-log 04-12'],
-    ['korvex usa pnpm, no npm \u2014 nunca sugerir npm install', '0.91', 'norms/korvex'],
+    ['nimbus usa pnpm, no npm \u2014 nunca sugerir npm install', '0.91', 'norms/nimbus'],
     ['router: fallbackChain debe ser puro, sin side-effects', '0.87', 'session-log 04-09'],
     ['frontier siempre requiere confirmacion manual', '0.85', 'policy'],
   ];

@@ -118,12 +118,12 @@ describe("queryAcrossSources", () => {
   };
 
   test("positive: structured merge across sources, score order, dedup, schema", async () => {
-    const res = await queryAcrossSources("korvex", 10, deps(twoSources, {
+    const res = await queryAcrossSources("nimbus", 10, deps(twoSources, {
       "second-brain": [{ score: 0.6, slug: "shared", chunk_text: "sb" }, { score: 0.5, slug: "sb-only", chunk_text: "x" }],
       "company-brain": [{ score: 0.9, slug: "shared", chunk_text: "cb" }, { score: 0.8, slug: "cb-only", chunk_text: "y" }],
     }));
     expect(res.schema_version).toBe(1);
-    expect(res.query).toBe("korvex");
+    expect(res.query).toBe("nimbus");
     expect(res.partial).toBe(false);
     expect(res.failures).toEqual([]);
     expect(res.results.map((r) => r.slug)).toEqual(["shared", "cb-only", "sb-only"]);

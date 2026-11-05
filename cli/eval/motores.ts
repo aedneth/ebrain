@@ -33,9 +33,9 @@ function correr(cmd: string[], env?: Record<string, string>, timeoutMs = 120_000
 
 /** qmd `search` (BM25) o `query` (híbrido local: expansión + BM25 + vectores [+ reranker]). */
 export function motorQmd(opts: { coleccion: string; index?: string; modo: "search" | "query"; sinRerank?: boolean; configDir?: string; primaria?: string }): Motor {
-  // coleccion "*" = todas las colecciones del índice. La primaria (por defecto la colección pedida, o «korvex»)
+  // coleccion "*" = todas las colecciones del índice. La primaria (por defecto la colección pedida, o «nimbus»)
   // conserva su ruta; las demás quedan como «<colección>/<ruta>» para no chocar con las rutas del corpus principal.
-  const primaria = opts.primaria ?? (opts.coleccion === "*" ? "korvex" : opts.coleccion);
+  const primaria = opts.primaria ?? (opts.coleccion === "*" ? "nimbus" : opts.coleccion);
   const ruta = (file: string) => {
     const m = file.match(/^qmd:\/\/([^/]+)\/(.*)$/);
     if (!m) return file;
@@ -64,7 +64,7 @@ export function motorQmd(opts: { coleccion: string; index?: string; modo: "searc
 }
 
 /** GBrain por el daemon de eBrain (MCP). Solo para la línea base de v0.42. */
-export function motorGbrainDaemon(herramienta: "search" | "query", fuente: string, primaria = "korvex"): Motor {
+export function motorGbrainDaemon(herramienta: "search" | "query", fuente: string, primaria = "nimbus"): Motor {
   return {
     nombre: `gbrain-daemon-${herramienta}:${fuente}`,
     pagado: herramienta === "query",

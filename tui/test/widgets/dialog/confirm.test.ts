@@ -15,7 +15,7 @@ describe("confirm (truecolor/unicode)", () => {
       {
         danger: true,
         title: "kill session",
-        message: "terminar ebr-claude-korvex?",
+        message: "terminar ebr-claude-nimbus?",
         confirmKey: "y",
         confirmLabel: "kill",
         cancelKey: "esc",
@@ -28,7 +28,7 @@ describe("confirm (truecolor/unicode)", () => {
     for (const row of out) expect(displayWidth(row)).toBe(width);
 
     expect(strip(out[0])).toBe("┌─ kill session ───────────────────────────────────┐");
-    expect(strip(out[2])).toBe("│ terminar ebr-claude-korvex?                      │");
+    expect(strip(out[2])).toBe("│ terminar ebr-claude-nimbus?                      │");
     expect(strip(out[4])).toBe("│ [y] kill   [esc] cancel                          │");
     expect(strip(out[5])).toBe("└" + "─".repeat(width - 2) + "┘");
   });

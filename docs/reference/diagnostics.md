@@ -60,5 +60,5 @@ When a check is not healthy, preserve its message and inspect the named boundary
 anything. A restart can interrupt active sessions. Adapter detection only reports what is installed
 and locally configurable; it never installs a provider CLI or changes an account.
 
-Next: [troubleshooting](../guides/troubleshooting.md) for symptom-oriented recovery, or
+Next: troubleshooting for symptom-oriented recovery, or
 [daemon and federation](../architecture/daemon-federation.md) for the ownership model.

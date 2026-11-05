@@ -10,6 +10,7 @@ const PUBLIC_FILES = [
   "THIRD_PARTY_NOTICES.md",
   "assets/README.md",
   "docs/PUBLIC-DOCUMENTATION.md",
+  "docs/reference/prompt-context.md",
   "docs/getting-started/install.md",
   "docs/getting-started/quickstart.md",
   "docs/getting-started/onboarding.md",

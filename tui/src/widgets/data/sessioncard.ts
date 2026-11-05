@@ -14,7 +14,7 @@ export type SessionState = "running" | "waiting" | "idle" | "error" | "done";
 
 export interface SessionCardProps {
   agent: AgentName;
-  /** e.g. "ebr-claude-korvex". */
+  /** e.g. "ebr-claude-nimbus". */
   name: string;
   /** e.g. "02:41". */
   uptime?: string;

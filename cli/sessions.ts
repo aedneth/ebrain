@@ -4,7 +4,7 @@
  * (SPRINT-TUI 6.1.6 · ADR-003 §2 · ULTRAPLAN-TUI §2/§5.4). La TUI (F6.4) es SOLO el control plane;
  * tmux es el data plane — las sesiones sobreviven a la TUI y a este proceso CLI.
  *
- * Naming: `ebr-<agente>-<slug>` (p.ej. `ebr-claude-korvex`). `list` enumera SOLO sesiones `ebr-*`.
+ * Naming: `ebr-<agente>-<slug>` (p.ej. `ebr-claude-nimbus`). `list` enumera SOLO sesiones `ebr-*`.
  *
  * SEGURIDAD (hard requirements — no negociables, ver SPRINT-TUI 6.1.6):
  *   - `peek` SIEMPRE pasa el pane por scrubSecrets() antes de imprimirse/devolverse. Cero excepción.

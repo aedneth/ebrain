@@ -33,9 +33,9 @@ describe("guard translation", () => {
     expect(blocks("execute_code", { code: "print(1+1)" }, ask, [])).toBe(false);
   });
   test("extra patterns apply to read tools only", () => {
-    const extra = [/\.config\/acme\//];
-    expect(blocks("read_file", { path: "/home/u/.config/acme/key" }, ask, extra)).toBe(true);
-    expect(blocks("terminal", { command: 'KEY="$(cat ~/.config/acme/key)" run' }, ask, extra)).toBe(false);
+    const extra = [/\.config\/nimbus\//];
+    expect(blocks("read_file", { path: "/home/u/.config/nimbus/key" }, ask, extra)).toBe(true);
+    expect(blocks("terminal", { command: 'KEY="$(cat ~/.config/nimbus/key)" run' }, ask, extra)).toBe(false);
   });
   test("each agent gets its own verdict shape", () => {
     const agy = JSON.parse(guardOutput("antigravity", { toolCall: { name: "view_file", args: { AbsolutePath: "/x/.env" } } }, ask, []));

@@ -1,57 +1,77 @@
 # Quick Start
 
-This path verifies the local control plane without asking you to configure a token, OAuth flow, or
-database lock by hand. It assumes eBrain is installed from source and at least one supported local
-agent CLI is available.
+This path takes a Linux machine with git and curl from nothing to a running daemon and a checked agent wiring. Every step
+below was run from scratch in a throwaway `HOME` (the install took about two and a half minutes), and the places where it
+stops short are listed at the end instead of hidden.
 
-## 1. Boot the shared service
+## 1. Install and boot
 
 ```bash
-ebrain up
+curl -fsSL https://raw.githubusercontent.com/aedneth/ebrain/main/scripts/install.sh | sh
 ebrain doctor
-ebrain status --json
 ```
 
-`ebrain up` is idempotent. It mints and stores the local MCP credential before the daemon binds,
-starts the loopback-only daemon, registers detected supported adapters, and runs its bounded smoke
-path. `doctor` explains missing local prerequisites rather than silently continuing.
+The installer installs [Bun](https://bun.sh) if it is missing, and a private Bun 1.4.4 under `~/.local/share/ebrain/bun` if
+the one on your `PATH` is older than the pinned engine needs. It pins the knowledge engine, links `ebrain` into
+`~/.local/bin`, and runs `ebrain up`: private credential, loopback daemon, onboarding of the agent CLIs it finds. It never
+reads a dotenv, never prints a secret and never installs an agent for you. To read it before running it, clone the
+repository and run `./scripts/install.sh --from-source`.
 
-## 2. Verify agent onboarding
+`ebrain doctor` should end with `ebrain doctor: OK`. On a fresh machine it still lists warnings (no provider key, adapters
+not wired yet, keyword-only recall): those are things to decide, not failures.
+
+## 2. Wire an agent
 
 ```bash
-ebrain onboard --all
-ebrain fleet --json
+ebrain harness install codex        # or: antigravity · hermes · claude · gemini
+ebrain harness doctor codex
 ```
 
-Onboarding registers the command-only bridge with compatible local agent CLIs. It never asks you
-to paste a credential into a prompt. A missing CLI is reported as unavailable; eBrain does not
-pretend it is connected.
+Installing writes the hooks into the file **that agent reads**, adds eBrain's entries without touching yours (a
+`.ebrain-backup` of the file is kept the first time), and then the doctor checks the result, asking the agent itself where it
+can:
 
-## 3. Save one durable decision
+- **Codex** reads `~/.codex/hooks.json` and runs a hook only after you approve it: open Codex and run `/hooks`. The doctor
+  asks `codex features list` whether hooks are enabled.
+- **Antigravity** reads `~/.gemini/config/hooks.json`; eBrain owns only the group named `ebrain`.
+- **Hermes** gets a `pre_tool_call` hook in `~/.hermes/config.yaml` and a memory provider named `ebrain`; the doctor checks
+  `hermes hooks list`.
+
+Each install self-tests the guard with a read of a dotenv file in that agent's own payload shape, and the doctor fails if it
+is not denied.
+
+## 3. Give the prompt hook something to run
+
+The hooks hand each prompt to a *context command* that you configure; with none configured they do nothing. See
+[the context command](../reference/prompt-context.md).
+
+```bash
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/ebrain"
+echo '/path/to/your/context-command' > "${XDG_CONFIG_HOME:-$HOME/.config}/ebrain/context-command"
+```
+
+## 4. Save a decision
 
 ```bash
 ebrain remember --project demo "Review a database migration before merge."
-ebrain q "what must happen before a database migration merges?"
 ```
 
-`remember` writes a concise learning through the approved local path. `q` searches configured,
-approved federated sources; it is not a guarantee that every local file or past terminal pane is
-searchable. Read [memory layers](../concepts/memory.md) before adding broad source material.
-
-## 4. Open the control plane
-
-```bash
-ebrain
-```
-
-The TUI opens only in a real interactive terminal. Start with [first workspace and session](workspace-session.md),
-then use [manual launch](../launch/manual-launch.md) when you are ready to run an agent.
+The learning is written to disk at once and a write-through to the daemon is attempted.
 
 ## What this path does not do
 
-- It does not install an agent CLI or create a provider account.
-- It does not make hosted embeddings or provider routing mandatory.
-- It does not expose a daemon outside loopback.
-- It does not make every transcript durable memory.
+- **Searching what you just remembered does not work on a clean install.** `ebrain q` queries federated sources other than
+  the engine's `default`, and a fresh install has none, so it answers `no eligible federated sources are available`.
+  Register a source (see [configuration](../reference/configuration.md) and `ebrain memoria`) first.
+- It does not make `think` or `synthesize` answer: the engine runs with no chat model on purpose (they report
+  `no LLM available`; search is unaffected).
+- It does not install an agent CLI or create a provider account, and it does not expose the daemon outside loopback.
+- macOS and WSL are untested.
 
-Continue with [boot and onboarding](onboarding.md) for the service lifecycle and adapter boundary.
+## Turn it off
+
+- All agents, memory only, one file: `touch "${XDG_CONFIG_HOME:-$HOME/.config}/ebrain/sin-memoria-en-prompt"`.
+- One agent: remove the `ebrain` entries from its hook file, or restore the `.ebrain-backup` next to it.
+- The rest: `ebrain uninstall` prints what it would remove (MCP entries, launcher, service, config) and removes nothing;
+  `ebrain uninstall --yes` applies it, and `--purge` also deletes the brain store. It does not edit the hook files above:
+  remove those by hand, as in the previous line.

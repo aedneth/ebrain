@@ -303,6 +303,7 @@ describe("the shipped artifact, not a copy of it", () => {
           EBRAIN_BIN_DIR: join(home, "bin"),
           GBRAIN_REPO: engine,
           GBRAIN_REF: engineRef,
+          EBRAIN_BUN_MIN: "1.0.0", // the fake bun answers 1.3.14; the real pin (1.4.4) would try to download one
           EBRAIN_SKIP_UP: "1",
         },
       });

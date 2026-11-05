@@ -238,7 +238,7 @@ describe("contrast", () => {
 });
 
 // ---------------------------------------------------------------------------
-// ZERO-EMOJI policy (Korvex discipline, hard gate)
+// ZERO-EMOJI policy (Nimbus discipline, hard gate)
 // ---------------------------------------------------------------------------
 
 // U+1F000–U+1FAFF (misc symbols/pictographs/emoticons/transport/supplemental symbols),

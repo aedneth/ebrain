@@ -43,7 +43,7 @@ const homeState = {
     atLabel: "14:31",
   },
   sessions: {
-    rows: [{ name: "ebr-claude-korvex", agent: "claude", uptime: "02:41", attached: false }],
+    rows: [{ name: "ebr-claude-nimbus", agent: "claude", uptime: "02:41", attached: false }],
     selected: 0,
     peek: null,
     status: "ready" as const,

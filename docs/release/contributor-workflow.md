@@ -22,4 +22,4 @@ High-risk changes, including architecture, persistence, migration, license/distr
 work, are reviewed by someone other than their author. The author's own write-up is evidence for
 that review, never a substitute for it.
 
-See [CONTRIBUTING.md](../../CONTRIBUTING.md) and [open-source readiness](open-source-readiness.md).
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) and open-source readiness.

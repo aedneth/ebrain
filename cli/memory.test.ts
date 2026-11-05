@@ -25,8 +25,8 @@ test("listLearningFiles: recorre memory/learnings/<project>/*.md a un nivel", ()
   writeFileSync(join(dir, "ebrain", "a.md"), "x");
   writeFileSync(join(dir, "ebrain", "b.md"), "x");
   writeFileSync(join(dir, "ebrain", "not-md.txt"), "x"); // no cuenta
-  mkdirSync(join(dir, "korvex-web"), { recursive: true });
-  writeFileSync(join(dir, "korvex-web", "c.md"), "x");
+  mkdirSync(join(dir, "nimbus-web"), { recursive: true });
+  writeFileSync(join(dir, "nimbus-web", "c.md"), "x");
 
   expect(listLearningFiles(dir).length).toBe(3);
 });

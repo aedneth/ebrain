@@ -12,7 +12,7 @@ import type { Theme } from "../../theme.js";
 import { panel } from "./panel.js";
 
 export interface TerminalPeekProps {
-  /** e.g. "peek · ebr-claude-korvex" */
+  /** e.g. "peek · ebr-claude-nimbus" */
   title: string;
   /** Appends " · live" to the title. */
   live?: boolean;

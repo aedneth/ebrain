@@ -147,14 +147,14 @@ describe("deny policy — config file resolution", () => {
   });
 
   test("a malformed entry throws and does NOT echo the offending token", () => {
-    const path = fixture("denied-alpha\nclient/acme\n");
+    const path = fixture("denied-alpha\nclient/nimbus\n");
     expect(() => withConfig(path, deniedRepos)).toThrow(/invalid deny entry on line 2/);
     try {
       withConfig(path, deniedRepos);
     } catch (e) {
       // A malformed entry can still contain a real name; only the position may be reported.
-      expect(String(e)).not.toContain("client/acme");
-      expect(String(e)).not.toContain("acme");
+      expect(String(e)).not.toContain("client/nimbus");
+      expect(String(e)).not.toContain("nimbus");
     }
   });
 });
@@ -170,8 +170,8 @@ describe("deny policy — both halves agree on the same file", () => {
     { name: "whitespace-only policy denies nothing", contents: "   \n\t\n", probe: "anything", denied: false },
     { name: "empty policy denies nothing", contents: "", probe: "anything", denied: false },
     // A dot is a literal in the TS matcher; the shell half must not treat it as a regex wildcard.
-    { name: "dot is literal (no wildcard)", contents: "acme.com\n", probe: "acmeXcom", denied: false },
-    { name: "dot matches itself", contents: "acme.com\n", probe: "repos/acme.com", denied: true },
+    { name: "dot is literal (no wildcard)", contents: "nimbus.com\n", probe: "nimbusXcom", denied: false },
+    { name: "dot matches itself", contents: "nimbus.com\n", probe: "repos/nimbus.com", denied: true },
     // Pass-3 F-P2: the separator sets used to diverge. JS `\s` counts vertical tab and form feed;
     // the shell's `tr` did not, so one file split into two entries on one half and one malformed
     // entry on the other. Both are now the same explicit ASCII set.
@@ -230,7 +230,7 @@ describe("deny policy — the shell half fails CLOSED (F-R1 regression)", () => 
   const malformed: Array<{ name: string; contents: string }> = [
     { name: "regex metacharacter", contents: "denied-alpha\nfoo(\n" },
     { name: "leading dash (parsed as a grep option)", contents: "-foo\ndenied-alpha\n" },
-    { name: "path separator", contents: "denied-alpha\nclient/acme\n" },
+    { name: "path separator", contents: "denied-alpha\nclient/nimbus\n" },
     { name: "glob character", contents: "denied-*\n" },
     { name: "alternation character", contents: "a|b\n" },
   ];
@@ -243,7 +243,7 @@ describe("deny policy — the shell half fails CLOSED (F-R1 regression)", () => 
       expect(valid.denied).toBe(true);
       expect(unrelated.denied).toBe(true); // fail-closed: unknown policy ⇒ deny
       expect(valid.stderr).toMatch(/not a bare repository name/);
-      expect(valid.stderr).not.toMatch(/foo\(|client\/acme/); // position, never the token
+      expect(valid.stderr).not.toMatch(/foo\(|client\/nimbus/); // position, never the token
       // The TS half must reject the same file rather than diverge.
       expect(() => withConfig(path, deniedRepos)).toThrow(/invalid deny entry/);
     });

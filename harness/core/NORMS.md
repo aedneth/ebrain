@@ -44,7 +44,7 @@
   migraciones, releases). Qué agente hace de revisor es tu decisión; que no sea el mismo, no.
 - Commit por fase con mensaje descriptivo. **Nunca** commitees `.brain/`, `.claude/`, backups ni secretos.
 - Los cambios estructurales dejan **rastro narrativo**: el log de sesión lo escribe el hook Stop del
-  proyecto donde exista (en Korvex, `02-daily/logs/`), pero además dejá entrada en el CHANGELOG del proyecto y, si aprendiste algo
+  proyecto donde exista (en Nimbus, `02-daily/logs/`), pero además dejá entrada en el CHANGELOG del proyecto y, si aprendiste algo
   reutilizable, un `ebrain remember`. El driver primario no trabaja sin dejar huella.
 - Acciones irreversibles o hacia afuera (deploy, push, borrado): confirmá primero salvo autorización durable.
 

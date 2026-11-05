@@ -1,7 +1,7 @@
 Frame para mirar el output de otra sesion (peek tmux): borde siempre dim, contenido en texto secundario.
 
 ```jsx
-<TerminalPeek title="peek \u00B7 ebr-claude-korvex" live height="16em">
+<TerminalPeek title="peek \u00B7 ebr-claude-nimbus" live height="16em">
 {"$ claude --resume\\n> analizando workspace..."}
 </TerminalPeek>
 ```

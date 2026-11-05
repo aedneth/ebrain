@@ -1,5 +1,5 @@
 export interface TerminalPeekProps {
-  /** ej. "peek \u00B7 ebr-claude-korvex" */
+  /** ej. "peek \u00B7 ebr-claude-nimbus" */
   title: string;
   /** Anexa "\u00B7 live" al titulo */
   live?: boolean;

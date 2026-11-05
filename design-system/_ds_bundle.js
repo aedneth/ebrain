@@ -1097,7 +1097,7 @@ function _extends() { return _extends = Object.assign ? Object.assign.bind() : f
 // ebrain screens: HOME, SESSIONS, LAUNCH
 const SESSIONS = [{
   agent: 'claude',
-  name: 'ebr-claude-korvex',
+  name: 'ebr-claude-nimbus',
   uptime: '02:41',
   state: 'running',
   detail: 'sonnet-4 \u00b7 refactor router de modelos'
@@ -1271,7 +1271,7 @@ function HomeScreen() {
   }, /*#__PURE__*/React.createElement(window.Panel, {
     title: "ultimas memorias",
     bg: "var(--surface-1)"
-  }, [['deepseek v3 falla con tool-use paralelo; enrutar a claude', '0.94', 'routing'], ['korvex usa pnpm, no npm \u2014 nunca sugerir npm install', '0.91', 'korvex'], ['frontier siempre requiere confirmacion manual del usuario', '0.88', 'policy']].map((m, i) => /*#__PURE__*/React.createElement("div", {
+  }, [['deepseek v3 falla con tool-use paralelo; enrutar a claude', '0.94', 'routing'], ['nimbus usa pnpm, no npm \u2014 nunca sugerir npm install', '0.91', 'nimbus'], ['frontier siempre requiere confirmacion manual del usuario', '0.88', 'policy']].map((m, i) => /*#__PURE__*/React.createElement("div", {
     key: i,
     style: {
       display: 'flex',
@@ -1308,7 +1308,7 @@ function SessionsScreen({
 }) {
   const s = SESSIONS[selected];
   const peekBody = {
-    'ebr-claude-korvex': '$ claude --resume korvex\n\u203a analizando src/router/models.ts\n  encontradas 3 funciones a refactorizar:\n  - resolveCap()   \u2713 hecho\n  - pickModel()    \u25b8 en progreso\n  - fallbackChain()  pendiente\n\n> aplicando cambios a pickModel()...\n  + 24 lineas  - 11 lineas'
+    'ebr-claude-nimbus': '$ claude --resume nimbus\n\u203a analizando src/router/models.ts\n  encontradas 3 funciones a refactorizar:\n  - resolveCap()   \u2713 hecho\n  - pickModel()    \u25b8 en progreso\n  - fallbackChain()  pendiente\n\n> aplicando cambios a pickModel()...\n  + 24 lineas  - 11 lineas'
   };
   return /*#__PURE__*/React.createElement(window.Screen, {
     tab: "sessions",
@@ -1536,7 +1536,7 @@ function LaunchScreen({
     style: {
       color: 'var(--text-2)'
     }
-  }, "norms/korvex.md"), /*#__PURE__*/React.createElement("span", {
+  }, "norms/nimbus.md"), /*#__PURE__*/React.createElement("span", {
     style: {
       color: 'var(--text-3)'
     }
@@ -1571,7 +1571,7 @@ Object.assign(window, {
 try { (() => {
 // ebrain screens: MEMORY, ROUTING, DOCTOR
 function MemoryScreen() {
-  const results = [['deepseek v3 falla con tool-use paralelo; enrutar a claude', '0.94', 'session-log 04-12'], ['korvex usa pnpm, no npm \u2014 nunca sugerir npm install', '0.91', 'norms/korvex'], ['router: fallbackChain debe ser puro, sin side-effects', '0.87', 'session-log 04-09'], ['frontier siempre requiere confirmacion manual', '0.85', 'policy']];
+  const results = [['deepseek v3 falla con tool-use paralelo; enrutar a claude', '0.94', 'session-log 04-12'], ['nimbus usa pnpm, no npm \u2014 nunca sugerir npm install', '0.91', 'norms/nimbus'], ['router: fallbackChain debe ser puro, sin side-effects', '0.87', 'session-log 04-09'], ['frontier siempre requiere confirmacion manual', '0.85', 'policy']];
   const logs = [['04-12 14:32', 'claude', 'refactor router'], ['04-12 11:08', 'codex', 'specs de tests'], ['04-11 18:44', 'gemini', 'research MCP'], ['04-11 09:20', 'cursor', 'ui Panel'], ['04-10 16:03', 'opencode', 'docs pnpm']];
   return /*#__PURE__*/React.createElement(window.Screen, {
     tab: "memory",
@@ -2086,7 +2086,7 @@ function Screen({
     style: {
       flex: 'none'
     },
-    cwd: "~/code/korvex",
+    cwd: "~/code/nimbus",
     branch: "main",
     right: "ebrain 0.4.2"
   }));

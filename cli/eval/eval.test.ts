@@ -56,7 +56,7 @@ describe("la regla de lo retirado", () => {
     const n = normalizar("04-strategy/modelo-y-oferta/OFERTA-CANONICA.md");
     expect(normalizar("qmd://company-brain/04-strategy/modelo-y-oferta/OFERTA-CANONICA.md")).toBe(n);
     expect(normalizar("04-strategy/modelo-y-oferta/oferta-canonica")).toBe(n);
-    expect(normalizar("qmd://korvex/04-strategy/modelo-y-oferta/OFERTA-CANONICA.md?index=e2con")).toBe(n);
+    expect(normalizar("qmd://nimbus/04-strategy/modelo-y-oferta/OFERTA-CANONICA.md?index=e2con")).toBe(n);
     expect(normalizar("11-platform/brain/decisions/x.md")).toBe(normalizar("11-platform/.brain/decisions/x.md"));
   });
 });
@@ -70,7 +70,7 @@ describe("el validador", () => {
 
   test("falla si una retirada está viva, si la vigente no existe, si hay id repetido o un cliente", () => {
     const a = cargarCasos(yaml(`  - id: B1
-    consulta: "precio de acme"
+    consulta: "precio de nimbus"
     vigente: [no/existe.md]
     retiradas: [04-strategy/plan-viejo.md]
     fuente: prueba
@@ -79,7 +79,7 @@ describe("el validador", () => {
     vigente: [07-clients/x/record.md]
     fuente: prueba
 `));
-    const msgs = validar(a, ["acme"], 1, 50).filter((x) => x.nivel === "error").map((x) => x.mensaje);
+    const msgs = validar(a, ["nimbus"], 1, 50).filter((x) => x.nivel === "error").map((x) => x.mensaje);
     expect(msgs.some((m) => m.startsWith("vigente inexistente"))).toBe(true);
     expect(msgs.some((m) => m.includes("la regla la ve vigente"))).toBe(true);
     expect(msgs).toContain("id repetido");
@@ -105,7 +105,7 @@ describe("el modo hook", () => {
     expect(prohibida("/h/K/07-clients/x/record.md", c)).toBe("cliente");
     expect(prohibida("/h/Documents/Second Brain/02-daily/a.md", c)).toBe("second-brain");
     expect(prohibida("00-inbox/borrador.md", c)).toBe("retirada");
-    expect(prohibida("repo-de-acme/a.md", c, /acme/)).toBe("cliente");
+    expect(prohibida("repo-de-nimbus/a.md", c, /nimbus/)).toBe("cliente");
     expect(prohibida("04-strategy/OFERTA-CANONICA.md", c)).toBeNull();
   });
 });

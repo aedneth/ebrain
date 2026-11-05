@@ -13,14 +13,14 @@ describe("footer", () => {
 
   it("renders cwd:branch left (branch secondary) and version right, exact width", () => {
     const row = footer(
-      { cwd: "~/code/korvex", branch: "main", right: "ebrain 0.4.2" },
+      { cwd: "~/code/nimbus", branch: "main", right: "ebrain 0.4.2" },
       theme,
       40,
     );
     const muted = theme.fg("text.muted");
     const secondary = theme.fg("text.secondary");
     // leftPlain len 18, rightPlain len 12, inner 38, gap 8
-    const leftColored = muted + "~/code/korvex" + ":" + theme.reset + secondary + "main" + theme.reset;
+    const leftColored = muted + "~/code/nimbus" + ":" + theme.reset + secondary + "main" + theme.reset;
     const rightColored = muted + "ebrain 0.4.2" + theme.reset;
     const expected = " " + leftColored + " ".repeat(8) + rightColored + " ";
 

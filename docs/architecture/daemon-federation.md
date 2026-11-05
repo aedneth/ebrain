@@ -25,4 +25,4 @@ agent CLI -> command-only bridge -> authenticated loopback daemon -> approved lo
 Federation is explicit. A developer can operate eBrain with local context, episodes, procedures, and
 workspaces before adding compatible sources. Source isolation remains the authoritative boundary.
 See [privacy](../guides/privacy.md) and
-[public architecture decisions](adr-index.md).
+public architecture decisions.
