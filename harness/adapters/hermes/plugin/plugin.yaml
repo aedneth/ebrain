@@ -1,0 +1,4 @@
+name: ebrain
+version: 0.1.0
+description: "eBrain — each turn's relevant memory, from the context command, as a Hermes memory provider."
+pip_dependencies: []

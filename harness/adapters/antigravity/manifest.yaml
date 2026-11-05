@@ -1,0 +1,30 @@
+# adapter: antigravity — Google Antigravity CLI (`agy`). Hooks live in ~/.gemini/config/hooks.json as named groups;
+# eBrain owns only the group "ebrain" and never touches the others. PreToolUse entries are nested
+# ({matcher, hooks:[...]}), PreInvocation entries are flat. Its tools read files without a shell (view_file,
+# grep_search …), so the guard translates them (cli/agent-hooks.ts). Verified against agy 1.4.12.
+agent: antigravity
+class: heavy   # RAM governor: conservative, one heavy agent at a time
+description: Antigravity CLI — guard (shell and file tools) + per-prompt context.
+norms:
+  target: null
+  mode: none
+hooks:
+  config: ~/.gemini/config/hooks.json
+  format: claude-json
+  root: ebrain
+  dir: ~/.gemini/hooks
+  runtime_events: [PreToolUse, PreInvocation]
+  events:
+    pre_tool_use: PreToolUse
+    pre_invocation: PreInvocation
+  wrappers:
+    - { file: ebrain-guard.sh,   core: guard-agent.sh,    event: pre_tool_use,   matcher: "", timeout: 8 }
+    - { file: ebrain-context.sh, core: prompt-context.sh, event: pre_invocation, flat: true, timeout: 20 }
+mcp:
+  register: null
+  method: none
+env:
+  AGENT_NAME: antigravity
+guard: enforced
+doctor: "agy --version"
+launch: agy

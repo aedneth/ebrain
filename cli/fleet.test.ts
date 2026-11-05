@@ -64,10 +64,10 @@ test("doctorOk: rc=0 del script → true, rc!=0 → false", async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-test("smoke: los 6 adapters reales del harness declaran class heavy|light (nunca unknown)", async () => {
+test("smoke: los 8 adapters reales del harness declaran class heavy|light (nunca unknown)", async () => {
   const names = listAdapters();
-  expect(names.sort()).toEqual(["claude", "codex", "cursor", "gemini", "generic", "opencode"]);
-  const heavy = ["claude", "codex", "cursor", "opencode"];
+  expect(names.sort()).toEqual(["antigravity", "claude", "codex", "cursor", "gemini", "generic", "hermes", "opencode"]);
+  const heavy = ["antigravity", "claude", "codex", "cursor", "hermes", "opencode"];
   const light = ["gemini", "generic"];
   for (const n of names) {
     const cls = await readClass(n);

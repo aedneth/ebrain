@@ -37,6 +37,10 @@ export interface WrapperSpec {
   event: string;
   /** Which tool calls the hook applies to. Empty means "all". */
   matcher: string;
+  /** Seconds the runtime waits for the hook. Absent: the runtime's own default. */
+  timeout?: number;
+  /** The runtime keeps this event's entries flat (`{type, command}`), with no inner `hooks` list. */
+  flat?: boolean;
 }
 
 export interface HooksSpec {
@@ -49,6 +53,12 @@ export interface HooksSpec {
   /** Top-level key the events nest under, or null when they sit at the root. */
   root: string | null;
   wrappers: WrapperSpec[];
+  /** Events the runtime really dispatches. A wired key outside this list is one the agent will never fire. */
+  runtimeEvents: string[];
+  /** Files an older install wrote where the agent never looks. Reported, never trusted. */
+  stale: string[];
+  /** What the user must still do after wiring (for example, approve the hooks inside the agent). */
+  trust: string | null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -56,7 +66,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function parseHooksBlock(agent: string, manifest: unknown, home = homedir()): HooksSpec {
-  const none: HooksSpec = { agent, format: "none", configPath: null, hooksDir: null, events: {}, root: null, wrappers: [] };
+  const none: HooksSpec = { agent, format: "none", configPath: null, hooksDir: null, events: {}, root: null, wrappers: [], runtimeEvents: [], stale: [], trust: null };
   if (!isRecord(manifest) || !isRecord(manifest.hooks)) return none;
   const hooks = manifest.hooks;
   if (hooks.format !== "claude-json") return none;
@@ -72,9 +82,13 @@ export function parseHooksBlock(agent: string, manifest: unknown, home = homedir
   if (Array.isArray(hooks.wrappers)) {
     for (const entry of hooks.wrappers) {
       if (!isRecord(entry)) continue;
-      const { file, core, event, matcher } = entry;
+      const { file, core, event, matcher, timeout, flat } = entry;
       if (typeof file !== "string" || typeof core !== "string" || typeof event !== "string") continue;
-      wrappers.push({ file, core, event, matcher: typeof matcher === "string" ? matcher : "" });
+      wrappers.push({
+        file, core, event, matcher: typeof matcher === "string" ? matcher : "",
+        ...(typeof timeout === "number" ? { timeout } : {}),
+        ...(flat === true ? { flat: true } : {}),
+      });
     }
   }
 
@@ -86,6 +100,9 @@ export function parseHooksBlock(agent: string, manifest: unknown, home = homedir
     events,
     root: typeof hooks.root === "string" && hooks.root.length > 0 ? hooks.root : null,
     wrappers,
+    runtimeEvents: Array.isArray(hooks.runtime_events) ? hooks.runtime_events.filter((e): e is string => typeof e === "string") : [],
+    stale: Array.isArray(hooks.stale) ? hooks.stale.filter((e): e is string => typeof e === "string").map((e) => expandPath(e, home)) : [],
+    trust: typeof hooks.trust === "string" && hooks.trust.length > 0 ? hooks.trust : null,
   };
 }
 
@@ -127,7 +144,7 @@ export function wrapperSpellings(wrapperPath: string, home: string): string[] {
 /** Is this wrapper already referenced anywhere under this event, however the user spelled it? */
 function alreadyWired(entries: Record<string, unknown>[], spellings: readonly string[]): boolean {
   return entries.some((entry) => {
-    const inner = Array.isArray(entry.hooks) ? entry.hooks : [];
+    const inner = [...(Array.isArray(entry.hooks) ? entry.hooks : []), entry];
     return inner.some((hook) =>
       isRecord(hook) && typeof hook.command === "string" && spellings.some((spelling) => (hook.command as string).includes(spelling)),
     );
@@ -165,9 +182,14 @@ export function mergeHookConfig(current: Record<string, unknown>, spec: HooksSpe
       present.push(wrapper.file);
       continue;
     }
+    const hook = {
+      type: "command",
+      command: hookCommand(wrapperPath),
+      ...(wrapper.timeout ? { timeout: wrapper.timeout } : {}),
+    };
     container[runtimeEvent] = [
       ...entries,
-      { matcher: wrapper.matcher, hooks: [{ type: "command", command: hookCommand(wrapperPath) }] },
+      wrapper.flat ? hook : { matcher: wrapper.matcher, hooks: [hook] },
     ];
     added.push(wrapper.file);
   }
@@ -198,6 +220,13 @@ export function writeJson(path: string, data: Record<string, unknown>): void {
   writeFileSync(temp, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600 });
   chmodSync(temp, 0o600);
   renameSync(temp, target);
+}
+
+/** Events wired in the config that the runtime does not dispatch: keys the agent will never fire. */
+export function deadEvents(current: Record<string, unknown>, spec: HooksSpec): string[] {
+  if (spec.runtimeEvents.length === 0) return [];
+  const container = spec.root ? (isRecord(current[spec.root]) ? (current[spec.root] as Record<string, unknown>) : {}) : current;
+  return Object.keys(container).filter((key) => !spec.runtimeEvents.includes(key));
 }
 
 export interface WireReport extends WireOutcome {
@@ -257,6 +286,16 @@ function main(): void {
     process.exit(2);
   }
   const report = wireAgent(spec, apply);
+  const extra: string[] = [];
+  if (spec.configPath) {
+    try {
+      const dead = deadEvents(readJson(spec.configPath), spec);
+      if (dead.length) extra.push(`  hook ✗ ${spec.configPath} has keys ${agent} never fires: ${dead.join(", ")} (valid events: ${spec.runtimeEvents.join(", ")})`);
+    } catch { /* wireAgent already reports an unreadable config */ }
+  }
+  for (const file of spec.stale) {
+    if (existsSync(file)) extra.push(`  hook ⚠ ${file} exists but ${agent} does not read it; hooks only count in ${spec.configPath}`);
+  }
   if (json) {
     const { next: _next, ...rest } = report;
     console.log(JSON.stringify(rest, null, 2));
@@ -276,8 +315,12 @@ function main(): void {
     console.log(report.applied ? `  hook ✓ '${file}' WIRED into ${report.configPath}` : `  hook ⚠ '${file}' not wired — run 'ebrain harness install ${agent}'`);
   }
   for (const file of report.unmapped) console.log(`  hook · '${file}' has no runtime event on this agent (invoked directly)`);
+  for (const line of extra) console.log(line);
+  if (spec.trust && report.applied) console.log(`  hook ⚠ ${spec.trust}`);
+  else if (spec.trust && report.present.length > 0) console.log(`  hook · ${spec.trust}`);
   // A wrapper we could not wire is the security control sitting inert; that is a red check.
   if (!report.applied && report.added.length > 0) process.exit(1);
+  if (extra.some((line) => line.includes("✗"))) process.exit(1);
 }
 
 if (import.meta.main) main();

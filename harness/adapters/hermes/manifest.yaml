@@ -1,0 +1,24 @@
+# adapter: hermes — Hermes Agent (NousResearch). Two pieces: a shell hook in ~/.hermes/config.yaml
+# (`hooks.pre_tool_call`) that runs the secret guard, and a memory-provider plugin (`~/.hermes/plugins/ebrain`,
+# `memory.provider: ebrain`) whose prefetch() hands each turn the context command's text. Verified against v0.22.7.
+agent: hermes
+class: heavy   # RAM governor: conservative, one heavy agent at a time
+description: Hermes Agent — guard (shell and file tools) + per-turn context as a memory provider.
+norms:
+  target: null
+  mode: none
+hooks:
+  config: ~/.hermes/config.yaml
+  format: hermes-yaml
+  dir: ~/.hermes/hooks
+  plugin_dir: ~/.hermes/plugins/ebrain
+  wrappers:
+    - { file: ebrain-guard.sh, core: guard-agent.sh, event: pre_tool_call, timeout: 8 }
+mcp:
+  register: null
+  method: none
+env:
+  AGENT_NAME: hermes
+guard: enforced
+doctor: "hermes --version"
+launch: hermes

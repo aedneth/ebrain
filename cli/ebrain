@@ -80,7 +80,7 @@ Frozen on 2026-11-02 (no measured use; the code stays in the repo, EBRAIN_CONGEL
   procedures · providers · profiles · workspaces · targets · workflows · fleet · memory · sessions ·
   task-profile · advise · federate. Why and evidence: README.md, section "Frozen on 2026-11-02"
 
-Agents supported by install: claude · codex · gemini · generic
+Agents supported by install: claude · codex · antigravity · hermes · gemini · generic
 EOF
 }
 

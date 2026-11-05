@@ -12,6 +12,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSy
 import { join } from "path";
 import { tmpdir } from "os";
 import {
+  deadEvents,
   hookCommand,
   mergeHookConfig,
   parseHooksBlock,
@@ -38,6 +39,9 @@ const NESTED: HooksSpec = {
   events: { pre_tool_use: "PreToolUse" },
   root: "hooks",
   wrappers: [{ file: "guard.sh", core: "guard-secrets.sh", event: "pre_tool_use", matcher: "Bash" }],
+  runtimeEvents: [],
+  stale: [],
+  trust: null,
 };
 
 const FLAT: HooksSpec = {
@@ -258,5 +262,38 @@ describe("writeJson", () => {
 describe("hookCommand", () => {
   test("runs the wrapper through bash, so a lost exec bit does not disable the guard", () => {
     expect(hookCommand("/h/guard.sh")).toBe("bash /h/guard.sh");
+  });
+});
+
+describe("flat entries, timeouts and dead events (Antigravity, Codex)", () => {
+  const AGY: HooksSpec = {
+    ...NESTED,
+    agent: "antigravity",
+    root: "ebrain",
+    events: { pre_tool_use: "PreToolUse", pre_invocation: "PreInvocation" },
+    runtimeEvents: ["PreToolUse", "PreInvocation"],
+    wrappers: [
+      { file: "g.sh", core: "guard-agent.sh", event: "pre_tool_use", matcher: "", timeout: 8 },
+      { file: "c.sh", core: "prompt-context.sh", event: "pre_invocation", matcher: "", flat: true, timeout: 20 },
+    ],
+  };
+  test("a flat event keeps `{type, command}` entries and a nested one keeps `hooks:[…]`; both carry the timeout", () => {
+    const { next } = mergeHookConfig({ other: { PreInvocation: [{ type: "command", command: "x" }] } }, AGY);
+    const mine = next.ebrain as Record<string, any>;
+    expect(mine.PreInvocation).toEqual([{ type: "command", command: "bash /home/t/.claude/hooks/c.sh", timeout: 20 }]);
+    expect(mine.PreToolUse[0].hooks[0].timeout).toBe(8);
+    expect(next.other).toEqual({ PreInvocation: [{ type: "command", command: "x" }] });
+  });
+  test("a flat entry is recognised on the second run", () => {
+    const first = mergeHookConfig({}, AGY).next;
+    const second = mergeHookConfig(first, AGY);
+    expect(second.added).toEqual([]);
+    expect(second.present.sort()).toEqual(["c.sh", "g.sh"]);
+  });
+  test("deadEvents flags keys the runtime never fires — the old Codex layout", () => {
+    const codex: HooksSpec = { ...NESTED, runtimeEvents: ["PreToolUse", "Stop"] };
+    expect(deadEvents({ hooks: { pre_tool_use: [], PreToolUse: [] } }, codex)).toEqual(["pre_tool_use"]);
+    expect(deadEvents({ hooks: { PreToolUse: [] } }, codex)).toEqual([]);
+    expect(deadEvents({ pre_tool_use: [] }, { ...codex, root: null })).toEqual(["pre_tool_use"]);
   });
 });

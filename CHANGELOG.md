@@ -7,6 +7,24 @@ before, and what boundary moved. Implementation detail lives in the commits.
 
 ━━━
 
+## Unreleased (branch `integracion`) — Agent adapters that are verified against what each agent reads
+
+- **Security fix.** `ebrain harness doctor codex` reported ✓ while looking at `~/.codex/hooks/hooks.json`, a file Codex does
+  not read, with snake_case keys it does not understand: Codex ran without the secret guard. The adapter now writes
+  `~/.codex/hooks.json` in the documented envelope (`PreToolUse`, `SessionStart`, `UserPromptSubmit`, `Stop`), says the hooks
+  must be approved in `/hooks`, warns about the old file, flags wired keys the agent never fires, and asks the agent itself
+  (`codex features list`) whether hooks are enabled.
+- New adapters: **Antigravity** (hooks group `ebrain` in `~/.gemini/config/hooks.json`) and **Hermes** (a `pre_tool_call`
+  shell hook plus a memory-provider plugin; the verdict comes from `hermes hooks list`). Each ships guard and per-prompt
+  context, and the doctor self-tests the guard with that agent's own payload shape.
+- The guard now covers agents that read files without a shell (`view_file`, `read_file`, `grep_search`, `execute_code`) by
+  translating each call into the shell read it performs and asking the one canon. The canon also knows `auth.json`,
+  `oauth_creds*` and `.credentials.json`. Extra credential locations for read tools go in `~/.config/ebrain/guard-extra-paths`
+  (one regex per line); shell is deliberately excluded, because loading a key at run time is the right use.
+- The per-prompt context command is a documented contract (`docs/reference/prompt-context.md`), configured by
+  `EBRAIN_CONTEXT_CMD` or `~/.config/ebrain/context-command`. The norms and the session-start text stop claiming the MCP is
+  connected and describe what happens: memory arrives with each prompt, and `ebrain remember` enters the index at the next sync.
+
 ## Unreleased (branches `recorte` + `integracion`) — eBrain is a memory that arrives by itself, and nothing else
 
 - Everything without measured use in October 2026 is frozen: the terminal cockpit, workspaces,

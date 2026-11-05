@@ -45,16 +45,27 @@ const WrapperSchema = z.object({
   event: z.string().min(1),
   /** Which tool calls the hook applies to. Absent means all of them. */
   matcher: z.string().optional(),
+  timeout: z.number().int().positive().optional(),
+  /** The runtime keeps this event's entries flat, with no inner `hooks` list. */
+  flat: z.boolean().optional(),
 });
 
 const HooksSchema = z.object({
   config: z.string().nullable().optional(),
-  format: z.enum(["claude-json", "none"]),
+  format: z.enum(["claude-json", "hermes-yaml", "none"]),
   /** Top-level key the events nest under; absent or null means they sit at the root. */
   root: z.string().nullable().optional(),
   dir: z.string().nullable().optional(),
   events: z.record(z.string(), z.string()).default({}),
   wrappers: z.array(WrapperSchema).default([]),
+  /** Events the runtime really dispatches; a wired key outside this list is flagged by the doctor. */
+  runtime_events: z.array(z.string()).optional(),
+  /** Files an older install wrote where the agent never looks. */
+  stale: z.array(z.string()).optional(),
+  /** Hermes: where its memory-provider plugin is installed. */
+  plugin_dir: z.string().optional(),
+  /** What the user still has to do inside the agent after wiring. */
+  trust: z.string().optional(),
   /** Hooks another system owns. Documentation only — the harness does not touch these. */
   external: z.array(z.string()).optional(),
 });
@@ -92,6 +103,8 @@ export const AdapterManifestSchema = z.strictObject({
   env: z.record(z.string(), z.string()).optional(),
   /** A command that proves the agent is installed and healthy, or null when there is none. */
   doctor: z.string().nullable().optional(),
+  /** An extended regex the `doctor` output must match; without a match the agent is not seeing the hooks. */
+  doctor_expect: z.string().optional(),
   launch: z.string().nullable().optional(),
   /**
    * Whether the secret guard is technically enforced (a runtime hook denies the call) or advisory

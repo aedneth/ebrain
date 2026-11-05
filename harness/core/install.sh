@@ -98,7 +98,9 @@ EOF
   # Para los hooks de contexto eso es fricción; para el guard de secretos es el control de seguridad
   # del producto instalado en disco pero inerte, detrás de una edición manual que hay que acertar.
   # El merge es aditivo, idempotente y atómico: no toca ningún otro hook del usuario.
-  if [ -f "$EBRAIN_HOME/cli/hooks-wire.ts" ]; then
+  if [ "$HOOKS_FORMAT" = "hermes-yaml" ]; then
+    "$BUN" run "$EBRAIN_HOME/cli/hermes-wire.ts" --apply || true
+  elif [ -f "$EBRAIN_HOME/cli/hooks-wire.ts" ]; then
     "$BUN" run "$EBRAIN_HOME/cli/hooks-wire.ts" "$AGENT" --apply || true
   fi
 
@@ -127,7 +129,11 @@ rc=0
 # pregunta parecida pero no la misma: un nombre mencionado en un comentario, o cableado bajo un
 # evento que el runtime no dispara, contaba como cableado. Ahora lo responde el mismo módulo que
 # lo escribe, así el chequeo y la instalación no pueden divergir.
-if [ -f "$EBRAIN_HOME/cli/hooks-wire.ts" ] && [ "$HOOKS_FORMAT" != "none" ]; then
+if [ "$HOOKS_FORMAT" = "hermes-yaml" ]; then
+  hw_out="$("$BUN" run "$EBRAIN_HOME/cli/hermes-wire.ts" 2>&1)"; hw_rc=$?
+  [ -n "$hw_out" ] && printf '%s\n' "$hw_out"
+  [ "$hw_rc" -eq 0 ] || rc=1
+elif [ -f "$EBRAIN_HOME/cli/hooks-wire.ts" ] && [ "$HOOKS_FORMAT" != "none" ]; then
   hw_out="$("$BUN" run "$EBRAIN_HOME/cli/hooks-wire.ts" "$AGENT" 2>&1)"; hw_rc=$?
   [ -n "$hw_out" ] && printf '%s\n' "$hw_out"
   [ "$hw_rc" -eq 0 ] || rc=1
@@ -183,18 +189,49 @@ if [ -f "$CORE/contract-test.sh" ]; then
   fi
 fi
 
-# d) self-test: el guard niega una lectura de dotenv (fixture deny), vía el wrapper del agente si existe
-GW=""; while IFS=$'\t' read -r file core event; do [ "$core" = "guard-secrets.sh" ] && GW="$HOOKS_DIR/$file"; done < <(wrapper_files)
-FIX="$HARNESS/contract/fixtures/deny-cat-envlocal.json"
-if [ -n "$GW" ] && [ -x "$GW" ] && [ -f "$FIX" ]; then
-  bash "$GW" < "$FIX" >/dev/null 2>&1; [ "$?" = 2 ] && echo "  self-test ✓ el wrapper del guard niega (exit 2)" || { echo "  self-test ⚠ el wrapper del guard NO negó"; rc=1; }
+# d) self-test: the agent's guard wrapper must deny a read of a dotenv, fed the payload shape THAT agent sends.
+#    Antigravity and Hermes also get a file-tool read (no shell involved), which is what the translator is for.
+GW=""; while IFS=$'\t' read -r file core event; do case "$core" in guard-secrets.sh|guard-agent.sh) GW="$HOOKS_DIR/$file";; esac; done < <(wrapper_files)
+selftest() { # <label> <payload> <grep-pattern, empty = exit code 2>
+  local out code
+  out="$(printf '%s' "$2" | bash "$GW" 2>/dev/null)"; code=$?
+  if { [ -z "$3" ] && [ "$code" = 2 ]; } || { [ -n "$3" ] && printf '%s' "$out" | grep -q "$3"; }; then
+    echo "  self-test ✓ the guard wrapper denies: $1"
+  else
+    echo "  self-test ✗ the guard wrapper did NOT deny: $1"; SELF_RC=1
+  fi
+}
+SELF_RC=0
+if [ -n "$GW" ] && [ -x "$GW" ]; then
+  case "$AGENT" in
+    antigravity)
+      selftest "shell read of .env" '{"toolCall":{"name":"run_command","args":{"CommandLine":"cat .env"}}}' '"decision":"deny"'
+      selftest "file-tool read of .env" '{"toolCall":{"name":"view_file","args":{"AbsolutePath":"/tmp/x/.env"}}}' '"decision":"deny"'
+      selftest "file-tool read of a login file" '{"toolCall":{"name":"view_file","args":{"AbsolutePath":"/home/u/.gemini/oauth_creds.json"}}}' '"decision":"deny"' ;;
+    hermes)
+      selftest "shell read of .env" '{"tool_name":"terminal","tool_input":{"command":"cat .env"}}' '"decision":"block"'
+      selftest "file-tool read of .env" '{"tool_name":"read_file","tool_input":{"path":"/tmp/x/.env"}}' '"decision":"block"' ;;
+    *)
+      FIX="$HARNESS/contract/fixtures/deny-cat-envlocal.json"
+      [ -f "$FIX" ] && selftest "shell read of .env" "$(cat "$FIX")" "" ;;
+  esac
+  [ "$SELF_RC" = 0 ] || rc=1
 fi
 
 # e) doctor nativo del agente (best-effort)
 if [ -n "$AGENT_DOCTOR" ] && [ "$AGENT_DOCTOR" != "null" ]; then
   bin="${AGENT_DOCTOR%% *}"
   if command -v "$bin" >/dev/null 2>&1; then
-    eval "$AGENT_DOCTOR" >/dev/null 2>&1 && echo "  agente ✓ '$AGENT_DOCTOR' ok" || echo "  agente ⚠ '$AGENT_DOCTOR' reportó problemas"
+    doc_out="$(eval "$AGENT_DOCTOR" 2>&1)"; doc_rc=$?
+    DOC_EXPECT="$(mget doctor_expect)"
+    if [ "$doc_rc" != 0 ]; then
+      echo "  agente ⚠ '$AGENT_DOCTOR' reportó problemas"
+    elif [ -n "$DOC_EXPECT" ]; then
+      if printf '%s\n' "$doc_out" | grep -Eq "$DOC_EXPECT"; then echo "  agente ✓ '$AGENT_DOCTOR': $AGENT reports hooks enabled"
+      else echo "  agente ✗ '$AGENT_DOCTOR' does not show hooks enabled — the agent would ignore every hook above"; rc=1; fi
+    else
+      echo "  agente ✓ '$AGENT_DOCTOR' ok"
+    fi
   else
     echo "  agente ⚠ '$bin' no está instalado — el harness quedó listo; instalá/logueá el CLI y re-corré doctor"
   fi

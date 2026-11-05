@@ -1,25 +1,31 @@
-# adapter: codex — Codex CLI, driver primario. Hooks Claude-compatibles (snake_case).
-# Migra el antiguo overlay/codex-harness a esta capa canónica: los hooks pasan a ser wrappers
-# de los scripts core del harness. install = idempotente, zero-behavior-change (ya estaba cableado).
+# adapter: codex — Codex CLI. Hooks in the format Codex documents (https://learn.chatgpt.com/docs/hooks):
+# ~/.codex/hooks.json, `{"hooks": {"<Event>": [{"matcher", "hooks": [{"type": "command", ...}]}]}}`.
+# An earlier version of this manifest pointed at ~/.codex/hooks/hooks.json with snake_case events: Codex reads
+# neither, so the doctor said ✓ while Codex ran with no secret guard. `stale` below makes the doctor say so.
 agent: codex
-class: heavy   # gobernador RAM (F6.4.6): 4GB Celeron, "un heavy a la vez"
-description: Codex CLI — cerebro/driver primario. Adapter completo (guard + contexto + write-back + normas + MCP).
+class: heavy   # RAM governor: 4 GB laptop, one heavy agent at a time
+description: Codex CLI — guard + per-prompt context + session log + norms + MCP.
 norms:
   target: ~/.codex/AGENTS.md
   mode: managed-block
 hooks:
-  config: ~/.codex/hooks/hooks.json
+  config: ~/.codex/hooks.json
   format: claude-json
-  root: null                      # events sit at the root of this config
+  root: hooks                     # Codex nests its events under a top-level "hooks" key
   dir: ~/.codex/hooks
+  runtime_events: [PreToolUse, PermissionRequest, PostToolUse, PreCompact, PostCompact, UserPromptSubmit, SubagentStop, Stop, PreModelRequest, PostModelRequest, SessionStart, SubagentStart, SessionEnd, Interrupt]
+  stale: [~/.codex/hooks/hooks.json]
+  trust: "Codex runs a hook only after you approve it: open Codex and run /hooks (trust follows each hook's hash, so a changed wrapper needs approving again)"
   events:
-    pre_tool_use: pre_tool_use
-    session_start: session_start
-    stop: subagent_stop        # Codex no tiene evento `stop`; usa subagent_stop
+    pre_tool_use: PreToolUse
+    session_start: SessionStart
+    user_prompt: UserPromptSubmit
+    stop: Stop
   wrappers:
-    - { file: block-secret-read.sh, core: guard-secrets.sh, event: pre_tool_use }
-    - { file: session-context.sh,   core: inject-context.sh, event: session_start }
-    - { file: log-session.sh,       core: log-session.sh,    event: stop }
+    - { file: block-secret-read.sh, core: guard-secrets.sh,   event: pre_tool_use,  matcher: Bash, timeout: 10 }
+    - { file: session-context.sh,   core: inject-context.sh,  event: session_start, timeout: 10 }
+    - { file: prompt-context.sh,    core: prompt-context.sh,  event: user_prompt,   timeout: 20 }
+    - { file: log-session.sh,       core: log-session.sh,     event: stop,          timeout: 10 }
 mcp:
   register: "ebrain onboard codex"
   method: cli
@@ -31,5 +37,6 @@ mcp:
   keys: [mcp_servers]
 env:
   AGENT_NAME: codex
-doctor: "codex doctor"
-launch: codex --dangerously-bypass-approvals-and-sandbox   # F6.6 — arranca en danger-full-access por diseño: aislamiento por dir + normas + guard de secretos gobiernan, no gates de aprobación
+doctor: "codex features list"
+doctor_expect: "^hooks[[:space:]].*true"
+launch: codex --dangerously-bypass-approvals-and-sandbox   # full access by design: directory isolation + norms + the secret guard govern, not approval gates
