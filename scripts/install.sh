@@ -2,7 +2,7 @@
 # eBrain installer — plug-and-play. Public entrypoint for:
 #   curl -fsSL https://raw.githubusercontent.com/aedneth/ebrain/main/scripts/install.sh | sh
 #
-# Installs Bun if missing, clones/updates eBrain, pins the gbrain engine, installs deps,
+# Installs Bun if missing (and a private Bun >= 1.4.4 if the one on PATH is older), clones/updates eBrain, pins the gbrain engine, installs deps,
 # links `ebrain` into your PATH, and runs `ebrain up`. Idempotent and safe to re-run.
 #
 # It NEVER prints secret values, NEVER sources a foreign dotenv, and does NOT install agent
@@ -62,6 +62,31 @@ if ! have bun; then
 fi
 have bun || die "bun is required and could not be installed (see https://bun.sh)"
 have git || die "git is required"
+
+# 1b. The pinned engine needs bun >= BUN_MIN. If the bun on PATH is older, eBrain gets its OWN copy under
+# ~/.local/share/ebrain/bun: the launcher puts it first for eBrain's processes only, and nothing else on the machine
+# sees it. Removing that directory is the way back. (Without this a fresh install stops at "GBrain requires Bun 1.4.4".)
+BUN_MIN="${EBRAIN_BUN_MIN:-1.4.4}"
+bun_ok() {
+  _v="$("$1" --version 2>/dev/null)" || return 1
+  [ -n "$_v" ] && [ "$(printf '%s\n%s\n' "$BUN_MIN" "$_v" | sort -V | head -1)" = "$BUN_MIN" ]
+}
+OWN_BUN_DIR="$HOME/.local/share/ebrain/bun"
+if [ "${EBRAIN_SKIP_GBRAIN:-0}" != "1" ]; then
+  if [ -x "$OWN_BUN_DIR/bun" ] && bun_ok "$OWN_BUN_DIR/bun"; then
+    PATH="$OWN_BUN_DIR:$PATH"
+  elif ! bun_ok bun; then
+    say "Installing a private Bun $BUN_MIN for eBrain (the one on PATH is older)"
+    mkdir -p "$OWN_BUN_DIR"
+    _tmp="$(mktemp -d)"
+    BUN_INSTALL="$_tmp" curl -fsSL https://bun.sh/install | BUN_INSTALL="$_tmp" bash -s "bun-v$BUN_MIN" >/dev/null \
+      || die "could not install Bun $BUN_MIN (see https://bun.sh)"
+    cp "$_tmp/bin/bun" "$OWN_BUN_DIR/bun" && chmod +x "$OWN_BUN_DIR/bun"
+    rm -rf "$_tmp"
+    bun_ok "$OWN_BUN_DIR/bun" || die "the private Bun at $OWN_BUN_DIR is not >= $BUN_MIN"
+    PATH="$OWN_BUN_DIR:$PATH"
+  fi
+fi
 
 # 2. eBrain source
 if [ "$FROM_SOURCE" -eq 1 ]; then
