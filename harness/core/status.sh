@@ -28,7 +28,14 @@ if [ "$JSON" = 1 ]; then
   MGET="$CORE/manifest-get.ts"
 
   serve_pid="$(pgrep -f 'cli\.ts serve' 2>/dev/null | head -1 || true)"
-  if [ -n "$serve_pid" ]; then
+  remote_up=0
+  if [ -z "$serve_pid" ] && curl -fsS -m 3 -o /dev/null "http://127.0.0.1:${EBRAIN_BRAIN_PORT:-8541}/health" 2>/dev/null; then remote_up=1; fi
+  if [ "$remote_up" = 1 ]; then
+    # The daemon runs on another host and answers here through a tunnel: ask it, do not open a local store.
+    j_state="up"; j_served_by="remote:tunnel"; j_cached=false
+    j_names="$("$BUN" run "$CORE/../../cli/remote-tools.ts" sources-list 2>/dev/null | awk '{print $1}' | grep -v '^default$' | grep -v '^$')"
+    j_sources="$(printf '%s\n' "$j_names" | jq -R -s -c 'split("\n") | map(select(length>0))')"
+  elif [ -n "$serve_pid" ]; then
     j_state="up"; j_served_by="mcp:$serve_pid"; j_cached=true
     j_sources="$( [ -f "$SOURCES_CACHE" ] && cat "$SOURCES_CACHE" || echo '[]' )"
     printf '%s' "$j_sources" | jq -e . >/dev/null 2>&1 || j_sources='[]'
@@ -102,7 +109,10 @@ printf '\033[1mebrain status\033[0m — %s\n' "$(date '+%Y-%m-%d %H:%M')"
 
 # brain
 serve_pid="$(pgrep -f 'cli\.ts serve' 2>/dev/null | head -1 || true)"
-if [ -n "$serve_pid" ]; then
+if [ -z "$serve_pid" ] && curl -fsS -m 3 -o /dev/null "http://127.0.0.1:${EBRAIN_BRAIN_PORT:-8541}/health" 2>/dev/null; then
+  rnames="$(${BUN:-bun} run "$CORE/../../cli/remote-tools.ts" sources-list 2>/dev/null | awk '{print $1}' | grep -v '^default$' | paste -sd' ' - 2>/dev/null)"
+  printf '  brain    UP · REMOTO (por túnel; no hay motor local) · sources: %s\n' "${rnames:-(no legibles)}"
+elif [ -n "$serve_pid" ]; then
   printf '  brain    UP · servido por MCP (PID %s) · lock PGLite activo\n' "$serve_pid"
 else
   src="$(cd /tmp && ebrain_timeout 50 "$RUN" sources list --timeout=40000 2>&1 || true)"

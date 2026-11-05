@@ -73,8 +73,17 @@ for f in gbrain-run gbrain-mcp; do
 done
 if command -v ebrain >/dev/null 2>&1; then c_ok "path:ebrain" "ebrain en PATH ($(command -v ebrain))"; else c_warn "path:ebrain" "ebrain no está en PATH (~/.local/bin)"; fi
 
+# A daemon can run on another host and be reached through a tunnel on this loopback port (the memory-on-the-VPS layout):
+# then it answers /health here but no `serve` process is ours. That is healthy, and must not be judged as a local engine.
+REMOTE_DAEMON=0
+if ! pgrep -f 'cli\.ts serve' >/dev/null 2>&1 && curl -fsS -m 3 -o /dev/null "http://127.0.0.1:${EBRAIN_BRAIN_PORT:-8541}/health" 2>/dev/null; then
+  REMOTE_DAEMON=1
+fi
+
 c_sec "daemon HTTP-MCP"
-if "$EBRAIN_HOME/scripts/ebrain-daemon" status >/dev/null 2>&1; then
+if [ "$REMOTE_DAEMON" = 1 ]; then
+  c_ok "daemon:status" "daemon HTTP-MCP UP (:${EBRAIN_BRAIN_PORT:-8541} healthy, REMOTE: no local engine runs here; it is served from another host through a tunnel)"
+elif "$EBRAIN_HOME/scripts/ebrain-daemon" status >/dev/null 2>&1; then
   c_ok "daemon:status" "daemon HTTP-MCP UP (:${EBRAIN_BRAIN_PORT:-8541} healthy)"
 else
   c_warn "daemon:status" "daemon HTTP-MCP DOWN (fallback stdio disponible si se registra manualmente)"
@@ -149,7 +158,7 @@ fi
 serve_pid="$(pgrep -f 'cli\.ts serve' 2>/dev/null | head -1 || true)"
 REMOTE_TOOLS="$EBRAIN_HOME/cli/remote-tools.ts"
 BUN_BIN="${BUN_BIN:-$HOME/.bun/bin/bun}"; command -v bun >/dev/null 2>&1 && BUN_BIN=bun
-if [ -n "$serve_pid" ] && [ -f "$REMOTE_TOOLS" ]; then
+if { [ -n "$serve_pid" ] || [ "$REMOTE_DAEMON" = 1 ]; } && [ -f "$REMOTE_TOOLS" ]; then
   src_json="$(ebrain_mktemp)"; src_err="$(ebrain_mktemp)"
   if "$BUN_BIN" run "$REMOTE_TOOLS" sources-list --json >"$src_json" 2>"$src_err"; then
     if [ "$TRUST_POLICY_ERROR" -eq 1 ]; then
@@ -210,6 +219,8 @@ c_warn "spend:gbrain-gap" "gap conocido: el spend del motor (think/dream) NO ent
 c_sec "brain engine"
 if [ -n "$serve_pid" ]; then
   c_ok "brain:engine" "brain UP (MCP serve, PID $serve_pid); stats vía tools MCP o 'ebrain status' con MCP idle"
+elif [ "$REMOTE_DAEMON" = 1 ]; then
+  c_ok "brain:engine" "brain remoto: responde por el túnel; su salud se mide en el host que lo corre ('ebrain doctor' allí)"
 else
   h_tmp="$(ebrain_mktemp)"
   if (cd /tmp && ebrain_timeout 60 "$RUN" doctor >"$h_tmp" 2>&1); then :; fi

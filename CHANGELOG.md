@@ -7,6 +7,16 @@ before, and what boundary moved. Implementation detail lives in the commits.
 
 ━━━
 
+## Unreleased (branch `integracion`) — The daemon can live on another host, reached through a tunnel
+
+- `ebrain memoria` has a projection-only mode (`"soloProyeccion": true` in its config): a machine without a daemon keeps its
+  corpus, its path allowlist and its qmd index fresh and stops there, with no engine and no embeddings. The allowlist
+  matters on the client side too: a prompt hook drops any result that is not in it.
+- The stop/start of the daemon around an embedding run is configurable (`EBRAIN_DAEMON_CTL`, default `systemctl --user`),
+  so a system unit works (`sudo -n systemctl`).
+- `ebrain doctor` and `ebrain status` recognise a daemon that answers on the loopback port with no local engine (a tunnel)
+  and report it as remote, instead of opening a local store and warning that sources cannot be read.
+
 ## Unreleased (branch `integracion`) — `ebrain q` finds what `remember` saved on a clean install
 
 - `ebrain q` searched every federated source except `default`, and a fresh install has only `default`: it answered
