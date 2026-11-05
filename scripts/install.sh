@@ -9,6 +9,8 @@
 # CLIs or call any provider. Test/CI overrides (env vars): EBRAIN_HOME, EBRAIN_REPO, EBRAIN_REF,
 # GBRAIN_REPO, GBRAIN_REF, EBRAIN_BIN_DIR, EBRAIN_SKIP_GBRAIN=1, EBRAIN_SKIP_UP=1 (test only).
 set -eu
+# A missing or empty HOME must stop here: tools fall back to the passwd entry and would write into the REAL home.
+case "${HOME:-}" in /?*) ;; *) echo "install.sh: HOME is empty or not an absolute path ('${HOME:-}'); refusing to run so nothing resolves to your real home" >&2; exit 2 ;; esac
 
 EBRAIN_REPO="${EBRAIN_REPO:-https://github.com/aedneth/ebrain.git}"
 EBRAIN_REF="${EBRAIN_REF:-main}"

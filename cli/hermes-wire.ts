@@ -55,6 +55,10 @@ function installPlugin(ebrainHome: string): void {
 }
 
 function main(): void {
+  if (!process.env.HOME || !process.env.HOME.startsWith("/")) {
+    console.error(`HOME is empty or not an absolute path ('${process.env.HOME ?? ""}'); refusing to touch any agent config`);
+    process.exit(2);
+  }
   const apply = process.argv.includes("--apply");
   const ebrainHome = resolveEbrainHome();
   let red = false;

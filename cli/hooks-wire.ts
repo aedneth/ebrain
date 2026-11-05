@@ -272,6 +272,10 @@ function loadSpec(agent: string, home = homedir()): HooksSpec | null {
 }
 
 function main(): void {
+  if (!process.env.HOME || !process.env.HOME.startsWith("/")) {
+    console.error(`HOME is empty or not an absolute path ('${process.env.HOME ?? ""}'); refusing to touch any agent config`);
+    process.exit(2);
+  }
   const argv = process.argv.slice(2);
   const json = argv.includes("--json");
   const apply = argv.includes("--apply");

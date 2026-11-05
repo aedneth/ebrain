@@ -9,6 +9,8 @@
 # claude/codex ya están cableados → install = verificación + CERO cambio de comportamiento (la validación).
 # gemini/generic = agente nuevo: crea todo desde el manifest (la prueba de la tesis).
 set -uo pipefail
+# A missing or empty HOME must stop here: tools fall back to the passwd entry and would write into the REAL home.
+case "${HOME:-}" in /?*) ;; *) echo "install: HOME is empty or not an absolute path ('${HOME:-}'); refusing to run so nothing resolves to your real home" >&2; exit 2 ;; esac
 
 . "$(dirname -- "${BASH_SOURCE[0]}")/ebrain-home.sh"
 ebrain_prefer_pinned_bun

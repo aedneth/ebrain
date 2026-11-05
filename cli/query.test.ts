@@ -27,7 +27,7 @@ describe("parseFederatedSources", () => {
       sources: [
         { id: "second-brain", name: "Second Brain", local_path: "/home/dev/notes/personal-brain", federated: true },
         { id: "company-brain", name: "Company Brain", local_path: "/home/dev/notes/team-brain", federated: true },
-        { id: "default", federated: true },      // excluded: default
+        { id: "default", federated: true },      // excluded: default duplicates named sources
         { id: "some-local", federated: false },  // excluded: not federated
       ],
     };
@@ -129,10 +129,16 @@ describe("queryAcrossSources", () => {
     expect(res.results.map((r) => r.slug)).toEqual(["shared", "cb-only", "sb-only"]);
   });
 
-  test("empty eligible sources throws (never a silent empty result)", async () => {
-    await expect(
-      queryAcrossSources("x", 10, deps({ sources: [{ id: "default", federated: true }] }, {})),
-    ).rejects.toThrow(/no eligible/);
+  test("a clean install (default is the only source) searches default instead of failing", async () => {
+    const res = await queryAcrossSources("x", 10, deps({ sources: [{ id: "default", federated: true }] }, {
+      default: [{ score: 0.9, slug: "learnings/a", chunk_text: "remembered" }],
+    }));
+    expect(res.results.map((r) => r.slug)).toEqual(["learnings/a"]);
+  });
+
+  test("a denied-client default is still never searched, and no source at all still throws", async () => {
+    await expect(queryAcrossSources("x", 10, deps({ sources: [{ id: "default", local_path: "/home/e/repos/denied-alpha", federated: true }] }, {}))).rejects.toThrow(/no eligible/);
+    await expect(queryAcrossSources("x", 10, deps({ sources: [] }, {}))).rejects.toThrow(/no eligible/);
   });
 
   test("one source fails, the other succeeds → partial:true with failure metadata", async () => {

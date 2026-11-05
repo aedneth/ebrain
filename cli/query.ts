@@ -53,7 +53,7 @@ export function parseFederatedSources(value: unknown): QuerySource[] {
   if (!isRecord(value) || !Array.isArray(value.sources)) {
     throw new Error("sources_list returned an invalid payload");
   }
-  return value.sources
+  const all = value.sources
     .filter(isRecord)
     .map((source): QuerySource | null => {
       if (typeof source.id !== "string" || !source.id.trim() || source.federated !== true) return null;
@@ -66,10 +66,14 @@ export function parseFederatedSources(value: unknown): QuerySource[] {
         ...(typeof source.name === "string" ? { name: source.name } : {}),
         ...(typeof source.local_path === "string" ? { path: source.local_path } : {}),
       };
-      if (normalized.id === "default" || isClientSourceRecord(normalized)) return null;
+      if (isClientSourceRecord(normalized)) return null;
       return normalized;
     })
     .filter((source): source is QuerySource => source !== null);
+  // `default` is the engine's catch-all. Next to named sources it only duplicates them, so it is left out.
+  // On a clean install it is the only source and where `remember` lands, so it is searched then (same client filter).
+  const named = all.filter((source) => source.id !== "default");
+  return named.length > 0 ? named : all;
 }
 
 export function parseSourceResults(source: string, value: unknown): QueryResult[] {

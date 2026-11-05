@@ -2,6 +2,8 @@
 # ebrain — unified CLI for the harness/knowledge layer. Thin dispatcher over the canonical pieces.
 # Installed as ~/.local/bin/ebrain (launcher) → this file. Everything lives under $EBRAIN_HOME.
 set -uo pipefail
+# A missing or empty HOME must stop here: tools fall back to the passwd entry and would write into the REAL home.
+case "${HOME:-}" in /?*) ;; *) echo "ebrain: HOME is empty or not an absolute path ('${HOME:-}'); refusing to run so nothing resolves to your real home" >&2; exit 2 ;; esac
 
 # Default to this dispatcher's own checkout ($EBRAIN_HOME/cli/ebrain → up one level) rather than a
 # "$HOME/eBrain" literal, so a checkout at any path works when invoked directly.
